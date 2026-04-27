@@ -1172,7 +1172,7 @@ function renderVendorTable(mes) {
             const pctMeta = metaVendMensal > 0 ? Math.round((v.realizado / metaVendMensal) * 100) : 0;
             const cor = pctMeta >= 100 ? '#22C55E' : pctMeta >= 60 ? '#F59E0B' : 'rgba(240,244,255,0.35)';
             const bold = pctMeta >= 100 ? 'font-weight:700;' : '';
-            return \`<span style="font-size:10px;font-family:'Space Mono',monospace;color:\${cor};\${bold}">\${medal} \${pctMeta}%</span>\`;
+            return '<span style="font-size:10px;font-family:Space Mono,monospace;color:' + cor + ';' + bold + '">' + medal + ' ' + pctMeta + '%</span>';
           }).join('')}
         </div>
       </td>
