@@ -1117,6 +1117,7 @@ function renderMetas() {
 function renderVendorTable(mes) {
   const d = allData[mes];
   if (!d) return;
+  const mesAtual = mes;
 
   const vendList = Object.entries(d.vendedores).map(([nome, v], i) => ({
     nome,
@@ -1132,7 +1133,7 @@ function renderVendorTable(mes) {
     <th>Faturamento</th>
     <th>Vendas</th>
     <th>Ticket médio</th>
-    <th>% Meta</th>
+    <th>% Metas</th>
     <th>Status</th>
   </tr></thead>`;
 
@@ -1164,11 +1165,15 @@ function renderVendorTable(mes) {
       <td class="mono">${vendas}</td>
       <td class="mono">${tm}</td>
       <td>
-        <div class="pct-bar-wrap">
-          <div class="pct-bar-track">
-            <div class="pct-bar-fill ${barColor}" style="width:${pct}%"></div>
-          </div>
-          <span class="pct-label" style="color:var(--text2)">${pct}%</span>
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          ${[['🥇',0],['🥈',1],['🥉',2]].map(([medal, mi]) => {
+            const fatMensal = metasData[mi] ? metasData[mi].faturamento : 0;
+            const metaVendMensal = fatMensal / 5;
+            const pctMeta = metaVendMensal > 0 ? Math.round((v.realizado / metaVendMensal) * 100) : 0;
+            const cor = pctMeta >= 100 ? '#22C55E' : pctMeta >= 60 ? '#F59E0B' : 'rgba(240,244,255,0.35)';
+            const bold = pctMeta >= 100 ? 'font-weight:700;' : '';
+            return \`<span style="font-size:10px;font-family:'Space Mono',monospace;color:\${cor};\${bold}">\${medal} \${pctMeta}%</span>\`;
+          }).join('')}
         </div>
       </td>
       <td>${status}</td>
