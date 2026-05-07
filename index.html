@@ -260,7 +260,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 <script>
 let DADOS = { maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} } };
 
-const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBV0F7S_7b1qi9WFTeGORVnJZ6J76tYEvPqAmWQjtwIsSv-dgbuOq_Qqef4YWNKIz0D1F8n_dqHK_F/pub?output=csv';
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBV0F7S_7b1qi9WFTeGORVnJZ6J76tYEvPqAmWQjtwIsSv-dgbuOq_Qqef4YWNKIz0D1F8n_dqHK_F/pub?gid=1346722959&single=true&output=csv';
 
 const VENDEDORES = ['Pedro','Felipe','Joao','Guilherme'];
 const VENDOR_COLORS = {
@@ -986,33 +986,42 @@ async function carregarDados(forceRefresh = false){
   const btn = document.getElementById('refreshBtn');
   const banner = document.getElementById('errorBanner');
   
-  dot.className = 'live-dot loading';
+  console.log('[Dashboard] Iniciando carregamento. URL:', CSV_URL);
+  
+  if(dot) dot.className = 'live-dot loading';
   if(btn) btn.classList.add('loading');
-  status.innerHTML = 'Carregando dados...';
-  banner.classList.remove('show');
+  if(status) status.innerHTML = 'Carregando dados...';
+  if(banner) banner.classList.remove('show');
   
   try {
-    // Cache buster pra forçar refresh
     const url = CSV_URL + (forceRefresh ? '&_t=' + Date.now() : '');
+    console.log('[Dashboard] Fetch:', url);
     const resp = await fetch(url, { cache: forceRefresh ? 'no-store' : 'default' });
+    console.log('[Dashboard] Resposta HTTP:', resp.status);
     if(!resp.ok) throw new Error('HTTP ' + resp.status);
     const text = await resp.text();
+    console.log('[Dashboard] CSV recebido. Tamanho:', text.length, 'chars. Primeiras 300:', text.substring(0,300));
     
     const novosDados = processarCSV(text);
+    console.log('[Dashboard] Dados processados. Maio:', novosDados.maio.totalFaturamento, 'em', novosDados.maio.totalVendas, 'vendas');
     DADOS = novosDados;
     
-    dot.className = 'live-dot';
-    const now = new Date();
-    document.getElementById('updateTime').textContent = now.toTimeString().slice(0,5);
-    status.innerHTML = 'Atualizado às <span id="updateTime">' + now.toTimeString().slice(0,5) + '</span>';
+    if(dot) dot.className = 'live-dot';
+    const agora = new Date();
+    const horaStr = agora.toTimeString().slice(0,5);
+    if(status) status.innerHTML = 'Atualizado às <span id="updateTime">' + horaStr + '</span>';
     
     renderAll();
+    console.log('[Dashboard] Render concluído com sucesso');
   } catch(err){
-    console.error('Erro ao carregar:', err);
-    dot.className = 'live-dot error';
-    status.innerHTML = 'Erro ao carregar';
-    banner.textContent = '⚠️ Erro ao buscar dados da planilha: ' + err.message + '. Verifique se a planilha continua publicada na web. Tente clicar em 🔄 ou recarregar a página.';
-    banner.classList.add('show');
+    console.error('[Dashboard] ERRO:', err);
+    console.error('[Dashboard] Stack:', err.stack);
+    if(dot) dot.className = 'live-dot error';
+    if(status) status.innerHTML = 'Erro ao carregar';
+    if(banner){
+      banner.textContent = '⚠️ Erro: ' + err.message + ' — abra o Console (F12) pra ver detalhes.';
+      banner.classList.add('show');
+    }
   } finally {
     if(btn) btn.classList.remove('loading');
   }
