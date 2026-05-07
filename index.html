@@ -53,6 +53,24 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .progress-bar.red{background:linear-gradient(90deg,var(--red),#dc2626)}
 .progress-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:6px}
 .metas-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.projecao-card{background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:16px;padding:24px;position:relative;overflow:hidden}
+.projecao-card.ouro{border-color:rgba(251,191,36,.3)}
+.projecao-card.ouro::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#fbbf24,#f59e0b)}
+.projecao-card.prata{border-color:rgba(203,213,225,.25)}
+.projecao-card.prata::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#cbd5e1,#94a3b8)}
+.projecao-card.bronze{border-color:rgba(217,119,6,.3)}
+.projecao-card.bronze::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#d97706,#b45309)}
+.proj-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.proj-medal{font-size:24px}
+.proj-title{font-size:14px;font-weight:700;letter-spacing:1.5px}
+.proj-falta{font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1.5px}
+.proj-falta-value{font-size:24px;font-weight:800;letter-spacing:-.5px;margin-bottom:14px}
+.proj-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid rgba(255,255,255,.05)}
+.proj-label{font-size:12px;color:var(--muted)}
+.proj-value{font-size:14px;font-weight:700}
+.proj-value.gold{color:#fbbf24}
+.proj-value.silver{color:#cbd5e1}
+.proj-value.bronze-c{color:#d97706}
 .meta-card{background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:16px;padding:32px;text-align:center}
 .meta-icon{font-size:32px;margin-bottom:12px}
 .meta-value{font-size:28px;font-weight:800;letter-spacing:-1px;margin-bottom:6px}
@@ -89,6 +107,13 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .metas-mini-row{display:flex;align-items:center;gap:6px;color:var(--muted)}
 .value-col{font-weight:700;font-size:15px}
 .value-col.gold{color:var(--gold)}
+.live-dot.loading{background:var(--orange);animation:spin 1s linear infinite}
+.live-dot.error{background:var(--red);animation:none}
+@keyframes spin{0%{opacity:.3}50%{opacity:1}100%{opacity:.3}}
+#refreshBtn:hover{border-color:var(--accent);color:var(--accent)}
+#refreshBtn.loading{opacity:.5;pointer-events:none}
+.error-banner{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:14px 18px;border-radius:12px;margin-bottom:20px;font-size:13px;display:none}
+.error-banner.show{display:block}
 @media (max-width:900px){
   body{padding:16px}
   .grid-4{grid-template-columns:repeat(2,1fr)}
@@ -102,6 +127,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 </head>
 <body>
 <div class="container">
+  <div class="error-banner" id="errorBanner"></div>
   <div class="header">
     <div class="brand">
       <div class="logo">werev</div>
@@ -110,7 +136,11 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div class="subtitle">Setor Comercial — Diretoria & Gerência de Vendas</div>
     </div>
     <div style="text-align:right">
-      <div class="update-info"><span class="live-dot"></span><span>Atualizado às <span id="updateTime">--:--</span></span></div>
+      <div class="update-info">
+        <span class="live-dot" id="liveDot"></span>
+        <span id="updateStatus">Atualizado às <span id="updateTime">--:--</span></span>
+        <button id="refreshBtn" onclick="carregarDados(true)" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;margin-left:8px" title="Atualizar dados">🔄</button>
+      </div>
       <div class="month-toggle">
         <button class="month-tab" onclick="setMonth('abril')">Abril</button>
         <button class="month-tab active" onclick="setMonth('maio')">Maio</button>
@@ -179,6 +209,9 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <div class="meta-card"><div class="meta-icon">🥉</div><div class="meta-value">R$ 264.000</div><div class="meta-detail">660 vendas · 165/vendedor</div></div>
   </div>
 
+  <div class="section-title">Projeção — Dias Úteis Restantes <span id="projecaoLabel" style="color:var(--accent)">(--)</span></div>
+  <div class="metas-grid" id="projecaoGrid"></div>
+
   <div class="section-title">Análise por Vendedor</div>
   <div class="grid-2">
     <div class="chart-card">
@@ -225,7 +258,9 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 </div>
 
 <script>
-const DADOS = {"maio": {"totalFaturamento": 25462.52, "totalVendas": 59, "porDia": {"2026-05-01": {"data": "2026-05-01", "total": 886.1600000000001, "qtd": 3, "ronda12": 886.1600000000001, "ronda16": 886.1600000000001, "ronda20": 886.1600000000001, "porVendedor": {"Felipe": {"valor": 644.48, "qtd": 2}, "Guilherme": {"valor": 241.68, "qtd": 1}}, "vendas": [{"hora": 5.016666666666667, "vendedor": "Felipe", "valor": 322.24}, {"hora": 5.033333333333333, "vendedor": "Felipe", "valor": 322.24}, {"hora": 5.033333333333333, "vendedor": "Guilherme", "valor": 241.68}]}, "2026-05-02": {"data": "2026-05-02", "total": 966.72, "qtd": 1, "ronda12": 0, "ronda16": 0, "ronda20": 966.72, "porVendedor": {"Guilherme": {"valor": 966.72, "qtd": 1}}, "vendas": [{"hora": 16.333333333333332, "vendedor": "Guilherme", "valor": 966.72}]}, "2026-05-04": {"data": "2026-05-04", "total": 5611.0, "qtd": 14, "ronda12": 547.0, "ronda16": 3626.0, "ronda20": 5611.0, "porVendedor": {"Felipe": {"valor": 1938.0, "qtd": 4}, "Guilherme": {"valor": 3079.0, "qtd": 7}, "Pedro": {"valor": 594.0, "qtd": 3}}, "vendas": [{"hora": 10.4, "vendedor": "Felipe", "valor": 547.0}, {"hora": 13.3, "vendedor": "Guilherme", "valor": 547.0}, {"hora": 13.35, "vendedor": "Guilherme", "valor": 547.0}, {"hora": 13.533333333333333, "vendedor": "Guilherme", "valor": 297.0}, {"hora": 14.733333333333333, "vendedor": "Guilherme", "valor": 547.0}, {"hora": 15.083333333333334, "vendedor": "Pedro", "valor": 297.0}, {"hora": 15.433333333333334, "vendedor": "Felipe", "valor": 297.0}, {"hora": 15.583333333333334, "vendedor": "Felipe", "valor": 547.0}, {"hora": 16.05, "vendedor": "Felipe", "valor": 547.0}, {"hora": 16.383333333333333, "vendedor": "Pedro", "valor": 148.5}, {"hora": 17.65, "vendedor": "Guilherme", "valor": 547.0}, {"hora": 17.783333333333335, "vendedor": "Guilherme", "valor": 297.0}, {"hora": 18.283333333333335, "vendedor": "Pedro", "valor": 148.5}, {"hora": 19.283333333333335, "vendedor": "Guilherme", "valor": 297.0}]}, "2026-05-05": {"data": "2026-05-05", "total": 6914.86, "qtd": 17, "ronda12": 2147.86, "ronda16": 4976.86, "ronda20": 6914.86, "porVendedor": {"Guilherme": {"valor": 4141.18, "qtd": 10}, "Pedro": {"valor": 835.6800000000001, "qtd": 3}, "Felipe": {"valor": 1641.0, "qtd": 3}, "Joao": {"valor": 297.0, "qtd": 1}}, "vendas": [{"hora": 6.033333333333333, "vendedor": "Guilherme", "valor": 273.5}, {"hora": 6.033333333333333, "vendedor": "Pedro", "valor": 241.68}, {"hora": 6.05, "vendedor": "Guilherme", "valor": 241.68}, {"hora": 9.6, "vendedor": "Pedro", "valor": 297.0}, {"hora": 10.683333333333334, "vendedor": "Felipe", "valor": 547.0}, {"hora": 10.966666666666667, "vendedor": "Guilherme", "valor": 547.0}, {"hora": 13.383333333333333, "vendedor": "Guilherme", "valor": 297.0}, {"hora": 13.416666666666666, "vendedor": "Guilherme", "valor": 297.0}, {"hora": 13.516666666666667, "vendedor": "Felipe", "valor": 547.0}, {"hora": 15.316666666666666, "vendedor": "Guilherme", "valor": 547.0}, {"hora": 15.45, "vendedor": "Felipe", "valor": 547.0}, {"hora": 15.583333333333334, "vendedor": "Guilherme", "valor": 297.0}, {"hora": 15.766666666666667, "vendedor": "Joao", "valor": 297.0}, {"hora": 16.783333333333335, "vendedor": "Guilherme", "valor": 547.0}, {"hora": 17.4, "vendedor": "Pedro", "valor": 297.0}, {"hora": 17.933333333333334, "vendedor": "Guilherme", "valor": 547.0}, {"hora": 19.35, "vendedor": "Guilherme", "valor": 547.0}]}, "2026-05-06": {"data": "2026-05-06", "total": 11083.78, "qtd": 24, "ronda12": 2814.1, "ronda16": 7135.06, "ronda20": 11083.78, "porVendedor": {"Guilherme": {"valor": 2270.58, "qtd": 5}, "Joao": {"valor": 2926.4799999999996, "qtd": 8}, "Pedro": {"valor": 3279.0, "qtd": 7}, "Felipe": {"valor": 2607.7200000000003, "qtd": 4}}, "vendas": [{"hora": 6.016666666666667, "vendedor": "Guilherme", "valor": 241.68}, {"hora": 6.033333333333333, "vendedor": "Guilherme", "valor": 273.5}, {"hora": 6.033333333333333, "vendedor": "Guilherme", "valor": 241.68}, {"hora": 10.633333333333333, "vendedor": "Joao", "valor": 297.0}, {"hora": 10.85, "vendedor": "Pedro", "valor": 297.0}, {"hora": 11.0, "vendedor": "Joao", "valor": 297.0}, {"hora": 11.166666666666666, "vendedor": "Joao", "valor": 322.24}, {"hora": 11.833333333333334, "vendedor": "Joao", "valor": 547.0}, {"hora": 11.883333333333333, "vendedor": "Pedro", "valor": 297.0}, {"hora": 12.466666666666667, "vendedor": "Joao", "valor": 547.0}, {"hora": 12.733333333333333, "vendedor": "Joao", "valor": 297.0}, {"hora": 12.966666666666667, "vendedor": "Felipe", "valor": 547.0}, {"hora": 13.016666666666667, "vendedor": "Guilherme", "valor": 966.72}, {"hora": 13.75, "vendedor": "Pedro", "valor": 547.0}, {"hora": 15.05, "vendedor": "Felipe", "valor": 547.0}, {"hora": 15.166666666666666, "vendedor": "Joao", "valor": 322.24}, {"hora": 15.416666666666666, "vendedor": "Pedro", "valor": 547.0}, {"hora": 16.083333333333332, "vendedor": "Felipe", "valor": 966.72}, {"hora": 16.8, "vendedor": "Pedro", "valor": 297.0}, {"hora": 17.083333333333332, "vendedor": "Felipe", "valor": 547.0}, {"hora": 17.466666666666665, "vendedor": "Pedro", "valor": 997.0}, {"hora": 17.716666666666665, "vendedor": "Guilherme", "valor": 547.0}, {"hora": 17.8, "vendedor": "Joao", "valor": 297.0}, {"hora": 17.983333333333334, "vendedor": "Pedro", "valor": 297.0}]}}, "porVendedor": {"Felipe": {"valor": 6831.2, "qtd": 13}, "Guilherme": {"valor": 10699.16, "qtd": 24}, "Joao": {"valor": 3223.48, "qtd": 9}, "Pedro": {"valor": 4708.68, "qtd": 13}}}, "abril": {"totalFaturamento": 4511.360000000001, "totalVendas": 6, "porDia": {"2026-04-24": {"data": "2026-04-24", "total": 297.0, "qtd": 1, "ronda12": 297.0, "ronda16": 297.0, "ronda20": 297.0, "porVendedor": {"NaN": {"valor": 297.0, "qtd": 1}}, "vendas": [{"hora": 1.4833333333333334, "vendedor": NaN, "valor": 297.0}]}, "2026-04-30": {"data": "2026-04-30", "total": 5058.360000000001, "qtd": 7, "ronda12": 0, "ronda16": 0, "ronda20": 2255.6800000000003, "porVendedor": {"Guilherme": {"valor": 3544.6400000000003, "qtd": 5}, "Pedro": {"valor": 966.72, "qtd": 1}, "NaN": {"valor": 547.0, "qtd": 1}}, "vendas": [{"hora": 17.933333333333334, "vendedor": "Guilherme", "valor": 322.24}, {"hora": 19.516666666666666, "vendedor": "Pedro", "valor": 966.72}, {"hora": 19.7, "vendedor": "Guilherme", "valor": 966.72}, {"hora": 20.266666666666666, "vendedor": "Guilherme", "valor": 966.72}, {"hora": 20.75, "vendedor": "Guilherme", "valor": 966.72}, {"hora": 20.8, "vendedor": NaN, "valor": 547.0}, {"hora": 22.933333333333334, "vendedor": "Guilherme", "valor": 322.24}]}}, "porVendedor": {"Guilherme": {"valor": 3544.6400000000003, "qtd": 5}, "Pedro": {"valor": 966.72, "qtd": 1}}}};
+let DADOS = { maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} } };
+
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBV0F7S_7b1qi9WFTeGORVnJZ6J76tYEvPqAmWQjtwIsSv-dgbuOq_Qqef4YWNKIz0D1F8n_dqHK_F/pub?output=csv';
 
 const VENDEDORES = ['Pedro','Felipe','Joao','Guilherme'];
 const VENDOR_COLORS = {
@@ -237,7 +272,14 @@ const VENDOR_COLORS = {
 const META_MENSAL = 350000;
 const META_DIARIA = 17500;
 const TICKET_META = 400;
-const HOJE = '2026-05-06';
+// Pega a data de hoje automaticamente no formato YYYY-MM-DD
+const HOJE = (() => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const dia = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${dia}`;
+})();
 
 let currentMonth = 'maio';
 let currentVendor = 'geral';
@@ -364,43 +406,122 @@ function renderChartVendedores(){
 
 function renderChartEvolucao(){
   const d = DADOS[currentMonth];
-  // Gerar todos os dias do mês
   const ano = 2026;
   const mes = currentMonth === 'maio' ? 5 : 4;
   const ultimoDia = new Date(ano, mes, 0).getDate();
+  
+  // Pré-calcular dias úteis do mês inteiro
+  const diasUteisMes = [];
+  for(let i=1;i<=ultimoDia;i++){
+    const dt = new Date(ano, mes-1, i);
+    const dow = dt.getDay();
+    if(dow >= 1 && dow <= 5) diasUteisMes.push(i);
+  }
+  const totalDU = diasUteisMes.length;
+  
+  // Para o reajuste: contar dias úteis restantes a partir de hoje
+  const hojeDate = new Date(HOJE + 'T00:00:00');
+  const hojeIdx = (mes === hojeDate.getMonth()+1 && ano === hojeDate.getFullYear()) ? hojeDate.getDate() : null;
+  
   const labels = [];
   const realizado = [];
-  const ouro = [];
-  const prata = [];
-  const bronze = [];
+  const ouro = [], prata = [], bronze = [];
+  const ouroReaj = [], prataReaj = [], bronzeReaj = [];
   
   let acumRealizado = 0;
+  let acumOuro = 0, acumPrata = 0, acumBronze = 0;
+  let acumOuroReaj = 0, acumPrataReaj = 0, acumBronzeReaj = 0;
+  
+  // Faturamento atual (até ontem) para cálculo da linha reajustada
+  let fatAteOntem = 0;
+  if(hojeIdx){
+    for(let i=1;i<hojeIdx;i++){
+      const k = `${ano}-${String(mes).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+      if(d.porDia[k]) fatAteOntem += d.porDia[k].total;
+    }
+  }
+  
+  // Dias úteis restantes (incluindo hoje)
+  const duRestantes = hojeIdx ? diasUteisMes.filter(x => x >= hojeIdx).length : 0;
+  const ritmoRestOuro = duRestantes > 0 ? Math.max(0, 550000 - fatAteOntem) / duRestantes : 0;
+  const ritmoRestPrata = duRestantes > 0 ? Math.max(0, 385000 - fatAteOntem) / duRestantes : 0;
+  const ritmoRestBronze = duRestantes > 0 ? Math.max(0, 264000 - fatAteOntem) / duRestantes : 0;
+  
+  // Ritmo planejado (dia útil normal)
+  const ritmoOuro = 550000 / totalDU;
+  const ritmoPrata = 385000 / totalDU;
+  const ritmoBronze = 264000 / totalDU;
+  
   for(let i=1;i<=ultimoDia;i++){
     const dataKey = `${ano}-${String(mes).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
     labels.push(`${String(i).padStart(2,'0')}/${String(mes).padStart(2,'0')}/26`);
     
     const dia = d.porDia[dataKey];
-    if(dia && dia.total){acumRealizado += dia.total}
+    if(dia && dia.total) acumRealizado += dia.total;
     realizado.push(acumRealizado);
     
-    // Metas acumuladas linearmente
-    ouro.push((550000/ultimoDia)*i);
-    prata.push((385000/ultimoDia)*i);
-    bronze.push((264000/ultimoDia)*i);
+    const ehDU = diasUteisMes.includes(i);
+    if(ehDU){
+      acumOuro += ritmoOuro;
+      acumPrata += ritmoPrata;
+      acumBronze += ritmoBronze;
+    }
+    ouro.push(acumOuro);
+    prata.push(acumPrata);
+    bronze.push(acumBronze);
+    
+    // Linha reajustada: até ontem segue o realizado; a partir de hoje, ritmo necessário
+    if(hojeIdx && i < hojeIdx){
+      // até ontem, mostra acompanhando o realizado (não desenha)
+      ouroReaj.push(null);
+      prataReaj.push(null);
+      bronzeReaj.push(null);
+    } else if(hojeIdx && i === hojeIdx){
+      // hoje: começa do faturamento até ontem
+      acumOuroReaj = fatAteOntem + (ehDU ? ritmoRestOuro : 0);
+      acumPrataReaj = fatAteOntem + (ehDU ? ritmoRestPrata : 0);
+      acumBronzeReaj = fatAteOntem + (ehDU ? ritmoRestBronze : 0);
+      ouroReaj.push(acumOuroReaj);
+      prataReaj.push(acumPrataReaj);
+      bronzeReaj.push(acumBronzeReaj);
+    } else if(hojeIdx && i > hojeIdx){
+      if(ehDU){
+        acumOuroReaj += ritmoRestOuro;
+        acumPrataReaj += ritmoRestPrata;
+        acumBronzeReaj += ritmoRestBronze;
+      }
+      ouroReaj.push(acumOuroReaj);
+      prataReaj.push(acumPrataReaj);
+      bronzeReaj.push(acumBronzeReaj);
+    } else {
+      ouroReaj.push(null);
+      prataReaj.push(null);
+      bronzeReaj.push(null);
+    }
+  }
+  
+  const datasets = [
+    {label:'Realizado',data:realizado,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.15)',fill:true,tension:.3,borderWidth:3,pointRadius:3,pointBackgroundColor:'#3b82f6'},
+    {label:'🥇 Ouro',data:ouro,borderColor:'#fbbf24',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5},
+    {label:'🥈 Prata',data:prata,borderColor:'#cbd5e1',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5},
+    {label:'🥉 Bronze',data:bronze,borderColor:'#d97706',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5}
+  ];
+  
+  if(currentMonth === 'maio' && hojeIdx){
+    datasets.push(
+      {label:'🥇 Ouro reajustada',data:ouroReaj,borderColor:'#fbbf24',borderDash:[2,4],fill:false,pointRadius:0,borderWidth:2,spanGaps:false},
+      {label:'🥈 Prata reajustada',data:prataReaj,borderColor:'#cbd5e1',borderDash:[2,4],fill:false,pointRadius:0,borderWidth:2,spanGaps:false},
+      {label:'🥉 Bronze reajustada',data:bronzeReaj,borderColor:'#d97706',borderDash:[2,4],fill:false,pointRadius:0,borderWidth:2,spanGaps:false}
+    );
   }
   
   if(chartEvol) chartEvol.destroy();
   chartEvol = new Chart(document.getElementById('chartEvol'),{
     type:'line',
-    data:{labels,datasets:[
-      {label:'Realizado',data:realizado,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.15)',fill:true,tension:.3,borderWidth:3,pointRadius:3,pointBackgroundColor:'#3b82f6'},
-      {label:'🥇 Ouro',data:ouro,borderColor:'#fbbf24',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5},
-      {label:'🥈 Prata',data:prata,borderColor:'#cbd5e1',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5},
-      {label:'🥉 Bronze',data:bronze,borderColor:'#d97706',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5}
-    ]},
+    data:{labels,datasets},
     options:{
       responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'top',labels:{color:'#8b95c7',usePointStyle:true,padding:15}},
+      plugins:{legend:{position:'top',labels:{color:'#8b95c7',usePointStyle:true,padding:12,font:{size:11}}},
       tooltip:{callbacks:{label:c=>c.dataset.label + ': ' + fmtMoney(c.parsed.y)}}},
       scales:{y:{ticks:{color:'#8b95c7',callback:fmtMoneyK},grid:{color:'rgba(255,255,255,.04)'}},
       x:{ticks:{color:'#8b95c7',maxRotation:0,autoSkip:true,maxTicksLimit:10},grid:{display:false}}}
@@ -624,9 +745,89 @@ function renderTabela(){
   });
 }
 
+function diasUteisRestantes(mes, ano){
+  // Retorna lista de Date dos dias úteis de hoje em diante (incluindo hoje)
+  const hoje = new Date(HOJE + 'T00:00:00');
+  const ultimoDia = new Date(ano, mes, 0).getDate();
+  const dias = [];
+  for(let d = 1; d <= ultimoDia; d++){
+    const dt = new Date(ano, mes-1, d);
+    if(dt < hoje) continue;
+    const dow = dt.getDay(); // 0=dom, 6=sab
+    if(dow >= 1 && dow <= 5) dias.push(dt);
+  }
+  return dias;
+}
+
+function diasUteisTotalMes(mes, ano){
+  const ultimoDia = new Date(ano, mes, 0).getDate();
+  const dias = [];
+  for(let d = 1; d <= ultimoDia; d++){
+    const dt = new Date(ano, mes-1, d);
+    const dow = dt.getDay();
+    if(dow >= 1 && dow <= 5) dias.push(dt);
+  }
+  return dias;
+}
+
+function renderProjecao(){
+  const grid = document.getElementById('projecaoGrid');
+  grid.innerHTML = '';
+  const label = document.getElementById('projecaoLabel');
+  
+  const ano = 2026;
+  const mes = currentMonth === 'maio' ? 5 : 4;
+  
+  // Em Abril, mostramos retrospectivo (não tem mais dias). Pula a seção.
+  const restantes = currentMonth === 'maio' ? diasUteisRestantes(mes, ano) : [];
+  
+  if(restantes.length === 0){
+    label.textContent = '(mês encerrado ou não aplicável)';
+    grid.innerHTML = '<div class="projecao-card" style="grid-column:1/-1;text-align:center;color:var(--muted);padding:24px">Sem dias úteis restantes neste mês.</div>';
+    return;
+  }
+  
+  label.textContent = `(a partir de hoje · ${restantes.length} dias úteis)`;
+  
+  const fatAtual = DADOS[currentMonth].totalFaturamento;
+  const nVendedores = VENDEDORES.length;
+  const metas = [
+    {nome:'Ouro', medal:'🥇', valor:550000, classe:'ouro', cor:'gold'},
+    {nome:'Prata', medal:'🥈', valor:385000, classe:'prata', cor:'silver'},
+    {nome:'Bronze', medal:'🥉', valor:264000, classe:'bronze', cor:'bronze-c'}
+  ];
+  
+  metas.forEach(m=>{
+    const falta = Math.max(0, m.valor - fatAtual);
+    const porDia = falta / restantes.length;
+    const porVendDia = porDia / nVendedores;
+    const bateu = falta === 0;
+    
+    grid.innerHTML += `
+      <div class="projecao-card ${m.classe}">
+        <div class="proj-header">
+          <span class="proj-medal">${m.medal}</span>
+          <span class="proj-title">${m.nome.toUpperCase()}</span>
+        </div>
+        <div class="proj-falta">${bateu ? 'META BATIDA' : 'Falta para bater'}</div>
+        <div class="proj-falta-value ${m.cor}">${bateu ? '✅' : fmtMoney(falta)}</div>
+        <div class="proj-row">
+          <span class="proj-label">Por dia (${restantes.length} dias)</span>
+          <span class="proj-value ${m.cor}">${bateu ? '—' : fmtMoney(porDia)}</span>
+        </div>
+        <div class="proj-row">
+          <span class="proj-label">Por vendedor/dia</span>
+          <span class="proj-value ${m.cor}">${bateu ? '—' : fmtMoney(porVendDia)}</span>
+        </div>
+      </div>
+    `;
+  });
+}
+
 function renderAll(){
   renderKPIs();
   renderHoje();
+  renderProjecao();
   renderChartVendedores();
   renderChartEvolucao();
   renderDaySelector();
@@ -638,8 +839,187 @@ function renderAll(){
 const now = new Date();
 document.getElementById('updateTime').textContent = now.toTimeString().slice(0,5);
 
+// ========== CARREGAMENTO E PROCESSAMENTO DO CSV ==========
+
+function parseCSV(text){
+  // Parser simples respeitando aspas duplas e vírgulas dentro de campos
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i = 0; i < text.length; i++){
+    const ch = text[i];
+    const next = text[i+1];
+    if(inQuotes){
+      if(ch === '"' && next === '"'){ field += '"'; i++; }
+      else if(ch === '"'){ inQuotes = false; }
+      else { field += ch; }
+    } else {
+      if(ch === '"'){ inQuotes = true; }
+      else if(ch === ','){ row.push(field); field = ''; }
+      else if(ch === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+      else if(ch === '\r'){ /* skip */ }
+      else { field += ch; }
+    }
+  }
+  if(field !== '' || row.length > 0){ row.push(field); rows.push(row); }
+  return rows;
+}
+
+function parseValor(v){
+  if(!v) return 0;
+  const s = String(v).replace('R$','').replace(/\s/g,'').trim().replace(',','.');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function parseData(s){
+  if(!s) return null;
+  // Aceita YYYY-MM-DD ou DD/MM/YYYY
+  s = String(s).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return { ano:+m[1], mes:+m[2], dia:+m[3] };
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return { ano:+m[3], mes:+m[2], dia:+m[1] };
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if(m) return { ano:2000+(+m[3]), mes:+m[2], dia:+m[1] };
+  return null;
+}
+
+function parseHora(h){
+  if(!h) return 0;
+  const s = String(h).trim();
+  // Formato HH:MM:SS ou HH:MM
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  if(m) return parseInt(m[1]) + parseInt(m[2])/60;
+  // Formato decimal (Excel pode passar como 0.5 = 12h)
+  const n = parseFloat(s);
+  if(!isNaN(n) && n >= 0 && n < 1) return n * 24;
+  if(!isNaN(n)) return n;
+  return 0;
+}
+
+function mapearVendedor(utm){
+  if(!utm) return null;
+  const s = String(utm).toLowerCase();
+  if(s.includes('joao-guilherme') || s.includes('joao_guilherme')) return 'Joao';
+  if(s.includes('guilherme') || s.includes('trinchao') || s.includes('trinchão')) return 'Guilherme';
+  if(s.includes('felipe') || s.includes('padovani')) return 'Felipe';
+  if(s.includes('pedro') || s.includes('barach')) return 'Pedro';
+  if(s.includes('daniel') || s.includes('godoy')) return 'Daniel';
+  return null;
+}
+
+function processarCSV(csvText){
+  const rows = parseCSV(csvText);
+  if(rows.length < 2) throw new Error('CSV vazio ou inválido');
+  
+  const header = rows[0].map(h => String(h).trim());
+  const idxData = header.findIndex(h => h.toLowerCase() === 'data');
+  const idxValor = header.findIndex(h => h.toLowerCase() === 'valor');
+  const idxHora = header.findIndex(h => h.toLowerCase() === 'hora');
+  const idxUtm = header.findIndex(h => h.toLowerCase().includes('utm') && h.toLowerCase().includes('source'));
+  
+  if(idxData < 0 || idxValor < 0 || idxUtm < 0){
+    throw new Error('Colunas obrigatórias não encontradas (Data, Valor, utm_source). Cabeçalhos vistos: ' + header.join(', '));
+  }
+  
+  // Inicializar estrutura
+  const acc = {
+    maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} },
+    abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }
+  };
+  
+  for(let i = 1; i < rows.length; i++){
+    const row = rows[i];
+    if(!row || row.length === 0 || !row[idxData]) continue;
+    
+    const data = parseData(row[idxData]);
+    if(!data || data.ano !== 2026) continue;
+    
+    let mesKey;
+    if(data.mes === 5) mesKey = 'maio';
+    else if(data.mes === 4) mesKey = 'abril';
+    else continue;
+    
+    const valor = parseValor(row[idxValor]);
+    const hora = idxHora >= 0 ? parseHora(row[idxHora]) : 0;
+    const vendedor = mapearVendedor(row[idxUtm]);
+    
+    if(!vendedor || vendedor === 'Daniel') continue; // Ignora Daniel
+    if(valor === 0) continue;
+    
+    const dataKey = `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}`;
+    
+    // Inicializa dia se não existe
+    if(!acc[mesKey].porDia[dataKey]){
+      acc[mesKey].porDia[dataKey] = {
+        data: dataKey, total: 0, qtd: 0,
+        ronda12: 0, ronda16: 0, ronda20: 0,
+        porVendedor: {}, vendas: []
+      };
+    }
+    const dia = acc[mesKey].porDia[dataKey];
+    dia.total += valor;
+    dia.qtd += 1;
+    dia.vendas.push({ hora, vendedor, valor });
+    if(hora < 12) dia.ronda12 += valor;
+    if(hora < 16) dia.ronda16 += valor;
+    if(hora < 20) dia.ronda20 += valor;
+    
+    if(!dia.porVendedor[vendedor]) dia.porVendedor[vendedor] = { valor: 0, qtd: 0 };
+    dia.porVendedor[vendedor].valor += valor;
+    dia.porVendedor[vendedor].qtd += 1;
+    
+    // Total mensal
+    acc[mesKey].totalFaturamento += valor;
+    acc[mesKey].totalVendas += 1;
+    if(!acc[mesKey].porVendedor[vendedor]) acc[mesKey].porVendedor[vendedor] = { valor: 0, qtd: 0 };
+    acc[mesKey].porVendedor[vendedor].valor += valor;
+    acc[mesKey].porVendedor[vendedor].qtd += 1;
+  }
+  
+  return acc;
+}
+
+async function carregarDados(forceRefresh = false){
+  const dot = document.getElementById('liveDot');
+  const status = document.getElementById('updateStatus');
+  const btn = document.getElementById('refreshBtn');
+  const banner = document.getElementById('errorBanner');
+  
+  dot.className = 'live-dot loading';
+  if(btn) btn.classList.add('loading');
+  status.innerHTML = 'Carregando dados...';
+  banner.classList.remove('show');
+  
+  try {
+    // Cache buster pra forçar refresh
+    const url = CSV_URL + (forceRefresh ? '&_t=' + Date.now() : '');
+    const resp = await fetch(url, { cache: forceRefresh ? 'no-store' : 'default' });
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    
+    const novosDados = processarCSV(text);
+    DADOS = novosDados;
+    
+    dot.className = 'live-dot';
+    const now = new Date();
+    document.getElementById('updateTime').textContent = now.toTimeString().slice(0,5);
+    status.innerHTML = 'Atualizado às <span id="updateTime">' + now.toTimeString().slice(0,5) + '</span>';
+    
+    renderAll();
+  } catch(err){
+    console.error('Erro ao carregar:', err);
+    dot.className = 'live-dot error';
+    status.innerHTML = 'Erro ao carregar';
+    banner.textContent = '⚠️ Erro ao buscar dados da planilha: ' + err.message + '. Verifique se a planilha continua publicada na web. Tente clicar em 🔄 ou recarregar a página.';
+    banner.classList.add('show');
+  } finally {
+    if(btn) btn.classList.remove('loading');
+  }
+}
+
 renderVendorTabs();
-renderAll();
+carregarDados();
 </script>
 </body>
 </html>
