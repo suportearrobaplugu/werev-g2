@@ -53,24 +53,6 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .progress-bar.red{background:linear-gradient(90deg,var(--red),#dc2626)}
 .progress-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:6px}
 .metas-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.projecao-card{background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:16px;padding:24px;position:relative;overflow:hidden}
-.projecao-card.ouro{border-color:rgba(251,191,36,.3)}
-.projecao-card.ouro::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#fbbf24,#f59e0b)}
-.projecao-card.prata{border-color:rgba(203,213,225,.25)}
-.projecao-card.prata::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#cbd5e1,#94a3b8)}
-.projecao-card.bronze{border-color:rgba(217,119,6,.3)}
-.projecao-card.bronze::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#d97706,#b45309)}
-.proj-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-.proj-medal{font-size:24px}
-.proj-title{font-size:14px;font-weight:700;letter-spacing:1.5px}
-.proj-falta{font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1.5px}
-.proj-falta-value{font-size:24px;font-weight:800;letter-spacing:-.5px;margin-bottom:14px}
-.proj-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid rgba(255,255,255,.05)}
-.proj-label{font-size:12px;color:var(--muted)}
-.proj-value{font-size:14px;font-weight:700}
-.proj-value.gold{color:#fbbf24}
-.proj-value.silver{color:#cbd5e1}
-.proj-value.bronze-c{color:#d97706}
 .meta-card{background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:16px;padding:32px;text-align:center}
 .meta-icon{font-size:32px;margin-bottom:12px}
 .meta-value{font-size:28px;font-weight:800;letter-spacing:-1px;margin-bottom:6px}
@@ -196,9 +178,6 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <div class="meta-card"><div class="meta-icon">🥈</div><div class="meta-value">R$ 385.000</div><div class="meta-detail">963 vendas · 241/vendedor</div></div>
     <div class="meta-card"><div class="meta-icon">🥉</div><div class="meta-value">R$ 264.000</div><div class="meta-detail">660 vendas · 165/vendedor</div></div>
   </div>
-
-  <div class="section-title">Projeção — Dias Úteis Restantes <span id="projecaoLabel" style="color:var(--accent)">(--)</span></div>
-  <div class="metas-grid" id="projecaoGrid"></div>
 
   <div class="section-title">Análise por Vendedor</div>
   <div class="grid-2">
@@ -385,122 +364,43 @@ function renderChartVendedores(){
 
 function renderChartEvolucao(){
   const d = DADOS[currentMonth];
+  // Gerar todos os dias do mês
   const ano = 2026;
   const mes = currentMonth === 'maio' ? 5 : 4;
   const ultimoDia = new Date(ano, mes, 0).getDate();
-  
-  // Pré-calcular dias úteis do mês inteiro
-  const diasUteisMes = [];
-  for(let i=1;i<=ultimoDia;i++){
-    const dt = new Date(ano, mes-1, i);
-    const dow = dt.getDay();
-    if(dow >= 1 && dow <= 5) diasUteisMes.push(i);
-  }
-  const totalDU = diasUteisMes.length;
-  
-  // Para o reajuste: contar dias úteis restantes a partir de hoje
-  const hojeDate = new Date(HOJE + 'T00:00:00');
-  const hojeIdx = (mes === hojeDate.getMonth()+1 && ano === hojeDate.getFullYear()) ? hojeDate.getDate() : null;
-  
   const labels = [];
   const realizado = [];
-  const ouro = [], prata = [], bronze = [];
-  const ouroReaj = [], prataReaj = [], bronzeReaj = [];
+  const ouro = [];
+  const prata = [];
+  const bronze = [];
   
   let acumRealizado = 0;
-  let acumOuro = 0, acumPrata = 0, acumBronze = 0;
-  let acumOuroReaj = 0, acumPrataReaj = 0, acumBronzeReaj = 0;
-  
-  // Faturamento atual (até ontem) para cálculo da linha reajustada
-  let fatAteOntem = 0;
-  if(hojeIdx){
-    for(let i=1;i<hojeIdx;i++){
-      const k = `${ano}-${String(mes).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
-      if(d.porDia[k]) fatAteOntem += d.porDia[k].total;
-    }
-  }
-  
-  // Dias úteis restantes (incluindo hoje)
-  const duRestantes = hojeIdx ? diasUteisMes.filter(x => x >= hojeIdx).length : 0;
-  const ritmoRestOuro = duRestantes > 0 ? Math.max(0, 550000 - fatAteOntem) / duRestantes : 0;
-  const ritmoRestPrata = duRestantes > 0 ? Math.max(0, 385000 - fatAteOntem) / duRestantes : 0;
-  const ritmoRestBronze = duRestantes > 0 ? Math.max(0, 264000 - fatAteOntem) / duRestantes : 0;
-  
-  // Ritmo planejado (dia útil normal)
-  const ritmoOuro = 550000 / totalDU;
-  const ritmoPrata = 385000 / totalDU;
-  const ritmoBronze = 264000 / totalDU;
-  
   for(let i=1;i<=ultimoDia;i++){
     const dataKey = `${ano}-${String(mes).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
     labels.push(`${String(i).padStart(2,'0')}/${String(mes).padStart(2,'0')}/26`);
     
     const dia = d.porDia[dataKey];
-    if(dia && dia.total) acumRealizado += dia.total;
+    if(dia && dia.total){acumRealizado += dia.total}
     realizado.push(acumRealizado);
     
-    const ehDU = diasUteisMes.includes(i);
-    if(ehDU){
-      acumOuro += ritmoOuro;
-      acumPrata += ritmoPrata;
-      acumBronze += ritmoBronze;
-    }
-    ouro.push(acumOuro);
-    prata.push(acumPrata);
-    bronze.push(acumBronze);
-    
-    // Linha reajustada: até ontem segue o realizado; a partir de hoje, ritmo necessário
-    if(hojeIdx && i < hojeIdx){
-      // até ontem, mostra acompanhando o realizado (não desenha)
-      ouroReaj.push(null);
-      prataReaj.push(null);
-      bronzeReaj.push(null);
-    } else if(hojeIdx && i === hojeIdx){
-      // hoje: começa do faturamento até ontem
-      acumOuroReaj = fatAteOntem + (ehDU ? ritmoRestOuro : 0);
-      acumPrataReaj = fatAteOntem + (ehDU ? ritmoRestPrata : 0);
-      acumBronzeReaj = fatAteOntem + (ehDU ? ritmoRestBronze : 0);
-      ouroReaj.push(acumOuroReaj);
-      prataReaj.push(acumPrataReaj);
-      bronzeReaj.push(acumBronzeReaj);
-    } else if(hojeIdx && i > hojeIdx){
-      if(ehDU){
-        acumOuroReaj += ritmoRestOuro;
-        acumPrataReaj += ritmoRestPrata;
-        acumBronzeReaj += ritmoRestBronze;
-      }
-      ouroReaj.push(acumOuroReaj);
-      prataReaj.push(acumPrataReaj);
-      bronzeReaj.push(acumBronzeReaj);
-    } else {
-      ouroReaj.push(null);
-      prataReaj.push(null);
-      bronzeReaj.push(null);
-    }
-  }
-  
-  const datasets = [
-    {label:'Realizado',data:realizado,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.15)',fill:true,tension:.3,borderWidth:3,pointRadius:3,pointBackgroundColor:'#3b82f6'},
-    {label:'🥇 Ouro',data:ouro,borderColor:'#fbbf24',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5},
-    {label:'🥈 Prata',data:prata,borderColor:'#cbd5e1',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5},
-    {label:'🥉 Bronze',data:bronze,borderColor:'#d97706',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5}
-  ];
-  
-  if(currentMonth === 'maio' && hojeIdx){
-    datasets.push(
-      {label:'🥇 Ouro reajustada',data:ouroReaj,borderColor:'#fbbf24',borderDash:[2,4],fill:false,pointRadius:0,borderWidth:2,spanGaps:false},
-      {label:'🥈 Prata reajustada',data:prataReaj,borderColor:'#cbd5e1',borderDash:[2,4],fill:false,pointRadius:0,borderWidth:2,spanGaps:false},
-      {label:'🥉 Bronze reajustada',data:bronzeReaj,borderColor:'#d97706',borderDash:[2,4],fill:false,pointRadius:0,borderWidth:2,spanGaps:false}
-    );
+    // Metas acumuladas linearmente
+    ouro.push((550000/ultimoDia)*i);
+    prata.push((385000/ultimoDia)*i);
+    bronze.push((264000/ultimoDia)*i);
   }
   
   if(chartEvol) chartEvol.destroy();
   chartEvol = new Chart(document.getElementById('chartEvol'),{
     type:'line',
-    data:{labels,datasets},
+    data:{labels,datasets:[
+      {label:'Realizado',data:realizado,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.15)',fill:true,tension:.3,borderWidth:3,pointRadius:3,pointBackgroundColor:'#3b82f6'},
+      {label:'🥇 Ouro',data:ouro,borderColor:'#fbbf24',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5},
+      {label:'🥈 Prata',data:prata,borderColor:'#cbd5e1',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5},
+      {label:'🥉 Bronze',data:bronze,borderColor:'#d97706',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5}
+    ]},
     options:{
       responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'top',labels:{color:'#8b95c7',usePointStyle:true,padding:12,font:{size:11}}},
+      plugins:{legend:{position:'top',labels:{color:'#8b95c7',usePointStyle:true,padding:15}},
       tooltip:{callbacks:{label:c=>c.dataset.label + ': ' + fmtMoney(c.parsed.y)}}},
       scales:{y:{ticks:{color:'#8b95c7',callback:fmtMoneyK},grid:{color:'rgba(255,255,255,.04)'}},
       x:{ticks:{color:'#8b95c7',maxRotation:0,autoSkip:true,maxTicksLimit:10},grid:{display:false}}}
@@ -724,89 +624,9 @@ function renderTabela(){
   });
 }
 
-function diasUteisRestantes(mes, ano){
-  // Retorna lista de Date dos dias úteis de hoje em diante (incluindo hoje)
-  const hoje = new Date(HOJE + 'T00:00:00');
-  const ultimoDia = new Date(ano, mes, 0).getDate();
-  const dias = [];
-  for(let d = 1; d <= ultimoDia; d++){
-    const dt = new Date(ano, mes-1, d);
-    if(dt < hoje) continue;
-    const dow = dt.getDay(); // 0=dom, 6=sab
-    if(dow >= 1 && dow <= 5) dias.push(dt);
-  }
-  return dias;
-}
-
-function diasUteisTotalMes(mes, ano){
-  const ultimoDia = new Date(ano, mes, 0).getDate();
-  const dias = [];
-  for(let d = 1; d <= ultimoDia; d++){
-    const dt = new Date(ano, mes-1, d);
-    const dow = dt.getDay();
-    if(dow >= 1 && dow <= 5) dias.push(dt);
-  }
-  return dias;
-}
-
-function renderProjecao(){
-  const grid = document.getElementById('projecaoGrid');
-  grid.innerHTML = '';
-  const label = document.getElementById('projecaoLabel');
-  
-  const ano = 2026;
-  const mes = currentMonth === 'maio' ? 5 : 4;
-  
-  // Em Abril, mostramos retrospectivo (não tem mais dias). Pula a seção.
-  const restantes = currentMonth === 'maio' ? diasUteisRestantes(mes, ano) : [];
-  
-  if(restantes.length === 0){
-    label.textContent = '(mês encerrado ou não aplicável)';
-    grid.innerHTML = '<div class="projecao-card" style="grid-column:1/-1;text-align:center;color:var(--muted);padding:24px">Sem dias úteis restantes neste mês.</div>';
-    return;
-  }
-  
-  label.textContent = `(a partir de hoje · ${restantes.length} dias úteis)`;
-  
-  const fatAtual = DADOS[currentMonth].totalFaturamento;
-  const nVendedores = VENDEDORES.length;
-  const metas = [
-    {nome:'Ouro', medal:'🥇', valor:550000, classe:'ouro', cor:'gold'},
-    {nome:'Prata', medal:'🥈', valor:385000, classe:'prata', cor:'silver'},
-    {nome:'Bronze', medal:'🥉', valor:264000, classe:'bronze', cor:'bronze-c'}
-  ];
-  
-  metas.forEach(m=>{
-    const falta = Math.max(0, m.valor - fatAtual);
-    const porDia = falta / restantes.length;
-    const porVendDia = porDia / nVendedores;
-    const bateu = falta === 0;
-    
-    grid.innerHTML += `
-      <div class="projecao-card ${m.classe}">
-        <div class="proj-header">
-          <span class="proj-medal">${m.medal}</span>
-          <span class="proj-title">${m.nome.toUpperCase()}</span>
-        </div>
-        <div class="proj-falta">${bateu ? 'META BATIDA' : 'Falta para bater'}</div>
-        <div class="proj-falta-value ${m.cor}">${bateu ? '✅' : fmtMoney(falta)}</div>
-        <div class="proj-row">
-          <span class="proj-label">Por dia (${restantes.length} dias)</span>
-          <span class="proj-value ${m.cor}">${bateu ? '—' : fmtMoney(porDia)}</span>
-        </div>
-        <div class="proj-row">
-          <span class="proj-label">Por vendedor/dia</span>
-          <span class="proj-value ${m.cor}">${bateu ? '—' : fmtMoney(porVendDia)}</span>
-        </div>
-      </div>
-    `;
-  });
-}
-
 function renderAll(){
   renderKPIs();
   renderHoje();
-  renderProjecao();
   renderChartVendedores();
   renderChartEvolucao();
   renderDaySelector();
