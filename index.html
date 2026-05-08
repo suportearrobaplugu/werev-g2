@@ -95,7 +95,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .rondas-tabela-wrap{margin-top:24px;padding-top:24px;border-top:1px solid rgba(255,255,255,.06)}
 .rondas-tabela-title{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:1.5px;margin-bottom:12px;text-transform:uppercase}
 .rondas-tabela-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.rondas-tabela{width:100%;border-collapse:collapse;font-size:12px;min-width:780px}
+.rondas-tabela{width:100%;border-collapse:collapse;font-size:12px;min-width:920px}
 .rondas-tabela th{text-align:left;padding:8px 10px;font-size:10px;color:var(--muted);font-weight:600;letter-spacing:1px;border-bottom:1px solid var(--border);text-transform:uppercase;white-space:nowrap}
 .rondas-tabela th.future{opacity:.4}
 .rondas-tabela td.future{opacity:.35}
@@ -107,6 +107,11 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .rondas-tabela .stack{display:flex;flex-direction:column;gap:2px;line-height:1.2}
 .rondas-tabela .stack .v-main{font-weight:700;font-size:12px}
 .rondas-tabela .stack .v-sub{font-size:10px;color:var(--muted)}
+.rondas-tabela th.total-col{text-align:right;background:rgba(91,140,255,.06);border-left:2px solid rgba(91,140,255,.25);border-right:2px solid rgba(91,140,255,.25);padding:12px 14px;font-size:11px}
+.rondas-tabela td.total-col{background:rgba(91,140,255,.04);border-left:2px solid rgba(91,140,255,.2);border-right:2px solid rgba(91,140,255,.2);padding:10px 14px}
+.rondas-tabela td.total-col .v-main{color:var(--accent);font-size:14px}
+.rondas-tabela tr.total-row td.total-col{background:rgba(91,140,255,.1)}
+.rondas-tabela tr.total-row td.total-col .v-main{font-size:15px}
 .rondas-tabela th.num{text-align:right}
 .rondas-tabela td{padding:12px;border-bottom:1px solid rgba(255,255,255,.04)}
 .rondas-tabela td.num{text-align:right;font-variant-numeric:tabular-nums}
@@ -780,8 +785,8 @@ function renderTabelaRondas(dia, diaKey){
   const horaAtual = new Date().getHours() + new Date().getMinutes()/60;
   function jaAconteceu(h){ return !ehHoje || horaAtual >= h; }
   
-  // Header (2 linhas: horários + métricas)
-  let head1 = '<tr><th rowspan="2">Vendedor</th>';
+  // Header (2 linhas: horários + métricas) — agora com coluna Total
+  let head1 = '<tr><th rowspan="2">Vendedor</th><th class="num total-col" rowspan="2" colspan="3">Total do dia</th>';
   HORARIOS.forEach(h => {
     const futureCls = jaAconteceu(h) ? '' : ' future';
     head1 += `<th class="num ronda-group${futureCls}" colspan="3">${String(h).padStart(2,'0')}h</th>`;
@@ -798,7 +803,7 @@ function renderTabelaRondas(dia, diaKey){
   tbody.innerHTML = '';
   
   if(!dia){
-    const totalCols = 1 + HORARIOS.length * 3;
+    const totalCols = 1 + 3 + HORARIOS.length * 3;
     tbody.innerHTML = `<tr><td colspan="${totalCols}" style="text-align:center;color:var(--muted);padding:20px">Sem dados para este dia</td></tr>`;
     return;
   }
@@ -812,14 +817,33 @@ function renderTabelaRondas(dia, diaKey){
     return { valor, qtd, ticket };
   }
   
-  // Totais por horario (sera agregado pelas linhas)
+  // Total absoluto do dia inteiro do vendedor (sem filtro de hora)
+  function totalDiaVendedor(vendedor){
+    const vendas = (dia.vendas||[]).filter(v => v.vendedor === vendedor);
+    const valor = vendas.reduce((s,v) => s + v.valor, 0);
+    const qtd = vendas.length;
+    return { valor, qtd, ticket: qtd > 0 ? valor/qtd : 0 };
+  }
+  
   const totaisPorHora = {};
   HORARIOS.forEach(h => totaisPorHora[h] = { valor: 0, qtd: 0 });
+  let totalGeralValor = 0, totalGeralQtd = 0;
   
   VENDEDORES.forEach(v => {
     const nome = v === 'Joao' ? 'João' : v;
     const cor = VENDOR_COLORS[v];
-    let row = `<tr><td><div class="vend-cell"><span class="vend-dot" style="background:${cor}"></span><span>${nome}</span></div></td>`;
+    const tot = totalDiaVendedor(v);
+    totalGeralValor += tot.valor;
+    totalGeralQtd += tot.qtd;
+    
+    const totValorTxt = tot.valor > 0 ? fmtMoney(tot.valor) : '—';
+    const totTicketTxt = tot.qtd > 0 ? fmtMoney(tot.ticket) : '—';
+    const totQtdTxt = tot.qtd > 0 ? tot.qtd : '—';
+    
+    let row = `<tr>
+      <td><div class="vend-cell"><span class="vend-dot" style="background:${cor}"></span><span>${nome}</span></div></td>
+      <td class="num total-col"><div class="stack"><span class="v-main">${totValorTxt}</span><span class="v-sub">${totQtdTxt} venda${tot.qtd === 1 ? '' : 's'} · ${totTicketTxt}</span></div></td>`;
+    
     HORARIOS.forEach(h => {
       const aconteceu = jaAconteceu(h);
       const futureCls = aconteceu ? '' : ' future';
@@ -836,7 +860,14 @@ function renderTabelaRondas(dia, diaKey){
   });
   
   // Linha de total
-  let totalRow = '<tr class="total-row"><td>Total</td>';
+  const totalGeralTicket = totalGeralQtd > 0 ? totalGeralValor/totalGeralQtd : 0;
+  const tgValorTxt = totalGeralValor > 0 ? fmtMoney(totalGeralValor) : '—';
+  const tgTicketTxt = totalGeralQtd > 0 ? fmtMoney(totalGeralTicket) : '—';
+  const tgQtdTxt = totalGeralQtd > 0 ? totalGeralQtd : '—';
+  
+  let totalRow = `<tr class="total-row">
+    <td>Total</td>
+    <td class="num total-col"><div class="stack"><span class="v-main">${tgValorTxt}</span><span class="v-sub">${tgQtdTxt} venda${totalGeralQtd === 1 ? '' : 's'} · ${tgTicketTxt}</span></div></td>`;
   HORARIOS.forEach(h => {
     const aconteceu = jaAconteceu(h);
     const futureCls = aconteceu ? '' : ' future';
