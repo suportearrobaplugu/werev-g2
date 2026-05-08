@@ -787,7 +787,7 @@ function renderTabelaRondas(dia, diaKey){
   const tbody = document.getElementById('rondasTbody');
   if(!tbody || !thead) return;
   
-  const HORARIOS = [8, 10, 12, 14, 16, 18, 20];
+  const HORARIOS = [9, 10, 12, 14, 16, 18, 20];
   const ehHoje = (diaKey === HOJE);
   const horaAtual = new Date().getHours() + new Date().getMinutes()/60;
   function jaAconteceu(h){ return !ehHoje || horaAtual >= h; }
