@@ -92,6 +92,18 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .vendor-tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
 .day-select{background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer}
 .ronda-chart-wrap{height:320px;position:relative;margin-top:16px}
+.rondas-tabela-wrap{margin-top:24px;padding-top:24px;border-top:1px solid rgba(255,255,255,.06)}
+.rondas-tabela-title{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:1.5px;margin-bottom:12px;text-transform:uppercase}
+.rondas-tabela{width:100%;border-collapse:collapse;font-size:13px}
+.rondas-tabela th{text-align:left;padding:10px 12px;font-size:10px;color:var(--muted);font-weight:600;letter-spacing:1px;border-bottom:1px solid var(--border);text-transform:uppercase}
+.rondas-tabela th.num{text-align:right}
+.rondas-tabela td{padding:12px;border-bottom:1px solid rgba(255,255,255,.04)}
+.rondas-tabela td.num{text-align:right;font-variant-numeric:tabular-nums}
+.rondas-tabela tr:last-child td{border-bottom:none}
+.rondas-tabela tr.total-row td{border-top:1px solid var(--border);font-weight:700;background:rgba(91,140,255,.04)}
+.rondas-tabela tr.total-row td.num{color:var(--accent)}
+.rondas-tabela .vend-cell{display:flex;align-items:center;gap:10px}
+.rondas-tabela .vend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .vendedor-table{width:100%;border-collapse:collapse;margin-top:16px}
 .vendedor-table th{text-align:left;padding:12px 16px;font-size:11px;color:var(--muted);font-weight:600;letter-spacing:1.5px;border-bottom:1px solid var(--border)}
 .vendedor-table td{padding:16px;border-bottom:1px solid rgba(255,255,255,.04)}
@@ -244,6 +256,20 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       </div>
     </div>
     <div class="ronda-chart-wrap"><canvas id="chartRondas"></canvas></div>
+    <div class="rondas-tabela-wrap">
+      <div class="rondas-tabela-title">Acumulado por vendedor</div>
+      <table class="rondas-tabela">
+        <thead>
+          <tr>
+            <th>Vendedor</th>
+            <th class="num">Ronda 12h</th>
+            <th class="num">Ronda 16h</th>
+            <th class="num">Ronda 20h</th>
+          </tr>
+        </thead>
+        <tbody id="rondasTbody"></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="section-title">Desempenho por Vendedor</div>
@@ -669,6 +695,30 @@ function renderRondas(){
     datasets.push(metaLineDataset('🥉 Bronze', META_DIA_BRONZE, '#d97706', nv));
   }
   
+  // Plugin para desenhar valores em cima das barras (apenas datasets do tipo bar com valor > 0)
+  const barLabelsPlugin = {
+    id: 'barLabels',
+    afterDatasetsDraw(chart){
+      const {ctx} = chart;
+      ctx.save();
+      ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = '#e8ecff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      chart.data.datasets.forEach((ds, i)=>{
+        if(ds.type === 'line') return;
+        const meta = chart.getDatasetMeta(i);
+        meta.data.forEach((bar, idx)=>{
+          const val = ds.data[idx];
+          if(!val || val <= 0) return;
+          const label = 'R$' + Math.round(val).toLocaleString('pt-BR');
+          ctx.fillText(label, bar.x, bar.y - 4);
+        });
+      });
+      ctx.restore();
+    }
+  };
+  
   // Gráfico
   if(chartRondas) chartRondas.destroy();
   chartRondas = new Chart(document.getElementById('chartRondas'),{
@@ -677,8 +727,10 @@ function renderRondas(){
       labels:['Ronda 12h','Ronda 16h','Ronda 20h'],
       datasets: datasets
     },
+    plugins:[barLabelsPlugin],
     options:{
       responsive:true,maintainAspectRatio:false,
+      layout:{padding:{top:24}},
       plugins:{
         legend:{
           display:true,
@@ -693,6 +745,59 @@ function renderRondas(){
       }
     }
   });
+  
+  // Renderizar tabela acumulada
+  renderTabelaRondas(dia);
+}
+
+function renderTabelaRondas(dia){
+  const tbody = document.getElementById('rondasTbody');
+  if(!tbody) return;
+  tbody.innerHTML = '';
+  
+  if(!dia){
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Sem dados para este dia</td></tr>';
+    return;
+  }
+  
+  function acum(vendedor, horaLimite){
+    return (dia.vendas||[])
+      .filter(v => v.vendedor === vendedor && v.hora < horaLimite)
+      .reduce((s,v) => s + v.valor, 0);
+  }
+  
+  let totR12 = 0, totR16 = 0, totR20 = 0;
+  
+  VENDEDORES.forEach(v => {
+    const r12 = acum(v, 12);
+    const r16 = acum(v, 16);
+    const r20 = acum(v, 20);
+    totR12 += r12; totR16 += r16; totR20 += r20;
+    const nome = v === 'Joao' ? 'João' : v;
+    const cor = VENDOR_COLORS[v];
+    tbody.innerHTML += `
+      <tr>
+        <td>
+          <div class="vend-cell">
+            <span class="vend-dot" style="background:${cor}"></span>
+            <span>${nome}</span>
+          </div>
+        </td>
+        <td class="num">${r12 > 0 ? fmtMoney(r12) : '—'}</td>
+        <td class="num">${r16 > 0 ? fmtMoney(r16) : '—'}</td>
+        <td class="num">${r20 > 0 ? fmtMoney(r20) : '—'}</td>
+      </tr>
+    `;
+  });
+  
+  tbody.innerHTML += `
+    <tr class="total-row">
+      <td>Total</td>
+      <td class="num">${totR12 > 0 ? fmtMoney(totR12) : '—'}</td>
+      <td class="num">${totR16 > 0 ? fmtMoney(totR16) : '—'}</td>
+      <td class="num">${totR20 > 0 ? fmtMoney(totR20) : '—'}</td>
+    </tr>
+  `;
 }
 
 function renderTabela(){
