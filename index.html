@@ -148,6 +148,70 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 #refreshBtn.loading{opacity:.5;pointer-events:none}
 .error-banner{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:14px 18px;border-radius:12px;margin-bottom:20px;font-size:13px;display:none}
 .error-banner.show{display:block}
+
+.tab-nav{display:flex;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:6px;margin-bottom:32px;width:fit-content}
+.tab-btn{padding:10px 20px;border:none;background:transparent;color:var(--muted);font-weight:600;font-size:14px;cursor:pointer;border-radius:10px;transition:all .2s;display:flex;align-items:center;gap:8px}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 4px 14px rgba(91,140,255,.3)}
+.tab-content{display:none}
+.tab-content.active{display:block;animation:fadeIn .4s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.recordes-hero{text-align:center;margin-bottom:40px;padding:32px 16px}
+.recordes-hero h2{font-size:42px;font-weight:800;letter-spacing:-1.5px;margin-bottom:8px;background:linear-gradient(135deg,#fbbf24,#f97316,#ef4444);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.recordes-hero .subtitle{font-size:14px;color:var(--muted)}
+.recordes-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:40px}
+.recorde-card{background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:20px;padding:28px;text-align:center;position:relative;overflow:hidden;transition:transform .3s,box-shadow .3s}
+.recorde-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(91,140,255,.15)}
+.recorde-card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#fbbf24,#f97316)}
+.recorde-card.gold::before{background:linear-gradient(90deg,#fbbf24,#f59e0b)}
+.recorde-card.fire::before{background:linear-gradient(90deg,#ef4444,#f97316)}
+.recorde-card.diamond::before{background:linear-gradient(90deg,#06b6d4,#3b82f6)}
+.recorde-icon{font-size:36px;margin-bottom:8px;display:block}
+.recorde-categoria{font-size:11px;letter-spacing:2.5px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:24px}
+.recorde-foto{width:96px;height:96px;border-radius:50%;margin:0 auto 14px;background-size:cover;background-position:center top;border:4px solid;box-shadow:0 8px 24px rgba(0,0,0,.4);position:relative}
+.recorde-foto::after{content:"👑";position:absolute;top:-12px;right:-8px;font-size:24px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+.recorde-foto.gold{border-color:#fbbf24}
+.recorde-foto.fire{border-color:#ef4444}
+.recorde-foto.diamond{border-color:#06b6d4}
+.recorde-nome{font-size:20px;font-weight:800;margin-bottom:18px}
+.recorde-valor{font-size:38px;font-weight:900;letter-spacing:-1.5px;line-height:1;margin-bottom:6px;background:linear-gradient(135deg,#fff,#a3b5ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.recorde-valor.gold{background:linear-gradient(135deg,#fbbf24,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.recorde-valor.fire{background:linear-gradient(135deg,#ef4444,#f97316);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.recorde-valor.diamond{background:linear-gradient(135deg,#06b6d4,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.recorde-data{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-top:8px}
+.recorde-empty{font-size:14px;color:var(--muted);padding:30px 0;font-style:italic}
+.podio-wrap{margin-bottom:40px}
+.podio-grid{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:16px;align-items:end;max-width:900px;margin:0 auto;padding:20px 0}
+.podio-step{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:16px;padding:24px 16px;text-align:center;position:relative}
+.podio-step.p1{padding-top:32px;padding-bottom:48px;border-color:rgba(251,191,36,.3)}
+.podio-step.p1::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#fbbf24,#f59e0b);border-radius:16px 16px 0 0}
+.podio-step.p2{border-color:rgba(203,213,225,.25);padding-bottom:32px}
+.podio-step.p2::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#cbd5e1,#94a3b8);border-radius:16px 16px 0 0}
+.podio-step.p3{border-color:rgba(217,119,6,.3);padding-bottom:24px}
+.podio-step.p3::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#d97706,#b45309);border-radius:16px 16px 0 0}
+.podio-medal{font-size:36px;margin-bottom:8px}
+.podio-foto{width:80px;height:80px;border-radius:50%;margin:0 auto 12px;background-size:cover;background-position:center top;border:3px solid var(--border)}
+.podio-step.p1 .podio-foto{width:100px;height:100px;border-color:#fbbf24}
+.podio-step.p2 .podio-foto{border-color:#cbd5e1}
+.podio-step.p3 .podio-foto{border-color:#d97706}
+.podio-nome{font-size:16px;font-weight:700;margin-bottom:4px}
+.podio-step.p1 .podio-nome{font-size:18px;color:#fbbf24}
+.podio-valor{font-size:22px;font-weight:800;letter-spacing:-.5px}
+.podio-step.p1 .podio-valor{font-size:26px}
+.podio-meta{font-size:11px;color:var(--muted);margin-top:6px;letter-spacing:1px;text-transform:uppercase}
+.coming-soon-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+.coming-soon-card{background:linear-gradient(135deg,var(--card),var(--card2));border:1px dashed var(--border);border-radius:16px;padding:32px;text-align:center;opacity:.6}
+.coming-soon-card .cs-icon{font-size:32px;margin-bottom:8px}
+.coming-soon-card .cs-title{font-size:14px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.coming-soon-card .cs-sub{font-size:12px;color:var(--muted)}
+@media (max-width:900px){
+  .recordes-grid{grid-template-columns:1fr}
+  .podio-grid{grid-template-columns:1fr}
+  .coming-soon-grid{grid-template-columns:1fr}
+  .recordes-hero h2{font-size:32px}
+  .recorde-valor{font-size:30px}
+}
+
 @media (max-width:900px){
   body{padding:16px}
   .grid-4{grid-template-columns:repeat(2,1fr)}
@@ -181,6 +245,13 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       </div>
     </div>
   </div>
+
+  <div class="tab-nav">
+    <button class="tab-btn active" data-tab="dashboard" onclick="setTab('dashboard')">📊 Dashboard</button>
+    <button class="tab-btn" data-tab="recordes" onclick="setTab('recordes')">🏆 Quadro dos Recordes</button>
+  </div>
+
+  <div id="tab-dashboard" class="tab-content active">
 
   <div class="section-title">Visão Geral</div>
   <div class="grid-4">
@@ -301,6 +372,37 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       </thead>
       <tbody id="vendedorTbody"></tbody>
     </table>
+  </div>
+
+  </div><!-- fim tab-dashboard -->
+
+  <div id="tab-recordes" class="tab-content">
+    <div class="recordes-hero">
+      <h2>🏆 Quadro dos Recordes</h2>
+      <div class="subtitle">Os melhores momentos da equipe — quem vai bater?</div>
+    </div>
+
+    <div class="section-title">Top Recordes</div>
+    <div class="recordes-grid" id="recordesGrid"></div>
+
+    <div class="section-title">Pódio do Mês</div>
+    <div class="podio-wrap">
+      <div class="podio-grid" id="podioGrid"></div>
+    </div>
+
+    <div class="section-title">Em breve</div>
+    <div class="coming-soon-grid">
+      <div class="coming-soon-card">
+        <div class="cs-icon">🗓️</div>
+        <div class="cs-title">Melhor Semana</div>
+        <div class="cs-sub">Disponível ao virar a primeira semana cheia</div>
+      </div>
+      <div class="coming-soon-card">
+        <div class="cs-icon">📆</div>
+        <div class="cs-title">Melhor Mês</div>
+        <div class="cs-sub">Disponível ao virar o mês</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1165,6 +1267,169 @@ function renderAll(){
   renderDaySelector();
   renderRondas();
   renderTabela();
+  renderRecordes();
+  renderPodio();
+}
+
+// ========== ABAS ==========
+function setTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+  
+  // Persistir na URL (sem reload)
+  const url = new URL(window.location);
+  url.searchParams.set('aba', tab);
+  history.replaceState({}, '', url);
+}
+
+// ========== RECORDES ==========
+function calcularRecordes(){
+  // Junta todos os dias de todos os meses
+  const todosDias = [];
+  ['maio','abril'].forEach(mes => {
+    Object.entries(DADOS[mes].porDia).forEach(([data, dia]) => {
+      todosDias.push({ data, ...dia });
+    });
+  });
+  
+  // Pra cada dia, calcula stats por vendedor
+  const recordesPorVendedor = {};
+  VENDEDORES.forEach(v => {
+    recordesPorVendedor[v] = {
+      maiorFat: { valor: 0, data: null, qtd: 0 },
+      maisVendas: { qtd: 0, data: null, valor: 0 },
+      maiorTicket: { ticket: 0, data: null, qtd: 0, valor: 0 }
+    };
+  });
+  
+  todosDias.forEach(dia => {
+    VENDEDORES.forEach(v => {
+      const vendasV = (dia.vendas||[]).filter(x => x.vendedor === v);
+      const valor = vendasV.reduce((s,x) => s + x.valor, 0);
+      const qtd = vendasV.length;
+      const ticket = qtd > 0 ? valor/qtd : 0;
+      
+      const r = recordesPorVendedor[v];
+      
+      // Maior faturamento (empate -> mais recente)
+      if(valor > r.maiorFat.valor || (valor === r.maiorFat.valor && valor > 0 && dia.data > (r.maiorFat.data||''))){
+        r.maiorFat = { valor, data: dia.data, qtd };
+      }
+      
+      // Mais vendas (empate -> mais recente)
+      if(qtd > r.maisVendas.qtd || (qtd === r.maisVendas.qtd && qtd > 0 && dia.data > (r.maisVendas.data||''))){
+        r.maisVendas = { qtd, data: dia.data, valor };
+      }
+      
+      // Maior ticket (mínimo 3 vendas, empate -> mais recente)
+      if(qtd >= 3){
+        if(ticket > r.maiorTicket.ticket || (ticket === r.maiorTicket.ticket && dia.data > (r.maiorTicket.data||''))){
+          r.maiorTicket = { ticket, data: dia.data, qtd, valor };
+        }
+      }
+    });
+  });
+  
+  // Agora pega o "rei" de cada categoria
+  function topPor(categoria, valorKey){
+    let top = null;
+    VENDEDORES.forEach(v => {
+      const r = recordesPorVendedor[v][categoria];
+      const val = r[valorKey];
+      if(val > 0 && (!top || val > top.val || (val === top.val && r.data > top.data))){
+        top = { vendedor: v, val, data: r.data, ...r };
+      }
+    });
+    return top;
+  }
+  
+  return {
+    maiorFat: topPor('maiorFat', 'valor'),
+    maisVendas: topPor('maisVendas', 'qtd'),
+    maiorTicket: topPor('maiorTicket', 'ticket')
+  };
+}
+
+function fmtDataRec(s){
+  if(!s) return '—';
+  const [y,m,d] = s.split('-');
+  return `${d}/${m}/${y.slice(2)}`;
+}
+
+function renderRecordes(){
+  const grid = document.getElementById('recordesGrid');
+  if(!grid) return;
+  
+  const rec = calcularRecordes();
+  
+  function cardHTML(categoria, icon, classe, recorde, valorTxt, sufixo){
+    if(!recorde){
+      return `<div class="recorde-card ${classe}">
+        <span class="recorde-icon">${icon}</span>
+        <div class="recorde-categoria">${categoria}</div>
+        <div class="recorde-empty">Aguardando primeiro recorde 👀</div>
+      </div>`;
+    }
+    const nome = recorde.vendedor === 'Joao' ? 'João' : recorde.vendedor;
+    const foto = VENDOR_PHOTOS[recorde.vendedor] || '';
+    return `<div class="recorde-card ${classe}">
+      <span class="recorde-icon">${icon}</span>
+      <div class="recorde-categoria">${categoria}</div>
+      <div class="recorde-foto ${classe}" style="background-image:url('${foto}')"></div>
+      <div class="recorde-nome">${nome}</div>
+      <div class="recorde-valor ${classe}">${valorTxt}</div>
+      <div class="recorde-data">📅 ${fmtDataRec(recorde.data)} ${sufixo || ''}</div>
+    </div>`;
+  }
+  
+  let html = '';
+  html += cardHTML('💰 Maior Faturamento (1 dia)', '💰', 'gold', rec.maiorFat,
+    rec.maiorFat ? fmtMoney(rec.maiorFat.valor) : '—',
+    rec.maiorFat ? `· ${rec.maiorFat.qtd} vendas` : '');
+  html += cardHTML('🔥 Dia com Mais Vendas', '🔥', 'fire', rec.maisVendas,
+    rec.maisVendas ? `${rec.maisVendas.qtd} vendas` : '—',
+    rec.maisVendas ? `· ${fmtMoney(rec.maisVendas.valor)}` : '');
+  html += cardHTML('💎 Maior Ticket Médio', '💎', 'diamond', rec.maiorTicket,
+    rec.maiorTicket ? fmtMoney(rec.maiorTicket.ticket) : '—',
+    rec.maiorTicket ? `· ${rec.maiorTicket.qtd} vendas` : '');
+  
+  grid.innerHTML = html;
+}
+
+function renderPodio(){
+  const grid = document.getElementById('podioGrid');
+  if(!grid) return;
+  
+  const d = DADOS[currentMonth];
+  const ranking = VENDEDORES.map(v => {
+    const info = d.porVendedor[v] || { valor: 0, qtd: 0 };
+    return { nome: v, valor: info.valor, qtd: info.qtd };
+  }).sort((a,b) => b.valor - a.valor);
+  
+  // Estrutura do pódio: 2º à esquerda, 1º no meio, 3º à direita
+  const top3 = ranking.slice(0, 3);
+  if(top3.length < 3){
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:30px">Aguardando mais dados...</div>';
+    return;
+  }
+  
+  function step(pos, info){
+    const nome = info.nome === 'Joao' ? 'João' : info.nome;
+    const foto = VENDOR_PHOTOS[info.nome] || '';
+    const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
+    return `<div class="podio-step p${pos}">
+      <div class="podio-medal">${medals[pos]}</div>
+      <div class="podio-foto" style="background-image:url('${foto}')"></div>
+      <div class="podio-nome">${nome}</div>
+      <div class="podio-valor">${fmtMoney(info.valor)}</div>
+      <div class="podio-meta">${info.qtd} vendas</div>
+    </div>`;
+  }
+  
+  // Ordem visual: 2 - 1 - 3
+  grid.innerHTML = step(2, top3[1]) + step(1, top3[0]) + step(3, top3[2]);
 }
 
 // Update time
@@ -1360,6 +1625,14 @@ async function carregarDados(forceRefresh = false){
 }
 
 renderVendorTabs();
+
+// Iniciar aba a partir da URL
+const urlParams = new URLSearchParams(window.location.search);
+const tabInicial = urlParams.get('aba');
+if(tabInicial === 'recordes'){
+  setTab('recordes');
+}
+
 carregarDados();
 </script>
 </body>
