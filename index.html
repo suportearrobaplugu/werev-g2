@@ -94,8 +94,19 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .ronda-chart-wrap{height:320px;position:relative;margin-top:16px}
 .rondas-tabela-wrap{margin-top:24px;padding-top:24px;border-top:1px solid rgba(255,255,255,.06)}
 .rondas-tabela-title{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:1.5px;margin-bottom:12px;text-transform:uppercase}
-.rondas-tabela{width:100%;border-collapse:collapse;font-size:13px}
-.rondas-tabela th{text-align:left;padding:10px 12px;font-size:10px;color:var(--muted);font-weight:600;letter-spacing:1px;border-bottom:1px solid var(--border);text-transform:uppercase}
+.rondas-tabela-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.rondas-tabela{width:100%;border-collapse:collapse;font-size:12px;min-width:780px}
+.rondas-tabela th{text-align:left;padding:8px 10px;font-size:10px;color:var(--muted);font-weight:600;letter-spacing:1px;border-bottom:1px solid var(--border);text-transform:uppercase;white-space:nowrap}
+.rondas-tabela th.future{opacity:.4}
+.rondas-tabela td.future{opacity:.35}
+.rondas-tabela th.ronda-group{text-align:center;border-left:1px dashed rgba(139,149,199,.25)}
+.rondas-tabela td.ronda-group{border-left:1px dashed rgba(139,149,199,.18)}
+.rondas-tabela th.ronda-group:first-of-type,
+.rondas-tabela td.ronda-group:first-of-type{border-left:none}
+.rondas-tabela th.metric-h{font-size:9px;padding:4px 10px;letter-spacing:.5px}
+.rondas-tabela .stack{display:flex;flex-direction:column;gap:2px;line-height:1.2}
+.rondas-tabela .stack .v-main{font-weight:700;font-size:12px}
+.rondas-tabela .stack .v-sub{font-size:10px;color:var(--muted)}
 .rondas-tabela th.num{text-align:right}
 .rondas-tabela td{padding:12px;border-bottom:1px solid rgba(255,255,255,.04)}
 .rondas-tabela td.num{text-align:right;font-variant-numeric:tabular-nums}
@@ -257,18 +268,13 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     </div>
     <div class="ronda-chart-wrap"><canvas id="chartRondas"></canvas></div>
     <div class="rondas-tabela-wrap">
-      <div class="rondas-tabela-title">Acumulado por vendedor</div>
-      <table class="rondas-tabela">
-        <thead>
-          <tr>
-            <th>Vendedor</th>
-            <th class="num">Ronda 12h</th>
-            <th class="num">Ronda 16h</th>
-            <th class="num">Ronda 20h</th>
-          </tr>
-        </thead>
-        <tbody id="rondasTbody"></tbody>
-      </table>
+      <div class="rondas-tabela-title">Acumulado por horário</div>
+      <div class="rondas-tabela-scroll">
+        <table class="rondas-tabela" id="rondasTabela">
+          <thead id="rondasThead"></thead>
+          <tbody id="rondasTbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -610,14 +616,24 @@ function renderRondas(){
     return;
   }
   
+  // Verifica se o dia selecionado eh HOJE (pra ocultar rondas futuras)
+  const ehHoje = (diaKey === HOJE);
+  const horaAtual = new Date().getHours() + new Date().getMinutes()/60;
+  
+  function rondaJaAconteceu(horaRonda){
+    if(!ehHoje) return true; // dias passados sempre mostram tudo
+    return horaAtual >= horaRonda;
+  }
+  
   // Pills com totais por ronda (sempre geral, indep. do filtro)
-  const r12Total = dia.ronda12;
-  const r16Total = dia.ronda16;
-  const r20Total = dia.ronda20;
-  [['12h',r12Total],['16h',r16Total],['20h',r20Total]].forEach(([h,v])=>{
+  const r12Total = rondaJaAconteceu(12) ? dia.ronda12 : 0;
+  const r16Total = rondaJaAconteceu(16) ? dia.ronda16 : 0;
+  const r20Total = rondaJaAconteceu(20) ? dia.ronda20 : 0;
+  [['12h',r12Total,12],['16h',r16Total,16],['20h',r20Total,20]].forEach(([h,v,hr])=>{
     const p = document.createElement('span');
-    p.className = 'ronda-pill' + (v>0?' filled':'');
-    p.textContent = v>0 ? `${h}: ${fmtMoney(v)}` : `${h}: aguardando`;
+    const aconteceu = rondaJaAconteceu(hr);
+    p.className = 'ronda-pill' + (v>0?' filled':'') + (!aconteceu?' future':'');
+    p.textContent = !aconteceu ? `${h}: aguardando` : (v>0 ? `${h}: ${fmtMoney(v)}` : `${h}: aguardando`);
     pills.appendChild(p);
   });
   
@@ -659,10 +675,14 @@ function renderRondas(){
   }
   
   if(currentVendor === 'geral'){
-    // Uma série por vendedor
+    // Uma série por vendedor (zerada para rondas futuras quando for hoje)
     datasets = VENDEDORES.map(v => ({
       label: v === 'Joao' ? 'João' : v,
-      data: [acumPorVendedor(v, 12), acumPorVendedor(v, 16), acumPorVendedor(v, 20)],
+      data: [
+        rondaJaAconteceu(12) ? acumPorVendedor(v, 12) : 0,
+        rondaJaAconteceu(16) ? acumPorVendedor(v, 16) : 0,
+        rondaJaAconteceu(20) ? acumPorVendedor(v, 20) : 0
+      ],
       backgroundColor: VENDOR_COLORS[v],
       borderRadius: 6,
       borderSkipped: false,
@@ -674,13 +694,13 @@ function renderRondas(){
     datasets.push(metaLineDataset('🥈 Prata', META_DIA_PRATA, '#cbd5e1', 1));
     datasets.push(metaLineDataset('🥉 Bronze', META_DIA_BRONZE, '#d97706', 1));
   } else {
-    // Só barras do vendedor selecionado
+    // Só barras do vendedor selecionado (zerada para rondas futuras)
     datasets = [{
       label: currentVendor === 'Joao' ? 'João' : currentVendor,
       data: [
-        acumPorVendedor(currentVendor, 12),
-        acumPorVendedor(currentVendor, 16),
-        acumPorVendedor(currentVendor, 20)
+        rondaJaAconteceu(12) ? acumPorVendedor(currentVendor, 12) : 0,
+        rondaJaAconteceu(16) ? acumPorVendedor(currentVendor, 16) : 0,
+        rondaJaAconteceu(20) ? acumPorVendedor(currentVendor, 20) : 0
       ],
       backgroundColor: VENDOR_COLORS[currentVendor],
       borderRadius: 8,
@@ -747,57 +767,88 @@ function renderRondas(){
   });
   
   // Renderizar tabela acumulada
-  renderTabelaRondas(dia);
+  renderTabelaRondas(dia, diaKey);
 }
 
-function renderTabelaRondas(dia){
+function renderTabelaRondas(dia, diaKey){
+  const thead = document.getElementById('rondasThead');
   const tbody = document.getElementById('rondasTbody');
-  if(!tbody) return;
+  if(!tbody || !thead) return;
+  
+  const HORARIOS = [8, 10, 12, 14, 16, 18, 20];
+  const ehHoje = (diaKey === HOJE);
+  const horaAtual = new Date().getHours() + new Date().getMinutes()/60;
+  function jaAconteceu(h){ return !ehHoje || horaAtual >= h; }
+  
+  // Header (2 linhas: horários + métricas)
+  let head1 = '<tr><th rowspan="2">Vendedor</th>';
+  HORARIOS.forEach(h => {
+    const futureCls = jaAconteceu(h) ? '' : ' future';
+    head1 += `<th class="num ronda-group${futureCls}" colspan="3">${String(h).padStart(2,'0')}h</th>`;
+  });
+  head1 += '</tr>';
+  let head2 = '<tr>';
+  HORARIOS.forEach(h => {
+    const futureCls = jaAconteceu(h) ? '' : ' future';
+    head2 += `<th class="num metric-h ronda-group${futureCls}">Valor</th><th class="num metric-h${futureCls}">Ticket</th><th class="num metric-h${futureCls}">Vendas</th>`;
+  });
+  head2 += '</tr>';
+  thead.innerHTML = head1 + head2;
+  
   tbody.innerHTML = '';
   
   if(!dia){
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Sem dados para este dia</td></tr>';
+    const totalCols = 1 + HORARIOS.length * 3;
+    tbody.innerHTML = `<tr><td colspan="${totalCols}" style="text-align:center;color:var(--muted);padding:20px">Sem dados para este dia</td></tr>`;
     return;
   }
   
-  function acum(vendedor, horaLimite){
-    return (dia.vendas||[])
-      .filter(v => v.vendedor === vendedor && v.hora < horaLimite)
-      .reduce((s,v) => s + v.valor, 0);
+  // Calcular acumulados por vendedor e horario
+  function calc(vendedor, horaLimite){
+    const vendas = (dia.vendas||[]).filter(v => v.vendedor === vendedor && v.hora < horaLimite);
+    const valor = vendas.reduce((s,v) => s + v.valor, 0);
+    const qtd = vendas.length;
+    const ticket = qtd > 0 ? valor/qtd : 0;
+    return { valor, qtd, ticket };
   }
   
-  let totR12 = 0, totR16 = 0, totR20 = 0;
+  // Totais por horario (sera agregado pelas linhas)
+  const totaisPorHora = {};
+  HORARIOS.forEach(h => totaisPorHora[h] = { valor: 0, qtd: 0 });
   
   VENDEDORES.forEach(v => {
-    const r12 = acum(v, 12);
-    const r16 = acum(v, 16);
-    const r20 = acum(v, 20);
-    totR12 += r12; totR16 += r16; totR20 += r20;
     const nome = v === 'Joao' ? 'João' : v;
     const cor = VENDOR_COLORS[v];
-    tbody.innerHTML += `
-      <tr>
-        <td>
-          <div class="vend-cell">
-            <span class="vend-dot" style="background:${cor}"></span>
-            <span>${nome}</span>
-          </div>
-        </td>
-        <td class="num">${r12 > 0 ? fmtMoney(r12) : '—'}</td>
-        <td class="num">${r16 > 0 ? fmtMoney(r16) : '—'}</td>
-        <td class="num">${r20 > 0 ? fmtMoney(r20) : '—'}</td>
-      </tr>
-    `;
+    let row = `<tr><td><div class="vend-cell"><span class="vend-dot" style="background:${cor}"></span><span>${nome}</span></div></td>`;
+    HORARIOS.forEach(h => {
+      const aconteceu = jaAconteceu(h);
+      const futureCls = aconteceu ? '' : ' future';
+      const r = calc(v, h);
+      totaisPorHora[h].valor += r.valor;
+      totaisPorHora[h].qtd += r.qtd;
+      const valorTxt = aconteceu ? (r.valor > 0 ? fmtMoney(r.valor) : '—') : '—';
+      const ticketTxt = aconteceu ? (r.qtd > 0 ? fmtMoney(r.ticket) : '—') : '—';
+      const qtdTxt = aconteceu ? (r.qtd > 0 ? r.qtd : '—') : '—';
+      row += `<td class="num ronda-group${futureCls}">${valorTxt}</td><td class="num${futureCls}">${ticketTxt}</td><td class="num${futureCls}">${qtdTxt}</td>`;
+    });
+    row += '</tr>';
+    tbody.innerHTML += row;
   });
   
-  tbody.innerHTML += `
-    <tr class="total-row">
-      <td>Total</td>
-      <td class="num">${totR12 > 0 ? fmtMoney(totR12) : '—'}</td>
-      <td class="num">${totR16 > 0 ? fmtMoney(totR16) : '—'}</td>
-      <td class="num">${totR20 > 0 ? fmtMoney(totR20) : '—'}</td>
-    </tr>
-  `;
+  // Linha de total
+  let totalRow = '<tr class="total-row"><td>Total</td>';
+  HORARIOS.forEach(h => {
+    const aconteceu = jaAconteceu(h);
+    const futureCls = aconteceu ? '' : ' future';
+    const t = totaisPorHora[h];
+    const ticket = t.qtd > 0 ? t.valor/t.qtd : 0;
+    const valorTxt = aconteceu ? (t.valor > 0 ? fmtMoney(t.valor) : '—') : '—';
+    const ticketTxt = aconteceu ? (t.qtd > 0 ? fmtMoney(ticket) : '—') : '—';
+    const qtdTxt = aconteceu ? (t.qtd > 0 ? t.qtd : '—') : '—';
+    totalRow += `<td class="num ronda-group${futureCls}">${valorTxt}</td><td class="num${futureCls}">${ticketTxt}</td><td class="num${futureCls}">${qtdTxt}</td>`;
+  });
+  totalRow += '</tr>';
+  tbody.innerHTML += totalRow;
 }
 
 function renderTabela(){
