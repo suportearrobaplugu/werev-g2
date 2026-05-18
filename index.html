@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Werev — Dashboard Comercial</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{
   --bg:#070b1a; --bg2:#0d1330; --card:#111935; --card2:#172148;
@@ -49,6 +50,47 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .insight-action{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:8px;background:rgba(0,0,0,.25);font-size:12px;color:rgba(232,236,255,.85)}
 .insight-action-label{font-weight:700;color:var(--gold);font-size:11px;letter-spacing:.5px;text-transform:uppercase}
 .insights-empty{padding:30px;text-align:center;color:var(--muted);font-style:italic;background:var(--card);border:1px dashed var(--border);border-radius:12px}
+.accordion-trigger{cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;transition:color .2s}
+.accordion-trigger:hover{color:var(--text)}
+.accordion-trigger #insightsCaret,.accordion-trigger .accordion-caret{display:inline-block;font-size:10px;transition:transform .2s;color:var(--muted)}
+.accordion-trigger.open #insightsCaret,.accordion-trigger.open .accordion-caret{transform:rotate(90deg)}
+.accordion-content{transition:max-height .3s ease,opacity .2s;overflow:hidden}
+.accordion-content.collapsed{max-height:0;opacity:0;margin:0;padding:0;pointer-events:none}
+.accordion-content.expanded{max-height:none;opacity:1}
+.relatorios-list{display:flex;flex-direction:column;gap:12px;margin-bottom:20px}
+.relatorio-card{background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.relatorio-header{padding:18px 22px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:12px;flex-wrap:wrap}
+.relatorio-header:hover{background:rgba(255,255,255,.02)}
+.relatorio-info{display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px}
+.relatorio-titulo{font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
+.relatorio-titulo .caret{font-size:10px;color:var(--muted);transition:transform .2s}
+.relatorio-card.open .relatorio-titulo .caret{transform:rotate(90deg)}
+.relatorio-resumo{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.relatorio-resumo b{color:var(--text);font-weight:700}
+.relatorio-resumo .delta-pos{color:var(--green)}
+.relatorio-resumo .delta-neg{color:var(--red)}
+.relatorio-actions{display:flex;gap:8px}
+.btn-pdf{padding:8px 14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:transform .15s,box-shadow .15s;letter-spacing:.3px}
+.btn-pdf:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(91,140,255,.35)}
+.relatorio-body{display:none;padding:0 22px 22px;border-top:1px solid var(--border)}
+.relatorio-card.open .relatorio-body{display:block}
+.relatorio-section{margin-top:20px}
+.relatorio-section-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:2px;margin-bottom:10px;text-transform:uppercase}
+.relatorio-table{width:100%;border-collapse:collapse;font-size:13px}
+.relatorio-table th{text-align:left;padding:10px 12px;color:var(--muted);font-weight:600;font-size:11px;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border)}
+.relatorio-table td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text)}
+.relatorio-table tr:last-child td{border-bottom:none}
+.rel-vendor-cell{display:flex;align-items:center;gap:10px}
+.rel-vendor-foto{width:32px;height:32px;border-radius:50%;background-size:cover;background-position:center top;border:2px solid;flex-shrink:0}
+.rel-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:6px}
+.rel-stat-card{background:rgba(0,0,0,.2);border-radius:10px;padding:14px 16px}
+.rel-stat-label{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
+.rel-stat-value{font-size:20px;font-weight:800;color:var(--text);font-family:'Inter',sans-serif}
+.rel-stat-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.rel-hour-list{display:flex;gap:8px;flex-wrap:wrap}
+.rel-hour-pill{padding:6px 12px;border-radius:999px;background:rgba(91,140,255,.12);border:1px solid rgba(91,140,255,.3);font-size:12px;color:#a3b5ff}
+.rel-hour-pill.cold{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:#fca5a5}
+.relatorios-empty{padding:40px;text-align:center;color:var(--muted);font-style:italic;background:var(--card);border:1px dashed var(--border);border-radius:12px}
 .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
 .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
@@ -403,14 +445,24 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
   </div>
 
   <div class="section-title-row">
-    <div class="section-title-flag">🚩 Pontos de Atenção e Direcionamentos</div>
-    <div class="insights-toggle">
-      <button class="insights-tab active" data-period="mes" onclick="setInsightsPeriod('mes')">Mês a Mês</button>
-      <button class="insights-tab" data-period="semana" onclick="setInsightsPeriod('semana')">Semana a Semana</button>
+    <div class="section-title-flag">📊 Relatórios Semanais</div>
+  </div>
+  <div class="insights-sub">Histórico semana a semana · semanas fechadas (segunda a domingo)</div>
+  <div class="relatorios-list" id="relatoriosList"></div>
+
+  <div class="section-title-row">
+    <div class="section-title-flag accordion-trigger" onclick="toggleAccordion('insights')">
+      <span id="insightsCaret">▶</span> 🚩 Pontos de Atenção e Direcionamentos
+    </div>
+    <div class="insights-toggle" id="insightsToggle" style="display:none">
+      <button class="insights-tab active" data-period="mes" onclick="event.stopPropagation();setInsightsPeriod('mes')">Mês a Mês</button>
+      <button class="insights-tab" data-period="semana" onclick="event.stopPropagation();setInsightsPeriod('semana')">Semana a Semana</button>
     </div>
   </div>
-  <div class="insights-sub">Insights baseados no comparativo · <span id="insightsCompLabel">MAI vs ABR</span></div>
-  <div class="insights-list" id="insightsList"></div>
+  <div id="insightsAccordion" class="accordion-content collapsed">
+    <div class="insights-sub">Insights baseados no comparativo · <span id="insightsCompLabel">MAI vs ABR</span></div>
+    <div class="insights-list" id="insightsList"></div>
+  </div>
 
   </div><!-- fim tab-dashboard -->
 
@@ -1480,7 +1532,490 @@ function renderAll(){
   renderRecordes();
   renderPodio();
   renderRecordesPeriodo();
+  renderRelatorios();
   renderInsights();
+}
+
+// ========== RELATÓRIOS SEMANAIS ==========
+
+function getSemanasFechadasIso(){
+  // Retorna array de semanas fechadas (seg-dom completos), ordenadas da mais recente pra mais antiga
+  // Considera datas que aparecem nos dados E hoje (pra saber se semana já fechou)
+  const hoje = new Date(HOJE + 'T00:00:00');
+  const hojeDow = hoje.getDay() || 7;
+  
+  // Última segunda da semana atual
+  const segAtual = new Date(hoje);
+  segAtual.setDate(hoje.getDate() - (hojeDow - 1));
+  
+  // Coletar todas as datas com vendas
+  const datasComVendas = new Set();
+  ['maio','abril'].forEach(mesKey => {
+    Object.keys(DADOS[mesKey].porDia).forEach(dt => datasComVendas.add(dt));
+  });
+  
+  if(datasComVendas.size === 0) return [];
+  
+  const datasArr = Array.from(datasComVendas).sort();
+  const primeiraData = new Date(datasArr[0] + 'T00:00:00');
+  
+  // Gerar todas as segundas-feiras entre a primeira data e a semana ANTERIOR à atual
+  const semanas = [];
+  let cursor = new Date(primeiraData);
+  const cursorDow = cursor.getDay() || 7;
+  cursor.setDate(cursor.getDate() - (cursorDow - 1)); // alinha pra segunda
+  
+  while(cursor < segAtual){
+    const seg = new Date(cursor);
+    const dom = new Date(seg);
+    dom.setDate(seg.getDate() + 6);
+    
+    if(dom < hoje){  // só fechadas
+      semanas.push({ seg, dom });
+    }
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  
+  // Ordena mais recente primeiro
+  return semanas.reverse();
+}
+
+function fmtDtCurto(d){
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+function getISOWeekNum(date){
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function gerarRelatorioSemana(seg, dom){
+  const segStr = `${seg.getFullYear()}-${String(seg.getMonth()+1).padStart(2,'0')}-${String(seg.getDate()).padStart(2,'0')}`;
+  const domStr = `${dom.getFullYear()}-${String(dom.getMonth()+1).padStart(2,'0')}-${String(dom.getDate()).padStart(2,'0')}`;
+  
+  // Coletar todas as vendas da semana
+  const stats = {
+    fat: 0, qtd: 0, ticket: 0,
+    porVendedor: {},
+    porHora: {},
+    porDia: {},
+    melhorDia: { data: null, valor: 0, qtd: 0 }
+  };
+  
+  VENDEDORES.forEach(v => {
+    stats.porVendedor[v] = { valor: 0, qtd: 0, dias: new Set() };
+  });
+  
+  for(let h = 9; h <= 21; h++) stats.porHora[h] = 0;
+  
+  ['maio','abril'].forEach(mesKey => {
+    Object.entries(DADOS[mesKey].porDia).forEach(([dt, info]) => {
+      if(dt >= segStr && dt <= domStr){
+        stats.fat += info.total || 0;
+        stats.qtd += info.qtd || 0;
+        stats.porDia[dt] = { valor: info.total || 0, qtd: info.qtd || 0 };
+        
+        if(info.total > stats.melhorDia.valor){
+          stats.melhorDia = { data: dt, valor: info.total, qtd: info.qtd };
+        }
+        
+        (info.vendas || []).forEach(v => {
+          if(stats.porVendedor[v.vendedor]){
+            stats.porVendedor[v.vendedor].valor += v.valor;
+            stats.porVendedor[v.vendedor].qtd += 1;
+            stats.porVendedor[v.vendedor].dias.add(dt);
+          }
+          const hr = Math.floor(v.hora || 0);
+          if(hr >= 9 && hr <= 21) stats.porHora[hr] += 1;
+        });
+      }
+    });
+  });
+  
+  stats.ticket = stats.qtd > 0 ? stats.fat / stats.qtd : 0;
+  
+  // Calcular top horarios e horarios mortos
+  const horariosOrdenados = Object.entries(stats.porHora)
+    .map(([h, v]) => ({ hora: parseInt(h), qtd: v }))
+    .sort((a, b) => b.qtd - a.qtd);
+  
+  stats.topHorarios = horariosOrdenados.filter(h => h.qtd > 0).slice(0, 3);
+  stats.horariosMortos = horariosOrdenados.filter(h => h.qtd === 0).map(h => h.hora);
+  
+  return stats;
+}
+
+let relatoriosCache = []; // pra ser usado depois pelo PDF
+
+function renderRelatorios(){
+  const list = document.getElementById('relatoriosList');
+  if(!list) return;
+  
+  const semanas = getSemanasFechadasIso();
+  
+  if(semanas.length === 0){
+    list.innerHTML = '<div class="relatorios-empty">Nenhuma semana fechada ainda. O primeiro relatório aparece após o domingo da semana corrente.</div>';
+    return;
+  }
+  
+  // Gerar stats de cada semana + comparativo com anterior
+  relatoriosCache = semanas.map(({ seg, dom }, idx) => {
+    const stats = gerarRelatorioSemana(seg, dom);
+    let anterior = null;
+    if(idx < semanas.length - 1){
+      anterior = gerarRelatorioSemana(semanas[idx+1].seg, semanas[idx+1].dom);
+    }
+    return { seg, dom, stats, anterior };
+  });
+  
+  list.innerHTML = relatoriosCache.map((r, idx) => {
+    const isoWeek = getISOWeekNum(r.seg);
+    const ano = r.seg.getFullYear();
+    const periodo = `${fmtDtCurto(r.seg)} – ${fmtDtCurto(r.dom)}/${String(ano).substring(2)}`;
+    
+    // Delta vs semana anterior
+    const dFat = r.anterior ? ((r.stats.fat - r.anterior.fat) / (r.anterior.fat || 1) * 100) : null;
+    const dQtd = r.anterior ? ((r.stats.qtd - r.anterior.qtd) / (r.anterior.qtd || 1) * 100) : null;
+    
+    function deltaHTML(d, prefix){
+      if(d === null) return '';
+      const cls = d > 0 ? 'delta-pos' : (d < 0 ? 'delta-neg' : '');
+      const sign = d > 0 ? '+' : '';
+      return ` <span class="${cls}">(${sign}${d.toFixed(0)}%)</span>`;
+    }
+    
+    return `
+    <div class="relatorio-card" id="relCard-${idx}">
+      <div class="relatorio-header" onclick="toggleRelatorio(${idx})">
+        <div class="relatorio-info">
+          <div class="relatorio-titulo">
+            <span class="caret">▶</span>
+            📅 Semana ${isoWeek}/${ano} · ${periodo}
+          </div>
+          <div class="relatorio-resumo">
+            <span>Fat: <b>${fmtMoney(r.stats.fat)}</b>${deltaHTML(dFat)}</span>
+            <span>Vendas: <b>${r.stats.qtd}</b>${deltaHTML(dQtd)}</span>
+            <span>Ticket: <b>${fmtMoney(r.stats.ticket)}</b></span>
+          </div>
+        </div>
+        <div class="relatorio-actions">
+          <button class="btn-pdf" onclick="event.stopPropagation();baixarRelatorioPDF(${idx})">📄 Baixar PDF</button>
+        </div>
+      </div>
+      <div class="relatorio-body">
+        ${renderRelatorioBody(r, isoWeek, ano, periodo, dFat, dQtd)}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderRelatorioBody(r, isoWeek, ano, periodo, dFat, dQtd){
+  // Performance por vendedor
+  const vendedoresOrdenados = VENDEDORES
+    .map(v => ({ nome: v, ...r.stats.porVendedor[v] }))
+    .sort((a, b) => b.valor - a.valor);
+  
+  const ticketReal = v => v.qtd > 0 ? v.valor/v.qtd : 0;
+  
+  let html = '';
+  
+  // Resumo executivo
+  html += `<div class="relatorio-section">
+    <div class="relatorio-section-title">Resumo Executivo</div>
+    <div class="rel-stat-grid">
+      <div class="rel-stat-card"><div class="rel-stat-label">Faturamento</div><div class="rel-stat-value">${fmtMoney(r.stats.fat)}</div></div>
+      <div class="rel-stat-card"><div class="rel-stat-label">Nº Vendas</div><div class="rel-stat-value">${r.stats.qtd}</div></div>
+      <div class="rel-stat-card"><div class="rel-stat-label">Ticket Médio</div><div class="rel-stat-value">${fmtMoney(r.stats.ticket)}</div></div>
+      <div class="rel-stat-card"><div class="rel-stat-label">Melhor Dia</div><div class="rel-stat-value">${r.stats.melhorDia.data ? fmtDtCurto(new Date(r.stats.melhorDia.data + 'T00:00:00')) : '—'}</div><div class="rel-stat-sub">${fmtMoney(r.stats.melhorDia.valor)} · ${r.stats.melhorDia.qtd} vendas</div></div>
+    </div>
+  </div>`;
+  
+  // Performance por vendedor
+  html += `<div class="relatorio-section">
+    <div class="relatorio-section-title">Performance por Vendedor</div>
+    <table class="relatorio-table">
+      <thead><tr><th>Vendedor</th><th>Faturamento</th><th>Vendas</th><th>Ticket</th><th>Dias ativos</th></tr></thead>
+      <tbody>`;
+  
+  vendedoresOrdenados.forEach(v => {
+    if(v.valor === 0 && v.qtd === 0) return; // não mostra quem não vendeu
+    const cor = VENDOR_COLORS[v.nome];
+    const foto = VENDOR_PHOTOS[v.nome] || '';
+    html += `<tr>
+      <td><div class="rel-vendor-cell">
+        <div class="rel-vendor-foto" style="background-image:url('${foto}');border-color:${cor}"></div>
+        <span>${displayName(v.nome)}</span>
+      </div></td>
+      <td><b>${fmtMoney(v.valor)}</b></td>
+      <td>${v.qtd}</td>
+      <td>${fmtMoney(ticketReal(v))}</td>
+      <td>${v.dias.size} dia${v.dias.size !== 1 ? 's' : ''}</td>
+    </tr>`;
+  });
+  
+  if(vendedoresOrdenados.every(v => v.valor === 0)){
+    html += `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Sem vendas registradas nesta semana.</td></tr>`;
+  }
+  
+  html += `</tbody></table></div>`;
+  
+  // Análise por hora
+  if(r.stats.topHorarios.length > 0){
+    html += `<div class="relatorio-section">
+      <div class="relatorio-section-title">Análise por Hora</div>
+      <div style="margin-bottom:10px;font-size:12px;color:var(--muted)">🔥 Horários mais produtivos:</div>
+      <div class="rel-hour-list">`;
+    r.stats.topHorarios.forEach(h => {
+      html += `<div class="rel-hour-pill">${String(h.hora).padStart(2,'0')}h · ${h.qtd} venda${h.qtd > 1 ? 's' : ''}</div>`;
+    });
+    html += `</div>`;
+    
+    if(r.stats.horariosMortos.length > 0 && r.stats.horariosMortos.length < 8){
+      html += `<div style="margin-top:14px;margin-bottom:10px;font-size:12px;color:var(--muted)">❄️ Horários sem vendas:</div>
+        <div class="rel-hour-list">`;
+      r.stats.horariosMortos.forEach(h => {
+        html += `<div class="rel-hour-pill cold">${String(h).padStart(2,'0')}h</div>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  
+  // Sugestões (insights)
+  if(r.anterior){
+    const insights = gerarInsights(r.stats, r.anterior, 'esta semana', 'semana anterior');
+    if(insights.length > 0){
+      html += `<div class="relatorio-section">
+        <div class="relatorio-section-title">Sugestões e Direcionamentos</div>
+        <div class="insights-list">`;
+      const order = { red: 0, yellow: 1, green: 2 };
+      insights.sort((a, b) => order[a.cor] - order[b.cor]);
+      insights.forEach(i => {
+        html += `<div class="insight-card ${i.cor}">
+          <div class="insight-title">${i.titulo}</div>
+          <div class="insight-desc">${i.desc}</div>
+          <div class="insight-action"><span class="insight-action-label">${i.acaoLabel}:</span><span>${i.acaoTexto}</span></div>
+        </div>`;
+      });
+      html += `</div></div>`;
+    }
+  }
+  
+  return html;
+}
+
+function toggleRelatorio(idx){
+  const card = document.getElementById('relCard-' + idx);
+  if(card) card.classList.toggle('open');
+}
+
+function toggleAccordion(key){
+  if(key === 'insights'){
+    const acc = document.getElementById('insightsAccordion');
+    const trigger = document.querySelector('.accordion-trigger');
+    const toggle = document.getElementById('insightsToggle');
+    if(!acc) return;
+    const collapsed = acc.classList.contains('collapsed');
+    if(collapsed){
+      acc.classList.remove('collapsed');
+      acc.classList.add('expanded');
+      trigger.classList.add('open');
+      if(toggle) toggle.style.display = 'flex';
+    } else {
+      acc.classList.add('collapsed');
+      acc.classList.remove('expanded');
+      trigger.classList.remove('open');
+      if(toggle) toggle.style.display = 'none';
+    }
+  }
+}
+
+function baixarRelatorioPDF(idx){
+  const r = relatoriosCache[idx];
+  if(!r) return;
+  
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  
+  const margin = 15;
+  let y = margin;
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const contentW = pageW - 2*margin;
+  
+  const isoWeek = getISOWeekNum(r.seg);
+  const ano = r.seg.getFullYear();
+  const periodo = `${fmtDtCurto(r.seg)} a ${fmtDtCurto(r.dom)}/${String(ano).substring(2)}`;
+  
+  function checkPageBreak(needed){
+    if(y + needed > pageH - margin){
+      doc.addPage();
+      y = margin;
+    }
+  }
+  
+  function addText(text, size, color, bold, indent){
+    doc.setFontSize(size);
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setTextColor(...(color || [40, 40, 40]));
+    const lines = doc.splitTextToSize(text, contentW - (indent || 0));
+    lines.forEach(line => {
+      checkPageBreak(size * 0.6);
+      doc.text(line, margin + (indent || 0), y);
+      y += size * 0.5;
+    });
+    y += 2;
+  }
+  
+  function addLine(){
+    checkPageBreak(3);
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.2);
+    doc.line(margin, y, pageW - margin, y);
+    y += 5;
+  }
+  
+  // CABEÇALHO
+  doc.setFillColor(20, 25, 60);
+  doc.rect(0, 0, pageW, 30, 'F');
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.text('Werev', margin, 14);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Relatorio Semanal Comercial', margin, 22);
+  doc.setFontSize(9);
+  doc.text(`Semana ${isoWeek}/${ano} - ${periodo}`, pageW - margin, 22, { align: 'right' });
+  y = 40;
+  
+  // RESUMO EXECUTIVO
+  addText('RESUMO EXECUTIVO', 13, [50, 80, 200], true);
+  y += 2;
+  
+  const dFat = r.anterior ? ((r.stats.fat - r.anterior.fat) / (r.anterior.fat || 1) * 100) : null;
+  const dQtd = r.anterior ? ((r.stats.qtd - r.anterior.qtd) / (r.anterior.qtd || 1) * 100) : null;
+  const dTicket = r.anterior ? ((r.stats.ticket - r.anterior.ticket) / (r.anterior.ticket || 1) * 100) : null;
+  
+  function fmtDelta(d){
+    if(d === null) return '';
+    const sign = d > 0 ? '+' : '';
+    return ` (${sign}${d.toFixed(0)}% vs semana anterior)`;
+  }
+  
+  // Limpar acentos e cifrao pra PDF base
+  function clean(s){
+    return s.replace(/R\$/g, 'R$').replace(/á/g, 'a').replace(/â/g, 'a').replace(/ã/g, 'a').replace(/é/g, 'e').replace(/ê/g, 'e').replace(/í/g, 'i').replace(/ó/g, 'o').replace(/ô/g, 'o').replace(/õ/g, 'o').replace(/ú/g, 'u').replace(/ç/g, 'c').replace(/Á/g, 'A').replace(/É/g, 'E').replace(/Í/g, 'I').replace(/Ó/g, 'O').replace(/Ú/g, 'U').replace(/Ç/g, 'C');
+  }
+  
+  addText(clean('Faturamento: ' + fmtMoney(r.stats.fat) + fmtDelta(dFat)), 11, null, false, 4);
+  addText(clean('Numero de vendas: ' + r.stats.qtd + fmtDelta(dQtd)), 11, null, false, 4);
+  addText(clean('Ticket medio: ' + fmtMoney(r.stats.ticket) + fmtDelta(dTicket)), 11, null, false, 4);
+  if(r.stats.melhorDia.data){
+    const md = new Date(r.stats.melhorDia.data + 'T00:00:00');
+    addText(clean(`Melhor dia: ${fmtDtCurto(md)} - ${fmtMoney(r.stats.melhorDia.valor)} (${r.stats.melhorDia.qtd} vendas)`), 11, null, false, 4);
+  }
+  y += 4;
+  addLine();
+  
+  // PERFORMANCE POR VENDEDOR
+  addText('PERFORMANCE POR VENDEDOR', 13, [50, 80, 200], true);
+  y += 2;
+  
+  const vendedoresOrdenados = VENDEDORES
+    .map(v => ({ nome: v, ...r.stats.porVendedor[v] }))
+    .filter(v => v.valor > 0 || v.qtd > 0)
+    .sort((a, b) => b.valor - a.valor);
+  
+  if(vendedoresOrdenados.length === 0){
+    addText(clean('Sem vendas registradas nesta semana.'), 10, [120, 120, 120], false, 4);
+  } else {
+    // Tabela manual
+    const colX = [margin + 4, margin + 50, margin + 90, margin + 120, margin + 150];
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(120, 120, 120);
+    checkPageBreak(8);
+    doc.text('VENDEDOR', colX[0], y);
+    doc.text('FATURAMENTO', colX[1], y);
+    doc.text('VENDAS', colX[2], y);
+    doc.text('TICKET', colX[3], y);
+    doc.text('DIAS', colX[4], y);
+    y += 4;
+    addLine();
+    
+    vendedoresOrdenados.forEach((v, i) => {
+      checkPageBreak(8);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', i === 0 ? 'bold' : 'normal');
+      doc.setTextColor(40, 40, 40);
+      const medal = i === 0 ? '* ' : (i < 3 ? `${i+1}o ` : '');
+      doc.text(clean(medal + displayName(v.nome)), colX[0], y);
+      doc.text(fmtMoney(v.valor), colX[1], y);
+      doc.text(String(v.qtd), colX[2], y);
+      doc.text(fmtMoney(v.qtd > 0 ? v.valor/v.qtd : 0), colX[3], y);
+      doc.text(String(v.dias.size), colX[4], y);
+      y += 6;
+    });
+  }
+  
+  y += 4;
+  addLine();
+  
+  // ANALISE POR HORA
+  addText('ANALISE POR HORA', 13, [50, 80, 200], true);
+  y += 2;
+  
+  if(r.stats.topHorarios.length > 0){
+    addText(clean('Horarios mais produtivos:'), 10, [120, 120, 120], false, 4);
+    r.stats.topHorarios.forEach(h => {
+      addText(clean(`- ${String(h.hora).padStart(2,'0')}h: ${h.qtd} venda${h.qtd > 1 ? 's' : ''}`), 10, null, false, 8);
+    });
+    if(r.stats.horariosMortos.length > 0 && r.stats.horariosMortos.length < 8){
+      y += 2;
+      addText(clean('Horarios sem vendas:'), 10, [120, 120, 120], false, 4);
+      addText(r.stats.horariosMortos.map(h => String(h).padStart(2,'0') + 'h').join(', '), 10, null, false, 8);
+    }
+  } else {
+    addText(clean('Sem registros de horario nesta semana.'), 10, [120, 120, 120], false, 4);
+  }
+  
+  // SUGESTOES
+  if(r.anterior){
+    const insights = gerarInsights(r.stats, r.anterior, 'esta semana', 'semana anterior');
+    if(insights.length > 0){
+      y += 4;
+      addLine();
+      addText('SUGESTOES E DIRECIONAMENTOS', 13, [50, 80, 200], true);
+      y += 2;
+      const order = { red: 0, yellow: 1, green: 2 };
+      insights.sort((a, b) => order[a.cor] - order[b.cor]);
+      insights.forEach(i => {
+        const colors = { red: [200, 50, 50], yellow: [200, 130, 30], green: [40, 150, 80] };
+        const prefix = { red: '! ', yellow: '! ', green: 'OK ' }[i.cor];
+        checkPageBreak(20);
+        addText(clean(prefix + i.titulo), 11, colors[i.cor], true);
+        addText(clean(i.desc), 9, [80, 80, 80], false, 4);
+        addText(clean(i.acaoLabel + ': ' + i.acaoTexto), 9, [60, 60, 60], true, 4);
+        y += 2;
+      });
+    }
+  }
+  
+  // FOOTER
+  const totalPages = doc.internal.getNumberOfPages();
+  for(let i = 1; i <= totalPages; i++){
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text(`Werev Dashboard Comercial - Gerado em ${fmtDtCurto(new Date())}`, margin, pageH - 8);
+    doc.text(`Pagina ${i}/${totalPages}`, pageW - margin, pageH - 8, { align: 'right' });
+  }
+  
+  doc.save(`werev-relatorio-semana-${isoWeek}-${ano}.pdf`);
 }
 
 // ========== INSIGHTS / PONTOS DE ATENÇÃO ==========
