@@ -1229,12 +1229,67 @@ function renderRondas(){
       type: 'bar'
     }];
     
-    // 3 linhas de meta INDIVIDUAL (dividida por 4 vendedores)
-    const nv = VENDEDORES.length;
-    datasets.push(metaLineDataset('🥇 Ouro', META_DIA_OURO, '#fbbf24', nv));
-    datasets.push(metaLineDataset('🥈 Prata', META_DIA_PRATA, '#cbd5e1', nv));
-    datasets.push(metaLineDataset('🥉 Bronze', META_DIA_BRONZE, '#d97706', nv));
+    // 3 linhas de meta INDIVIDUAL (valor cheio por vendedor: 12k/8k/5k)
+    datasets.push(metaLineDataset('🥇 Ouro', META_DIA_OURO, '#fbbf24', 1));
+    datasets.push(metaLineDataset('🥈 Prata', META_DIA_PRATA, '#cbd5e1', 1));
+    datasets.push(metaLineDataset('🥉 Bronze', META_DIA_BRONZE, '#d97706', 1));
   }
+  
+  // Plugin: desenha foto do vendedor (circular) embaixo de cada barra
+  const PHOTO_R = 14; // raio do círculo da foto
+  const nomeParaChave = {};
+  VENDEDORES.forEach(v => { nomeParaChave[displayName(v)] = v; });
+  const photoCache = {};
+  function getPhotoImg(chave){
+    if(photoCache[chave]) return photoCache[chave];
+    const src = (typeof VENDOR_PHOTOS !== 'undefined') ? VENDOR_PHOTOS[chave] : null;
+    if(!src) return null;
+    const img = new Image();
+    img.src = src;
+    photoCache[chave] = img;
+    return img;
+  }
+  const barPhotosPlugin = {
+    id: 'barPhotos',
+    afterDatasetsDraw(chart){
+      const {ctx, chartArea} = chart;
+      ctx.save();
+      chart.data.datasets.forEach((ds, i)=>{
+        if(ds.type === 'line') return;
+        const chave = nomeParaChave[ds.label];
+        if(!chave) return;
+        const img = getPhotoImg(chave);
+        const meta = chart.getDatasetMeta(i);
+        meta.data.forEach((bar, idx)=>{
+          const val = ds.data[idx];
+          if(!val || val <= 0) return;
+          const cx = bar.x;
+          const cy = chartArea.bottom + PHOTO_R + 6; // logo abaixo do eixo
+          // anel colorido do vendedor
+          ctx.beginPath();
+          ctx.arc(cx, cy, PHOTO_R+1.5, 0, Math.PI*2);
+          ctx.fillStyle = VENDOR_COLORS[chave] || '#888';
+          ctx.fill();
+          if(img && img.complete && img.naturalWidth){
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, PHOTO_R, 0, Math.PI*2);
+            ctx.clip();
+            ctx.drawImage(img, cx-PHOTO_R, cy-PHOTO_R, PHOTO_R*2, PHOTO_R*2);
+            ctx.restore();
+          } else {
+            // fallback: inicial do nome
+            ctx.fillStyle = '#fff';
+            ctx.font = '700 11px -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText((ds.label||'?')[0], cx, cy);
+          }
+        });
+      });
+      ctx.restore();
+    }
+  };
   
   // Plugin para desenhar valores em cima das barras (apenas datasets do tipo bar com valor > 0)
   const barLabelsPlugin = {
@@ -1268,10 +1323,10 @@ function renderRondas(){
       labels:['Ronda 12h','Ronda 16h','Ronda 20h'],
       datasets: datasets
     },
-    plugins:[barLabelsPlugin],
+    plugins:[barLabelsPlugin, barPhotosPlugin],
     options:{
       responsive:true,maintainAspectRatio:false,
-      layout:{padding:{top:24}},
+      layout:{padding:{top:24,bottom:42}},
       plugins:{
         legend:{
           display:true,
