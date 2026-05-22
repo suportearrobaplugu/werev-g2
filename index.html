@@ -1172,26 +1172,10 @@ function renderRondas(){
   
   let datasets = [];
   
-  // Metas DIÁRIAS REAJUSTADAS dinamicamente:
-  // meta_diaria = (meta_mensal - já_realizado) / dias_úteis_restantes
-  // Considera o mês selecionado e o dia selecionado.
-  const META_MES_OURO = 550000;
-  const META_MES_PRATA = 385000;
-  const META_MES_BRONZE = 264000;
-  
-  // Meta diária FIXA = meta mensal ÷ dias úteis do mês (não reajusta no fim do mês)
-  const [anoSel, mesSel, diaSel] = diaKey.split('-').map(Number);
-  const ultimoDia = new Date(anoSel, mesSel, 0).getDate();
-  let diasUteisMes = 0;
-  for(let d = 1; d <= ultimoDia; d++){
-    const dow = new Date(anoSel, mesSel-1, d).getDay();
-    if(dow >= 1 && dow <= 5) diasUteisMes++;
-  }
-  if(diasUteisMes === 0) diasUteisMes = 1; // evita divisão por zero
-  
-  const META_DIA_OURO   = META_MES_OURO   / diasUteisMes;
-  const META_DIA_PRATA  = META_MES_PRATA  / diasUteisMes;
-  const META_DIA_BRONZE = META_MES_BRONZE / diasUteisMes;
+  // Meta diária FIXA cravada manualmente (valor do dia inteiro; rondas usam 33/66/100%)
+  const META_DIA_OURO   = 12000;
+  const META_DIA_PRATA  = 8000;
+  const META_DIA_BRONZE = 5000;
   
   function metaLineDataset(label, valorDiario, color, divisor){
     const v = valorDiario / (divisor || 1);
