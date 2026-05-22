@@ -1179,28 +1179,19 @@ function renderRondas(){
   const META_MES_PRATA = 385000;
   const META_MES_BRONZE = 264000;
   
-  // Calcular faturamento já realizado ANTES do dia selecionado (exclusivo)
-  let realizadoAteOntem = 0;
-  Object.entries(DADOS[currentMonth].porDia).forEach(([dt, info]) => {
-    if(dt < diaKey){
-      realizadoAteOntem += info.total || 0;
-    }
-  });
-  
-  // Calcular quantos dias úteis restam (incluindo o dia selecionado, se for útil)
+  // Meta diária FIXA = meta mensal ÷ dias úteis do mês (não reajusta no fim do mês)
   const [anoSel, mesSel, diaSel] = diaKey.split('-').map(Number);
   const ultimoDia = new Date(anoSel, mesSel, 0).getDate();
-  let diasUteisRestantes = 0;
-  for(let d = diaSel; d <= ultimoDia; d++){
-    const dt = new Date(anoSel, mesSel-1, d);
-    const dow = dt.getDay();
-    if(dow >= 1 && dow <= 5) diasUteisRestantes++;
+  let diasUteisMes = 0;
+  for(let d = 1; d <= ultimoDia; d++){
+    const dow = new Date(anoSel, mesSel-1, d).getDay();
+    if(dow >= 1 && dow <= 5) diasUteisMes++;
   }
-  if(diasUteisRestantes === 0) diasUteisRestantes = 1; // evita divisão por zero
+  if(diasUteisMes === 0) diasUteisMes = 1; // evita divisão por zero
   
-  const META_DIA_OURO   = Math.max(0, (META_MES_OURO   - realizadoAteOntem) / diasUteisRestantes);
-  const META_DIA_PRATA  = Math.max(0, (META_MES_PRATA  - realizadoAteOntem) / diasUteisRestantes);
-  const META_DIA_BRONZE = Math.max(0, (META_MES_BRONZE - realizadoAteOntem) / diasUteisRestantes);
+  const META_DIA_OURO   = META_MES_OURO   / diasUteisMes;
+  const META_DIA_PRATA  = META_MES_PRATA  / diasUteisMes;
+  const META_DIA_BRONZE = META_MES_BRONZE / diasUteisMes;
   
   function metaLineDataset(label, valorDiario, color, divisor){
     const v = valorDiario / (divisor || 1);
@@ -1208,6 +1199,7 @@ function renderRondas(){
       label: label,
       data: metaPct.map(p => v * p),
       type: 'line',
+      yAxisID: 'yMeta',
       borderColor: color,
       backgroundColor: 'transparent',
       borderDash: [6,6],
@@ -1305,7 +1297,8 @@ function renderRondas(){
         tooltip:{callbacks:{label:c=>c.dataset.label + ': ' + fmtMoney(c.parsed.y)}}
       },
       scales:{
-        y:{ticks:{color:themeColors().muted,callback:fmtMoneyK},grid:{color:themeColors().grid},beginAtZero:true},
+        y:{ticks:{color:themeColors().muted,callback:fmtMoneyK},grid:{color:themeColors().grid},beginAtZero:true,title:{display:true,text:'Vendas por ronda',color:themeColors().muted,font:{size:10}}},
+        yMeta:{position:'right',ticks:{color:themeColors().muted,callback:fmtMoneyK},grid:{display:false},beginAtZero:true,title:{display:true,text:'Meta acumulada',color:themeColors().muted,font:{size:10}}},
         x:{ticks:{color:themeColors().muted},grid:{display:false}}
       }
     }
