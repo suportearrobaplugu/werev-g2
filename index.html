@@ -384,6 +384,19 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .ic-coment textarea:focus{outline:none;border-color:var(--accent)}
 .ic-coment-hint{font-size:10px;color:var(--muted);margin-top:5px;font-style:italic}
 @media(max-width:760px){.ic-recs{grid-template-columns:1fr}}
+
+/* ===== Aba Regras e Combinados ===== */
+.combinados-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px}
+.combinado{display:flex;gap:16px;background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:14px;padding:20px;transition:transform .15s,border-color .15s}
+.combinado:hover{transform:translateY(-2px);border-color:var(--accent)}
+.comb-num{font-size:30px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--accent);opacity:.55;line-height:1;flex-shrink:0;min-width:42px}
+.comb-titulo{font-size:16px;font-weight:800;margin-bottom:7px;line-height:1.25;color:var(--text-strong)}
+.comb-desc{font-size:13px;color:var(--muted);line-height:1.5}
+.regras-box{background:linear-gradient(135deg,var(--card),var(--card2));border:1px dashed var(--border);border-radius:14px;padding:40px;text-align:center}
+.regras-ic{font-size:34px;margin-bottom:12px}
+.regras-t{font-size:17px;font-weight:700;margin-bottom:6px;color:var(--text-strong)}
+.regras-d{font-size:13px;color:var(--muted)}
+@media(max-width:760px){.combinados-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -413,6 +426,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <button class="tab-btn active" data-tab="dashboard" onclick="setTab('dashboard')">📊 Dashboard</button>
     <button class="tab-btn" data-tab="recordes" onclick="setTab('recordes')">🏆 Quadro dos Recordes</button>
     <button class="tab-btn" data-tab="faturamento" onclick="setTab('faturamento')">📈 Faturamento Diário</button>
+    <button class="tab-btn" data-tab="regras" onclick="setTab('regras')">📋 Regras e Combinados</button>
   </div>
 
   <div id="tab-dashboard" class="tab-content active">
@@ -612,6 +626,32 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div id="heatmapDias"></div>
     </div>
     <div id="analiseDias"></div>
+  </div>
+
+  <div id="tab-regras" class="tab-content">
+    <div class="recordes-hero">
+      <h2>📋 Regras e Combinados</h2>
+      <div class="subtitle">A cultura WeRev · como jogamos o jogo</div>
+    </div>
+
+    <div class="section-title">🤝 Combinados — Comportamentos</div>
+    <div class="combinados-grid">
+      <div class="combinado"><div class="comb-num">01</div><div class="comb-body"><div class="comb-titulo">🛡️ Sem Vitimismo</div><div class="comb-desc">Antes de reclamar ou culpar, assuma a responsabilidade. Olhe para suas ações e pergunte: eu fiz tudo que estava ao meu alcance?</div></div></div>
+      <div class="combinado"><div class="comb-num">02</div><div class="comb-body"><div class="comb-titulo">🚀 Sem Comodismo</div><div class="comb-desc">Vendedores de Elite não se contentam com pouco. Você não está aqui para viver na mediocridade.</div></div></div>
+      <div class="combinado"><div class="comb-num">03</div><div class="comb-body"><div class="comb-titulo">⚙️ Processo acima de tudo</div><div class="comb-desc">Sempre siga o processo. Caso não siga, o erro e a responsabilidade serão todos seus. Se há um erro, como podemos alterar o processo para que não ocorra mais?</div></div></div>
+      <div class="combinado"><div class="comb-num">04</div><div class="comb-body"><div class="comb-titulo">🎯 O papo é reto, a conversa não faz curva</div><div class="comb-desc">Temos uma política de comunicação simples, clara, objetiva e direta.</div></div></div>
+      <div class="combinado"><div class="comb-num">05</div><div class="comb-body"><div class="comb-titulo">💬 Falar a Verdade</div><div class="comb-desc">Vamos te falar a verdade o mais cedo possível. Mesmo que você não goste ou não queira ouvir.</div></div></div>
+      <div class="combinado"><div class="comb-num">06</div><div class="comb-body"><div class="comb-titulo">🙋 Na dúvida, pergunte!</div><div class="comb-desc">Não faça nada sem entender. O time está à disposição para te ajudar — mas dê um Google antes. Faça o mínimo de pesquisa possível.</div></div></div>
+      <div class="combinado"><div class="comb-num">07</div><div class="comb-body"><div class="comb-titulo">📊 Dados e Deus, só acreditamos neles</div><div class="comb-desc">Não discutimos sem dados.</div></div></div>
+      <div class="combinado"><div class="comb-num">08</div><div class="comb-body"><div class="comb-titulo">🤝 Se combinou, faça</div><div class="comb-desc">Lembre que a credibilidade leva anos para se construir e segundos para destruir.</div></div></div>
+    </div>
+
+    <div class="section-title">📐 Regras</div>
+    <div class="regras-box">
+      <div class="regras-ic">🚧</div>
+      <div class="regras-t">Em breve</div>
+      <div class="regras-d">As regras serão adicionadas aqui em breve.</div>
+    </div>
   </div>
 
   <div class="werev-footer">
