@@ -361,6 +361,12 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .ic-insight-lab{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
 .ic-insight-val{font-size:16px;font-weight:800;margin-top:3px;color:var(--text-strong)}
 .ic-insight-det{font-size:11px;color:var(--muted);margin-top:2px;font-family:'JetBrains Mono',monospace}
+.ic-insight-top3{display:flex;flex-direction:column}
+.ic-top3{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.ic-top3-row{display:flex;align-items:center;gap:8px}
+.ic-top3-medal{font-size:14px;flex-shrink:0}
+.ic-top3-nome{font-size:13px;font-weight:700;color:var(--text-strong);flex:1}
+.ic-top3-val{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
 .ic-recs{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
 .ic-recs-titulo{font-size:12px;font-weight:700;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
 .ic-recs-titulo.pos{color:var(--green)}
@@ -1945,10 +1951,10 @@ function renderHeatmaps(){
   const faixas=[['Manhã (7-11h)',manha],['Tarde (12-17h)',tarde],['Noite (18-23h)',noite]].sort((a,b)=>b[1]-a[1]);
 
   const insightsHoras = [
-    {ic:'🏆',lab:'Horário de pico',val:picoH.h+'h',det:fmtV(picoH.val)},
+    {lab:'Top 3 horários', top3: horaOrd.slice(0,3).map(x=>({nome:x.h+'h', val:fmtV(x.val)}))},
     {ic:'⏰',lab:'Faixa mais quente',val:faixas[0][0].split(' ')[0],det:Math.round(faixas[0][1]/totalGeral*100)+'% das vendas'},
     {ic:'🌙',lab:'Horário mais fraco',val:fracoH.h+'h',det:fmtV(fracoH.val)},
-    {ic:'📊',lab:'2º melhor horário',val:(horaOrd[1]?horaOrd[1].h+'h':'-'),det:(horaOrd[1]?fmtV(horaOrd[1].val):'-')}
+    {ic:'📊',lab:'Concentração no topo',val:Math.round(horaOrd.slice(0,3).reduce((a,x)=>a+x.val,0)/totalGeral*100)+'%',det:'dos 3 melhores horários'}
   ];
   const posHoras = [
     {t:`Pico às ${picoH.h}h`, d:`Melhor horário do dia, com ${fmtV(picoH.val)}.`, tag:'CAPITALIZAR', acoes:'reforçar equipe no horário · garantir resposta rápida'},
@@ -1976,7 +1982,7 @@ function renderHeatmaps(){
   const mediaUtil = uteis.length ? totUteis/uteis.filter(x=>x.val>0).length : 0;
 
   const insightsDias = [
-    {ic:'🥇',lab:'Melhor dia',val:melhorDia.dia,det:`${fmtV(melhorDia.val)} · ${Math.round(melhorDia.val/totalDias*100)}%`},
+    {lab:'Top 3 dias (úteis)', top3: uteisOrd.slice(0,3).map(x=>({nome:x.dia, val:fmtV(x.val)}))},
     {ic:'📉',lab:'Dia útil mais fraco',val:piorUtil.dia,det:fmtV(piorUtil.val)},
     {ic:'💼',lab:'Útil vs fim de semana',val:`${Math.round(totUteis/totalDias*100)}% / ${Math.round(totFds/totalDias*100)}%`,det:'concentração'},
     {ic:'📈',lab:'Média por dia útil',val:fmtV(mediaUtil),det:'seg a sex'}
@@ -1997,13 +2003,23 @@ function renderHeatmaps(){
 
 // Monta o HTML de um quadro de Análise Inteligência Comercial WeRev
 function quadroAnalise(comentId, insights, positivas, negativas){
-  const insightCards = insights.map(i=>`
+  const insightCards = insights.map(i=>{
+    if(i.top3){
+      const medals=['🥇','🥈','🥉'];
+      const linhas=i.top3.map((x,idx)=>`<div class="ic-top3-row"><span class="ic-top3-medal">${medals[idx]}</span><span class="ic-top3-nome">${x.nome}</span><span class="ic-top3-val">${x.val}</span></div>`).join('');
+      return `<div class="ic-insight ic-insight-top3">
+        <div class="ic-insight-lab">${i.lab}</div>
+        <div class="ic-top3">${linhas}</div>
+      </div>`;
+    }
+    return `
     <div class="ic-insight">
       <div class="ic-insight-ic">${i.ic}</div>
       <div class="ic-insight-lab">${i.lab}</div>
       <div class="ic-insight-val">${i.val}</div>
       <div class="ic-insight-det">${i.det}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   const recCard = (r, tipo) => `
     <div class="ic-rec ${tipo}">
