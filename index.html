@@ -541,6 +541,19 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .copy-link-btn{background:var(--green);color:#06231b;border:none;padding:10px 18px;border-radius:8px;cursor:pointer;font-family:'Sora';font-weight:700;font-size:13px;flex-shrink:0;transition:.15s}
 .copy-link-btn:hover{opacity:.9}
 .copy-link-btn.ok{background:var(--accent);color:#fff}
+
+/* ===== Tutoriais (Loom + Scribe) ===== */
+.tutorial-box{background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:14px;padding:20px}
+.tut-tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.tut-tab{background:var(--bg,#0a0e14);border:1px solid var(--line);color:var(--muted);padding:10px 18px;border-radius:9px;cursor:pointer;font-family:'Sora';font-weight:600;font-size:13px;transition:.15s}
+.tut-tab:hover{color:var(--text);border-color:var(--accent)}
+.tut-tab.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tut-embed{border-radius:10px;overflow:hidden}
+.tut-embed iframe{display:block;width:100%}
+.tut-emptyloom{background:rgba(98,93,245,.06);border:2px dashed rgba(98,93,245,.3);border-radius:10px;padding:48px 24px;text-align:center}
+.tut-emptyloom .tel-ic{font-size:38px;margin-bottom:12px}
+.tut-emptyloom .tel-t{font-size:17px;font-weight:700;color:var(--text-strong);margin-bottom:6px}
+.tut-emptyloom .tel-d{font-size:13px;color:var(--muted);line-height:1.5;max-width:380px;margin:0 auto}
 </style>
 </head>
 <body>
@@ -584,6 +597,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
         <button class="sb-subitem" onclick="showProcPage('pipeline',event)"><span class="sb-subic">🔄</span><span class="sb-txt">Pipeline 2</span></button>
         <button class="sb-subitem" onclick="showProcPage('copies',event)"><span class="sb-subic">💬</span><span class="sb-txt">Copies</span></button>
         <button class="sb-subitem" onclick="showProcPage('links',event)"><span class="sb-subic">💳</span><span class="sb-txt">Links de Pagamento</span></button>
+        <button class="sb-subitem" onclick="showProcPage('finalizar',event)"><span class="sb-subic">🎬</span><span class="sb-txt">Finalizar atendimento</span></button>
       </div>
     </aside>
 
@@ -842,6 +856,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
         <div class="doc-card" onclick="showProcPage('pipeline')"><div class="dc-ic">🔄</div><h3>Pipeline 2 · Disparo CMP</h3><p>Fluxo operacional completo do funil, etapa por etapa, com motivos de perda.</p><div class="dc-go">Abrir documento →</div></div>
         <div class="doc-card" onclick="showProcPage('copies')"><div class="dc-ic">💬</div><h3>Diretório de Copies</h3><p>56 mensagens prontas por etapa, com gatilho, variação e botão copiar.</p><div class="dc-go">Abrir documento →</div></div>
         <div class="doc-card" onclick="showProcPage('links')"><div class="dc-ic">💳</div><h3>Links de Pagamento</h3><p>Links Hubla por vendedor, com valor, cupons e botão copiar.</p><div class="dc-go">Abrir documento →</div></div>
+        <div class="doc-card" onclick="showProcPage('finalizar')"><div class="dc-ic">🎬</div><h3>Finalizar atendimento (offline)</h3><p>Tutorial em vídeo e passo a passo pra encerrar o atendimento e ficar offline na ferramenta.</p><div class="dc-go">Abrir documento →</div></div>
       </div>
     </div>
 
@@ -886,6 +901,31 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
         <div class="proc-crumb"><a onclick="voltarLinkVend()">💳 Vendedores</a> › <span id="linksCrumbNome"></span></div>
         <div class="vend-header" id="linksVendHeader"></div>
         <div id="linksVendLinks"></div>
+      </div>
+    </div>
+
+    <!-- PÁGINA: FINALIZAR ATENDIMENTO (tutorial Loom + Scribe) -->
+    <div class="proc-page" id="proc-page-finalizar">
+      <div class="proc-crumb"><a onclick="showProcPage('home')">📚 Processos</a> › Finalizar atendimento</div>
+      <div class="section-title">🎬 Finalizar o atendimento · ficar offline na ferramenta</div>
+      <div class="sec-intro-txt">Passo a passo pra encerrar corretamente um atendimento e definir seu status como offline na ferramenta, garantindo que os cards não fiquem presos e a fila reflita a realidade do time.</div>
+      <div class="tutorial-box">
+        <div class="tut-tabs">
+          <button class="tut-tab on" data-tut="finalizar-video" onclick="tutTab('finalizar','video',this)">🎥 Vídeo (Loom)</button>
+          <button class="tut-tab" data-tut="finalizar-passo" onclick="tutTab('finalizar','passo',this)">📋 Passo a passo (Scribe)</button>
+        </div>
+        <div class="tut-pane" id="tut-finalizar-video">
+          <div class="tut-embed">
+            <div style="position:relative;padding-bottom:56.25%;height:0;border-radius:10px;overflow:hidden">
+              <iframe src="https://www.loom.com/embed/9e8bd391a29b405d8c29fe805b6029b8" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%"></iframe>
+            </div>
+          </div>
+        </div>
+        <div class="tut-pane" id="tut-finalizar-passo" style="display:none">
+          <div class="tut-embed">
+            <iframe src="https://scribehow.com/embed/ComercialDocumentacao_Processo_Finalizar_o_atendimento_colocar_offline_na_ferramenta__lI_aK8xOTo6hFr7seMw8ag" width="100%" height="640" allow="fullscreen" style="border:0;min-height:480px;border-radius:10px"></iframe>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -3549,6 +3589,14 @@ function voltarLinkVend(){
   document.getElementById('linksVendDetalhe').style.display='none';
   document.getElementById('linksVendList').style.display='block';
 }
+
+// alterna abas de tutorial (Loom/Scribe)
+function tutTab(proc, aba, btn){
+  document.querySelectorAll('#proc-page-'+proc+' .tut-tab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('tut-'+proc+'-video').style.display = (aba==='video') ? 'block':'none';
+  document.getElementById('tut-'+proc+'-passo').style.display = (aba==='passo') ? 'block':'none';
+}
 function copyLinkPag(btn){
   navigator.clipboard.writeText(btn.dataset.link).then(()=>{
     btn.textContent='✅ Copiado!'; btn.classList.add('ok');
@@ -3568,7 +3616,7 @@ function showProcPage(page, ev){
   if(target) target.classList.add('active');
   if(page==='links' && !window._linksRendered){ renderLinks(); window._linksRendered=true; }
   // marca sub-item ativo
-  const map = {home:0, pipeline:1, copies:2, links:3};
+  const map = {home:0, pipeline:1, copies:2, links:3, finalizar:4};
   const subs = document.querySelectorAll('#sbSubProcessos .sb-subitem');
   subs.forEach(s=>s.classList.remove('active'));
   if(subs[map[page]]) subs[map[page]].classList.add('active');
