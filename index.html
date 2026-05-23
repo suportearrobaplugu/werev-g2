@@ -351,6 +351,33 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
   h1{font-size:32px}
   .logo{font-size:36px}
 }
+
+/* ===== Quadros Análise Inteligência Comercial WeRev ===== */
+.ic-analise{background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:14px;padding:20px 22px;margin:14px 0 30px}
+.ic-analise-head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:var(--accent);margin-bottom:16px;text-transform:uppercase;letter-spacing:.5px}
+.ic-insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
+.ic-insight{background:rgba(0,0,0,.18);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.ic-insight-ic{font-size:18px;margin-bottom:6px}
+.ic-insight-lab{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.ic-insight-val{font-size:16px;font-weight:800;margin-top:3px;color:var(--text-strong)}
+.ic-insight-det{font-size:11px;color:var(--muted);margin-top:2px;font-family:'JetBrains Mono',monospace}
+.ic-recs{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+.ic-recs-titulo{font-size:12px;font-weight:700;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
+.ic-recs-titulo.pos{color:var(--green)}
+.ic-recs-titulo.neg{color:var(--orange)}
+.ic-rec{display:flex;gap:10px;background:rgba(0,0,0,.18);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.ic-rec.pos{border-left:3px solid var(--green)}
+.ic-rec.neg{border-left:3px solid var(--orange)}
+.ic-rec-icon{font-size:15px;flex-shrink:0;margin-top:1px}
+.ic-rec-title{font-size:13px;font-weight:700;color:var(--text-strong);margin-bottom:3px}
+.ic-rec-desc{font-size:12px;color:var(--muted);line-height:1.4;margin-bottom:7px}
+.ic-rec-tag{font-size:11px;color:var(--text);background:rgba(0,0,0,.25);border-radius:6px;padding:5px 9px;line-height:1.4}
+.ic-rec-tag-lab{font-weight:700;color:var(--orange)}
+.ic-coment-lab{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px}
+.ic-coment textarea{width:100%;background:rgba(0,0,0,.22);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:inherit;font-size:13px;resize:vertical;min-height:60px}
+.ic-coment textarea:focus{outline:none;border-color:var(--accent)}
+.ic-coment-hint{font-size:10px;color:var(--muted);margin-top:5px;font-style:italic}
+@media(max-width:760px){.ic-recs{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -513,7 +540,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 
   <div class="section-title-row">
     <div class="section-title-flag accordion-trigger" onclick="toggleAccordion('insights')">
-      <span id="insightsCaret">▶</span> 🚩 Pontos de Atenção e Direcionamentos
+      <span id="insightsCaret">▶</span> 💡 Análise Inteligência Comercial WeRev
     </div>
     <div class="insights-toggle" id="insightsToggle" style="display:none">
       <button class="insights-tab active" data-period="mes" onclick="event.stopPropagation();setInsightsPeriod('mes')">Mês a Mês</button>
@@ -573,10 +600,12 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div id="heatmapHoras"></div>
       <div class="hm-legend">menos <div class="hm-scale" id="hmLegScale"></div> mais</div>
     </div>
+    <div id="analiseHoras"></div>
     <div class="chart-card">
       <div class="chart-title">📅 Dias da semana que mais vendem</div>
       <div id="heatmapDias"></div>
     </div>
+    <div id="analiseDias"></div>
   </div>
 
   <div class="werev-footer">
@@ -1899,6 +1928,115 @@ function renderHeatmaps(){
       </div>`;
     }).join('');
   }
+
+  // ===== Quadros de Análise Inteligência Comercial WeRev =====
+  const fmtV = v => heatmapMode==='valor' ? 'R$ '+Math.round(v).toLocaleString('pt-BR') : Math.round(v)+' vendas';
+
+  // --- análise de HORÁRIOS ---
+  const porHora = HM_HORAS.map(h => ({ h, val: HM_DIAS.reduce((a,dia)=>a+matriz[dia][h][heatmapMode],0) }));
+  const totalGeral = porHora.reduce((a,x)=>a+x.val,0) || 1;
+  const horaOrd = [...porHora].sort((a,b)=>b.val-a.val);
+  const picoH = horaOrd[0];
+  const fracoH = [...porHora].filter(x=>x.val>0).sort((a,b)=>a.val-b.val)[0] || {h:'-',val:0};
+  // faixas do dia
+  const manha = porHora.filter(x=>x.h>=7&&x.h<=11).reduce((a,x)=>a+x.val,0);
+  const tarde = porHora.filter(x=>x.h>=12&&x.h<=17).reduce((a,x)=>a+x.val,0);
+  const noite = porHora.filter(x=>x.h>=18&&x.h<=23).reduce((a,x)=>a+x.val,0);
+  const faixas=[['Manhã (7-11h)',manha],['Tarde (12-17h)',tarde],['Noite (18-23h)',noite]].sort((a,b)=>b[1]-a[1]);
+
+  const insightsHoras = [
+    {ic:'🏆',lab:'Horário de pico',val:picoH.h+'h',det:fmtV(picoH.val)},
+    {ic:'⏰',lab:'Faixa mais quente',val:faixas[0][0].split(' ')[0],det:Math.round(faixas[0][1]/totalGeral*100)+'% das vendas'},
+    {ic:'🌙',lab:'Horário mais fraco',val:fracoH.h+'h',det:fmtV(fracoH.val)},
+    {ic:'📊',lab:'2º melhor horário',val:(horaOrd[1]?horaOrd[1].h+'h':'-'),det:(horaOrd[1]?fmtV(horaOrd[1].val):'-')}
+  ];
+  const posHoras = [
+    {t:`Pico às ${picoH.h}h`, d:`Melhor horário do dia, com ${fmtV(picoH.val)}.`, tag:'CAPITALIZAR', acoes:'reforçar equipe no horário · garantir resposta rápida'},
+    {t:`${faixas[0][0]} domina`, d:`Concentra ${Math.round(faixas[0][1]/totalGeral*100)}% das vendas do período.`, tag:'CAPITALIZAR', acoes:'priorizar disparos e follow-up nessa faixa'},
+    {t:`Top 3 horários somam força`, d:`${horaOrd.slice(0,3).map(x=>x.h+'h').join(', ')} são os mais produtivos.`, tag:'CAPITALIZAR', acoes:'planejar rondas em torno desses horários'}
+  ];
+  const negHoras = [
+    {t:`${faixas[2][0]} fraca`, d:`Menor faixa: só ${Math.round(faixas[2][1]/totalGeral*100)}% das vendas.`, tag:'ATRELAR', acoes:'testar ação específica · avaliar se vale cobertura'},
+    {t:`Horário morto às ${fracoH.h}h`, d:`Ponto mais fraco do dia, com ${fmtV(fracoH.val)}.`, tag:'ATRELAR', acoes:'verificar disponibilidade da equipe nesse horário'},
+    {t:`Concentração arriscada`, d:`Vendas muito dependentes do pico das ${picoH.h}h.`, tag:'ATRELAR', acoes:'distribuir esforço para reduzir dependência de 1 horário'}
+  ];
+  const ah = document.getElementById('analiseHoras');
+  if(ah) ah.innerHTML = quadroAnalise('analiseHorasComent', insightsHoras, posHoras, negHoras);
+
+  // --- análise de DIAS ---
+  const totDiaArr = HM_DIAS.map(dia => ({ dia, val: HM_HORAS.reduce((a,h)=>a+matriz[dia][h][heatmapMode],0) }));
+  const totalDias = totDiaArr.reduce((a,x)=>a+x.val,0) || 1;
+  const uteis = totDiaArr.filter(x=>!['Domingo','Sábado'].includes(x.dia));
+  const fds = totDiaArr.filter(x=>['Domingo','Sábado'].includes(x.dia));
+  const totUteis = uteis.reduce((a,x)=>a+x.val,0);
+  const totFds = fds.reduce((a,x)=>a+x.val,0);
+  const uteisOrd = [...uteis].sort((a,b)=>b.val-a.val);
+  const melhorDia = uteisOrd[0] || {dia:'-',val:0};
+  const piorUtil = [...uteis].filter(x=>x.val>0).sort((a,b)=>a.val-b.val)[0] || {dia:'-',val:0};
+  const mediaUtil = uteis.length ? totUteis/uteis.filter(x=>x.val>0).length : 0;
+
+  const insightsDias = [
+    {ic:'🥇',lab:'Melhor dia',val:melhorDia.dia,det:`${fmtV(melhorDia.val)} · ${Math.round(melhorDia.val/totalDias*100)}%`},
+    {ic:'📉',lab:'Dia útil mais fraco',val:piorUtil.dia,det:fmtV(piorUtil.val)},
+    {ic:'💼',lab:'Útil vs fim de semana',val:`${Math.round(totUteis/totalDias*100)}% / ${Math.round(totFds/totalDias*100)}%`,det:'concentração'},
+    {ic:'📈',lab:'Média por dia útil',val:fmtV(mediaUtil),det:'seg a sex'}
+  ];
+  const posDias = [
+    {t:`${melhorDia.dia} puxa o período`, d:`Melhor dia útil, com ${fmtV(melhorDia.val)}.`, tag:'CAPITALIZAR', acoes:'documentar o que funciona · replicar nos outros dias'},
+    {t:`Forte concentração em dia útil`, d:`${Math.round(totUteis/totalDias*100)}% das vendas de seg a sex.`, tag:'CAPITALIZAR', acoes:'manter foco operacional nos dias úteis'},
+    {t:`Top dias consistentes`, d:`${uteisOrd.slice(0,3).map(x=>x.dia).join(', ')} lideram as vendas.`, tag:'CAPITALIZAR', acoes:'alocar melhores recursos nesses dias'}
+  ];
+  const negDias = [
+    {t:`${piorUtil.dia} abaixo da média`, d:`Dia útil mais fraco, com ${fmtV(piorUtil.val)}.`, tag:'ATRELAR', acoes:`entender a queda · criar meta-desafio para ${piorUtil.dia}`},
+    {t:`Fim de semana ocioso`, d:`Sáb+Dom somam só ${Math.round(totFds/totalDias*100)}% das vendas.`, tag:'ATRELAR', acoes:'avaliar se vale operar ou concentrar esforço em dia útil'},
+    {t:`Dependência do ${melhorDia.dia}`, d:`Resultado muito concentrado num único dia.`, tag:'ATRELAR', acoes:'equilibrar performance ao longo da semana'}
+  ];
+  const ad = document.getElementById('analiseDias');
+  if(ad) ad.innerHTML = quadroAnalise('analiseDiasComent', insightsDias, posDias, negDias);
+}
+
+// Monta o HTML de um quadro de Análise Inteligência Comercial WeRev
+function quadroAnalise(comentId, insights, positivas, negativas){
+  const insightCards = insights.map(i=>`
+    <div class="ic-insight">
+      <div class="ic-insight-ic">${i.ic}</div>
+      <div class="ic-insight-lab">${i.lab}</div>
+      <div class="ic-insight-val">${i.val}</div>
+      <div class="ic-insight-det">${i.det}</div>
+    </div>`).join('');
+
+  const recCard = (r, tipo) => `
+    <div class="ic-rec ${tipo}">
+      <div class="ic-rec-icon">${tipo==='pos'?'✅':'⚠️'}</div>
+      <div class="ic-rec-body">
+        <div class="ic-rec-title">${r.t}</div>
+        <div class="ic-rec-desc">${r.d}</div>
+        <div class="ic-rec-tag"><span class="ic-rec-tag-lab">${r.tag}:</span> ${r.acoes}</div>
+      </div>
+    </div>`;
+
+  const salvo = (typeof localStorage!=='undefined' && localStorage.getItem(comentId)) || '';
+
+  return `
+  <div class="ic-analise">
+    <div class="ic-analise-head">💡 Análise Inteligência Comercial WeRev</div>
+    <div class="ic-insights">${insightCards}</div>
+    <div class="ic-recs">
+      <div class="ic-recs-col">
+        <div class="ic-recs-titulo pos">👍 Pontos positivos</div>
+        ${positivas.map(r=>recCard(r,'pos')).join('')}
+      </div>
+      <div class="ic-recs-col">
+        <div class="ic-recs-titulo neg">👎 Pontos de atenção</div>
+        ${negativas.map(r=>recCard(r,'neg')).join('')}
+      </div>
+    </div>
+    <div class="ic-coment">
+      <div class="ic-coment-lab">📝 Comentário da gestão</div>
+      <textarea id="${comentId}" placeholder="Escreva observações e direcionamentos da gestão..." oninput="try{localStorage.setItem('${comentId}',this.value)}catch(e){}">${salvo.replace(/</g,'&lt;')}</textarea>
+      <div class="ic-coment-hint">salvo neste navegador · não sincroniza entre dispositivos</div>
+    </div>
+  </div>`;
 }
 
 function renderAll(){
