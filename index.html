@@ -562,6 +562,21 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div class="chart-title">Valor de cada vendedor por dia · role na horizontal →</div>
       <div style="overflow-x:auto" id="fatDiarioTabelaWrap"></div>
     </div>
+
+    <div class="section-title">Padrão de vendas</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px" id="hmToggle">
+      <button class="hm-tg-btn on" data-m="valor" onclick="setHeatmapMode('valor')">Por valor (R$)</button>
+      <button class="hm-tg-btn" data-m="qtd" onclick="setHeatmapMode('qtd')">Por quantidade</button>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">🔥 Horários que mais vendem · dia da semana × hora (07h–23h)</div>
+      <div id="heatmapHoras"></div>
+      <div class="hm-legend">menos <div class="hm-scale" id="hmLegScale"></div> mais</div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">📅 Dias da semana que mais vendem</div>
+      <div id="heatmapDias"></div>
+    </div>
   </div>
 
   <div class="werev-footer">
@@ -1789,6 +1804,101 @@ function renderFaturamentoDiario(){
     `<td class="num total-col" style="color:#22c55e">${Math.round(totGeral).toLocaleString('pt-BR')}</td></tr>`;
 
   wrap.innerHTML = `<table class="rondas-tabela" style="min-width:auto">${head}<tbody>${body}${totRow}</tbody></table>`;
+
+  renderHeatmaps();
+}
+
+// ===== Heatmaps de padrão de vendas (dia da semana × hora, 07h-23h) =====
+let heatmapMode = 'valor';
+const HM_HORAS = []; for(let h=7; h<=23; h++) HM_HORAS.push(h);
+const HM_DIAS = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+
+function setHeatmapMode(m){
+  heatmapMode = m;
+  document.querySelectorAll('#hmToggle .hm-tg-btn').forEach(b=>{
+    b.classList.toggle('on', b.dataset.m === m);
+  });
+  renderHeatmaps();
+}
+
+function hmColor(t){ // t 0..1 → azul escuro → azul → verde → amarelo → vermelho
+  const stops=[[26,30,46],[37,99,235],[34,197,94],[250,204,21],[239,68,68]];
+  const seg=t*(stops.length-1);
+  const i=Math.min(Math.floor(seg),stops.length-2);
+  const f=seg-i, a=stops[i], b=stops[i+1];
+  return `rgb(${Math.round(a[0]+(b[0]-a[0])*f)},${Math.round(a[1]+(b[1]-a[1])*f)},${Math.round(a[2]+(b[2]-a[2])*f)})`;
+}
+
+function renderHeatmaps(){
+  const d = DADOS[currentMonth];
+  if(!d) return;
+
+  // matriz [diaSemana][hora] = {valor, qtd}
+  const matriz = {};
+  HM_DIAS.forEach(dia => { matriz[dia] = {}; HM_HORAS.forEach(h => matriz[dia][h] = {valor:0, qtd:0}); });
+
+  Object.keys(d.porDia).forEach(dtKey => {
+    const [ano,mes,diaN] = dtKey.split('-').map(Number);
+    const diaSemana = HM_DIAS[new Date(ano, mes-1, diaN).getDay()];
+    (d.porDia[dtKey].vendas || []).forEach(v => {
+      const h = Math.floor(v.hora);
+      if(h < 7 || h > 23) return;
+      matriz[diaSemana][h].valor += (v.valor || 0);
+      matriz[diaSemana][h].qtd += 1;
+    });
+  });
+
+  // max pra normalizar a cor
+  let max = 0;
+  HM_DIAS.forEach(dia => HM_HORAS.forEach(h => { const val = matriz[dia][h][heatmapMode]; if(val > max) max = val; }));
+
+  // ---- Heatmap horas (grid dia × hora) ----
+  const hm = document.getElementById('heatmapHoras');
+  if(hm){
+    hm.style.display = 'grid';
+    hm.style.gridTemplateColumns = `64px repeat(${HM_HORAS.length}, 1fr)`;
+    hm.style.gap = '3px';
+    let html = '<div></div>' + HM_HORAS.map(h => `<div style="text-align:center;font-size:9px;color:var(--muted);font-family:monospace">${h}h</div>`).join('');
+    HM_DIAS.forEach(dia => {
+      html += `<div style="display:flex;align-items:center;justify-content:flex-end;padding-right:6px;font-size:11px;color:var(--muted);font-weight:600">${dia.slice(0,3)}</div>`;
+      HM_HORAS.forEach(h => {
+        const val = matriz[dia][h][heatmapMode];
+        const t = max ? val/max : 0;
+        const titulo = `${dia} ${h}h: ${heatmapMode==='valor' ? 'R$ '+Math.round(val).toLocaleString('pt-BR') : val+' vendas'}`;
+        const txt = t > 0.28 ? (heatmapMode==='valor' ? (val>=1000 ? (val/1000).toFixed(1)+'k' : Math.round(val)) : val) : '';
+        html += `<div title="${titulo}" style="aspect-ratio:1;border-radius:4px;background:${hmColor(t)};display:flex;align-items:center;justify-content:center;font-size:8px;font-family:monospace;color:rgba(255,255,255,.9)">${txt}</div>`;
+      });
+    });
+    hm.innerHTML = html;
+  }
+  // legenda
+  const leg = document.getElementById('hmLegScale');
+  if(leg){
+    leg.style.display='inline-flex'; leg.style.gap='2px'; leg.style.margin='0 6px';
+    leg.innerHTML = [0,.25,.5,.75,1].map(t=>`<span style="width:20px;height:11px;border-radius:2px;display:inline-block;background:${hmColor(t)}"></span>`).join('');
+  }
+
+  // ---- Barras dias da semana ----
+  const bd = document.getElementById('heatmapDias');
+  if(bd){
+    const totDia = HM_DIAS.map(dia => ({
+      dia,
+      val: HM_HORAS.reduce((a,h)=>a + matriz[dia][h][heatmapMode], 0)
+    }));
+    const maxD = Math.max(...totDia.map(x=>x.val), 1);
+    bd.style.display='flex'; bd.style.flexDirection='column'; bd.style.gap='10px';
+    bd.innerHTML = totDia.map(x => {
+      const pct = x.val/maxD*100;
+      const txt = heatmapMode==='valor' ? 'R$ '+Math.round(x.val).toLocaleString('pt-BR') : x.val+' vendas';
+      return `<div style="display:grid;grid-template-columns:90px 1fr 100px;align-items:center;gap:12px">
+        <div style="font-size:13px;font-weight:600;color:var(--muted)">${x.dia}</div>
+        <div style="background:rgba(0,0,0,.25);border-radius:8px;height:26px;overflow:hidden">
+          <div style="height:100%;width:${Math.max(pct,3)}%;background:${hmColor(x.val/maxD)};border-radius:8px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;font-size:11px;font-weight:700;font-family:monospace;color:#06231b">${pct>20?txt:''}</div>
+        </div>
+        <div style="font-size:12px;font-family:monospace;text-align:right;color:var(--text)">${pct<=20?txt:''}</div>
+      </div>`;
+    }).join('');
+  }
 }
 
 function renderAll(){
