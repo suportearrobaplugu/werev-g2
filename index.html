@@ -59,11 +59,11 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Space Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;background-image:radial-gradient(at 20% 0%,var(--bg-radial-1) 0,transparent 50%),radial-gradient(at 80% 100%,var(--bg-radial-2) 0,transparent 50%);padding:32px;transition:background .3s,color .3s}
 .container{max-width:1400px;margin:0 auto}
-.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;flex-wrap:wrap;gap:20px}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;flex-wrap:wrap;gap:20px}
 .brand{flex:1}
 .logo{margin-bottom:8px}.logo img{height:42px;display:block;transition:opacity .3s}
 .tagline{display:none}
-h1{font-size:42px;font-weight:800;letter-spacing:-1.5px;line-height:1}
+h1{font-size:34px;font-weight:800;letter-spacing:-1px;line-height:1.05}
 h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .subtitle{font-size:13px;color:var(--muted);font-style:italic;margin-top:8px}
 .update-info{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;margin-bottom:12px;justify-content:flex-end}
@@ -151,9 +151,9 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .rel-hour-pill{padding:6px 12px;border-radius:999px;background:rgba(91,140,255,.12);border:1px solid rgba(91,140,255,.3);font-size:12px;color:#a3b5ff}
 .rel-hour-pill.cold{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:#fca5a5}
 .relatorios-empty{padding:40px;text-align:center;color:var(--muted);font-style:italic;background:var(--card);border:1px dashed var(--border);border-radius:12px}
-.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.grid-4{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
 .card{background:linear-gradient(135deg,var(--card) 0%,var(--card2) 100%);border:1px solid var(--border);border-radius:16px;padding:24px;position:relative;overflow:hidden}
 .card::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
 .card.green::before{background:linear-gradient(90deg,var(--green),#10b981)}
@@ -467,8 +467,9 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 @media(max-width:760px){.det-grid,.cenarios-wrap{grid-template-columns:1fr}}
 
 /* ===== Sidebar + Layout ===== */
-.layout-wrap{display:flex;gap:0;align-items:flex-start;position:relative}
-.sidebar{width:240px;flex-shrink:0;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 0;position:sticky;top:20px;transition:width .25s ease}
+.layout-wrap{display:block;position:relative}
+.sidebar{width:240px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 0;position:fixed;top:var(--sb-top,180px);left:32px;max-height:calc(100vh - var(--sb-top,180px) - 32px);overflow-y:auto;transition:width .25s ease;z-index:30}
+.content-area{min-width:0;margin-left:264px;transition:margin-left .25s ease}
 .sidebar .sb-collapse{position:absolute;top:14px;right:-13px;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;border:2px solid var(--bg,#0a0e14);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;z-index:6;line-height:1}
 .sb-grp{font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:14px 22px 6px;white-space:nowrap;overflow:hidden;transition:opacity .2s}
 .sb-item{display:flex;align-items:center;gap:13px;padding:11px 22px;cursor:pointer;color:var(--muted);font-weight:600;font-size:14px;border-left:3px solid transparent;background:none;width:100%;text-align:left;font-family:inherit;transition:.15s;white-space:nowrap;overflow:hidden}
@@ -476,7 +477,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .sb-item.active{background:rgba(51,95,235,.1);color:var(--text-strong);border-left-color:var(--accent)}
 .sb-ic{font-size:17px;flex-shrink:0;width:20px;text-align:center}
 .sb-txt{transition:opacity .2s}
-.content-area{flex:1;min-width:0;padding-left:24px}
+.content-area.sb-collapsed{margin-left:86px}
 .sidebar.collapsed{width:62px}
 .sidebar.collapsed .sb-txt,.sidebar.collapsed .sb-grp{opacity:0;width:0;padding:0;overflow:hidden}
 .sidebar.collapsed .sb-grp{height:8px;padding:4px 0}
@@ -484,10 +485,11 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .sb-mobile-toggle{display:none;position:fixed;top:16px;left:16px;z-index:50;width:42px;height:42px;border-radius:10px;background:var(--accent);color:#fff;border:none;font-size:20px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.3)}
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40}
 @media(max-width:900px){
-  .content-area{padding-left:0}
+  .content-area{margin-left:0 !important}
   .sb-mobile-toggle{display:flex;align-items:center;justify-content:center}
-  .sidebar{position:fixed;top:0;left:0;height:100vh;border-radius:0;z-index:45;transform:translateX(-100%);transition:transform .25s ease;padding-top:64px;overflow-y:auto}
+  .sidebar{position:fixed;top:0;left:0;height:100vh;max-height:100vh;border-radius:0;z-index:45;transform:translateX(-100%);transition:transform .25s ease;padding-top:64px;overflow-y:auto;width:240px}
   .sidebar.mobile-open{transform:translateX(0)}
+  .sidebar.collapsed{width:240px}
   .sidebar .sb-collapse{display:none}
   .sb-overlay.show{display:block}
   .layout-wrap{display:block}
@@ -3541,6 +3543,8 @@ function setTab(tab){
 function toggleSidebarCollapse(){
   const sb = document.getElementById('sidebar');
   sb.classList.toggle('collapsed');
+  const ca = document.querySelector('.content-area');
+  if(ca) ca.classList.toggle('sb-collapsed', sb.classList.contains('collapsed'));
   const btn = sb.querySelector('.sb-collapse');
   if(btn) btn.textContent = sb.classList.contains('collapsed') ? '›' : '‹';
   try{ localStorage.setItem('sbCollapsed', sb.classList.contains('collapsed') ? '1':'0'); }catch(e){}
@@ -3551,6 +3555,22 @@ function toggleSidebarMobile(){
   sb.classList.toggle('mobile-open');
   ov.classList.toggle('show');
 }
+
+// posiciona a sidebar logo abaixo do cabeçalho (header)
+function posicionarSidebar(){
+  if(window.innerWidth <= 900) return; // no mobile a sidebar é full-height
+  const header = document.querySelector('.header');
+  if(!header) return;
+  const rect = header.getBoundingClientRect();
+  // distância do topo do documento até o fim do header + um respiro
+  const top = rect.bottom + window.scrollY + 16;
+  // limita pra não descer demais; quando rola, gruda perto do topo
+  const topFixo = Math.max(24, top - window.scrollY);
+  document.documentElement.style.setProperty('--sb-top', topFixo + 'px');
+}
+window.addEventListener('load', posicionarSidebar);
+window.addEventListener('resize', posicionarSidebar);
+window.addEventListener('scroll', posicionarSidebar);
 
 
 const LINKS_DATA = {"produtos": [{"nome": "MVS", "valor": 247.0, "pagamento": "PIX / Cartão", "cupons": "20OFF 15OFF 10OFF", "linkPadrao": "https://pay.hub.la/7pMmRuMHMGmRBzmRPWQz?utm_source=comercial_mitsuo", "links": {"DANIEL GODOY": "https://pay.hub.la/7pMmRuMHMGmRBzmRPWQz?utm_source=comercial_daniel-godoy", "GUILHERME TRINCHÃO": "https://pay.hub.la/7pMmRuMHMGmRBzmRPWQz?utm_source=comercial_guilherme_trinchao", "FELIPE PADOVANI": "https://pay.hub.la/7pMmRuMHMGmRBzmRPWQz?utm_source=comercial_felipe-padovani", "PEDRO BARACH": "https://pay.hub.la/7pMmRuMHMGmRBzmRPWQz?utm_source=comercial_pedro-barach", "DIEGO ALMEIDA": "https://pay.hub.la/7pMmRuMHMGmRBzmRPWQz?utm_source=comercial_diego-almeida", "JOÃO GUILHERME": "https://pay.hub.la/7pMmRuMHMGmRBzmRPWQz?utm_source=comercial_joao-guilherme", "Lorena Ruas": "https://pay.hub.la/7pMmRuMHMGmRBzmRPWQz?utm_source=comercial_lorena-ruas", "Walisson Henrique": "https://pay.hub.la/7pMmRuMHMGmRBzmRPWQz?utm_source=comercial_walisson-henrique", "João Paulo": "https://pay.hub.la/7pMmRuMHMGmRBzmRPWQz?utm_source=comercial_joao-paulo"}}, {"nome": "LE 10 Produtos", "valor": 547.0, "pagamento": "PIX / Cartão", "cupons": "20OFF 15OFF 10OFF", "linkPadrao": "https://pay.hub.la/6KZgHokkUYRiOe8aS91C?utm_source=comercial_mitsuo", "links": {"DANIEL GODOY": "https://pay.hub.la/6KZgHokkUYRiOe8aS91C?utm_source=comercial_daniel-godoy", "GUILHERME TRINCHÃO": "https://pay.hub.la/6KZgHokkUYRiOe8aS91C?utm_source=comercial_guilherme-trinchao", "FELIPE PADOVANI": "https://pay.hub.la/6KZgHokkUYRiOe8aS91C?utm_source=comercial_felipe-padovani", "PEDRO BARACH": "https://pay.hub.la/6KZgHokkUYRiOe8aS91C?utm_source=comercial_pedro-barach", "DIEGO ALMEIDA": "https://pay.hub.la/6KZgHokkUYRiOe8aS91C?utm_source=comercial_diego-almeida", "JOÃO GUILHERME": "https://pay.hub.la/6KZgHokkUYRiOe8aS91C?utm_source=comercial_joao-guilherme", "Lorena Ruas": "https://pay.hub.la/6KZgHokkUYRiOe8aS91C?utm_source=comercial_lorena-ruas", "Walisson Henrique": "https://pay.hub.la/6KZgHokkUYRiOe8aS91C?utm_source=comercial_walisson-henrique", "João Paulo": "https://pay.hub.la/6KZgHokkUYRiOe8aS91C?utm_source=comercial_joao-paulo"}}, {"nome": "LE 5 Produtos", "valor": 297.0, "pagamento": "PIX / Cartão", "cupons": "20OFF 15OFF 10OFF", "linkPadrao": "https://pay.hub.la/xpf1yv5W4DTcrjjahV1B?utm_source=comercial_mitsuo", "links": {"DANIEL GODOY": "https://pay.hub.la/xpf1yv5W4DTcrjjahV1B?utm_source=comercial_daniel-godoy", "GUILHERME TRINCHÃO": "https://pay.hub.la/xpf1yv5W4DTcrjjahV1B?utm_source=comercial_guilherme-trinchao", "FELIPE PADOVANI": "https://pay.hub.la/xpf1yv5W4DTcrjjahV1B?utm_source=comercial_felipe-padovani", "PEDRO BARACH": "https://pay.hub.la/xpf1yv5W4DTcrjjahV1B?utm_source=comercial_pedro-barach", "DIEGO ALMEIDA": "https://pay.hub.la/xpf1yv5W4DTcrjjahV1B?utm_source=comercial_diego-almeida", "JOÃO GUILHERME": "https://pay.hub.la/xpf1yv5W4DTcrjjahV1B?utm_source=comercial_joao-guilherme", "Lorena Ruas": "https://pay.hub.la/xpf1yv5W4DTcrjjahV1B?utm_source=comercial_lorena-ruas", "Walisson Henrique": "https://pay.hub.la/xpf1yv5W4DTcrjjahV1B?utm_source=comercial_walisson-henrique", "João Paulo": "https://pay.hub.la/xpf1yv5W4DTcrjjahV1B?utm_source=comercial_joao-paulo"}}, {"nome": "CMP", "valor": 1497.0, "pagamento": "PIX / Cartão", "cupons": "20OFF 15OFF 10OFF", "linkPadrao": "https://pay.hub.la/7rjfcUaIVCftCoP7CuHo?utm_source=comercial_mitsuo", "links": {"DANIEL GODOY": "https://pay.hub.la/7rjfcUaIVCftCoP7CuHo?utm_source=comercial_daniel-godoy", "GUILHERME TRINCHÃO": "https://pay.hub.la/7rjfcUaIVCftCoP7CuHo?utm_source=comercial_guilherme-trinchao", "FELIPE PADOVANI": "https://pay.hub.la/7rjfcUaIVCftCoP7CuHo?utm_source=comercial_felipe-padovani", "PEDRO BARACH": "https://pay.hub.la/7rjfcUaIVCftCoP7CuHo?utm_source=comercial_pedro-barach", "DIEGO ALMEIDA": "https://pay.hub.la/7rjfcUaIVCftCoP7CuHo?utm_source=comercial_diego-almeida", "JOÃO GUILHERME": "https://pay.hub.la/7rjfcUaIVCftCoP7CuHo?utm_source=comercial_joao-guilherme", "Lorena Ruas": "https://pay.hub.la/7rjfcUaIVCftCoP7CuHo?utm_source=comercial_lorena-ruas", "Walisson Henrique": "https://pay.hub.la/7rjfcUaIVCftCoP7CuHo?utm_source=comercial_walisson-henrique", "João Paulo": "https://pay.hub.la/7rjfcUaIVCftCoP7CuHo?utm_source=comercial_joao-paulo"}}, {"nome": "CMP Lançamento 13/05/2026", "valor": 1449.0, "pagamento": "PIX / Cartão", "cupons": "20OFF 15OFF 10OFF", "linkPadrao": "https://pay.hub.la/qMFZnXrYdAu6MzBnc0OU?utm_source=comercial_mitsuo", "links": {"DANIEL GODOY": "https://pay.hub.la/qMFZnXrYdAu6MzBnc0OU?utm_source=comercial_daniel-godoy", "GUILHERME TRINCHÃO": "https://pay.hub.la/qMFZnXrYdAu6MzBnc0OU?utm_source=comercial_guilherme-trinchao", "FELIPE PADOVANI": "https://pay.hub.la/qMFZnXrYdAu6MzBnc0OU?utm_source=comercial_felipe-padovani", "PEDRO BARACH": "https://pay.hub.la/qMFZnXrYdAu6MzBnc0OU?utm_source=comercial_pedro-barach", "DIEGO ALMEIDA": "https://pay.hub.la/qMFZnXrYdAu6MzBnc0OU?utm_source=comercial_diego-almeida", "JOÃO GUILHERME": "https://pay.hub.la/qMFZnXrYdAu6MzBnc0OU?utm_source=comercial_joao-guilherme", "Lorena Ruas": "https://pay.hub.la/qMFZnXrYdAu6MzBnc0OU?utm_source=comercial_lorena-ruas", "Walisson Henrique": "https://pay.hub.la/qMFZnXrYdAu6MzBnc0OU?utm_source=comercial_walisson-henrique", "João Paulo": "https://pay.hub.la/qMFZnXrYdAu6MzBnc0OU?utm_source=comercial_joao-paulo"}}, {"nome": "CMP PIX PARCELADO", "valor": 1449.0, "pagamento": "PIX Parcelado / Cartão Inteligente", "cupons": "-", "linkPadrao": "https://pay.hub.la/4INEbj0MkOrTIEwPJtfp?utm_source=comercial_mitsuo", "links": {"DANIEL GODOY": "https://pay.hub.la/4INEbj0MkOrTIEwPJtfp?utm_source=comercial_daniel-godoy", "GUILHERME TRINCHÃO": "https://pay.hub.la/4INEbj0MkOrTIEwPJtfp?utm_source=comercial_guilherme-trinchao", "FELIPE PADOVANI": "https://pay.hub.la/4INEbj0MkOrTIEwPJtfp?utm_source=comercial_felipe-padovani", "PEDRO BARACH": "https://pay.hub.la/4INEbj0MkOrTIEwPJtfp?utm_source=comercial_pedro-barach", "DIEGO ALMEIDA": "https://pay.hub.la/4INEbj0MkOrTIEwPJtfp?utm_source=comercial_diego-almeida", "JOÃO GUILHERME": "https://pay.hub.la/4INEbj0MkOrTIEwPJtfp?utm_source=comercial_joao-guilherme", "Lorena Ruas": "https://pay.hub.la/4INEbj0MkOrTIEwPJtfp?utm_source=comercial_lorena-ruas", "Walisson Henrique": "https://pay.hub.la/4INEbj0MkOrTIEwPJtfp?utm_source=comercial_walisson-henrique", "João Paulo": "https://pay.hub.la/4INEbj0MkOrTIEwPJtfp?utm_source=comercial_joao-paulo"}}], "vendedores": [{"nome": "DANIEL GODOY", "fotoKey": "", "inicial": "D"}, {"nome": "GUILHERME TRINCHÃO", "fotoKey": "Guilherme", "inicial": "G"}, {"nome": "FELIPE PADOVANI", "fotoKey": "Felipe", "inicial": "F"}, {"nome": "PEDRO BARACH", "fotoKey": "Pedro", "inicial": "P"}, {"nome": "DIEGO ALMEIDA", "fotoKey": "", "inicial": "D"}, {"nome": "JOÃO GUILHERME", "fotoKey": "JoaoG", "inicial": "J"}, {"nome": "Lorena Ruas", "fotoKey": "Lorena", "inicial": "L"}, {"nome": "Walisson Henrique", "fotoKey": "Walisson", "inicial": "W"}, {"nome": "João Paulo", "fotoKey": "JoaoP", "inicial": "J"}]};
@@ -3634,6 +3654,7 @@ try{
     document.addEventListener('DOMContentLoaded',()=>{ 
       const sb=document.getElementById('sidebar'); 
       if(sb){sb.classList.add('collapsed'); const b=sb.querySelector('.sb-collapse'); if(b)b.textContent='›';}
+      const ca=document.querySelector('.content-area'); if(ca) ca.classList.add('sb-collapsed');
     });
   }
 }catch(e){}
