@@ -621,6 +621,8 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <button class="sb-item" data-tab="recordes" onclick="setTab('recordes')"><span class="sb-ic">🏆</span><span class="sb-txt">Quadro dos Recordes</span></button>
       <button class="sb-item" data-tab="faturamento" onclick="setTab('faturamento')"><span class="sb-ic">📈</span><span class="sb-txt">Faturamento Diário</span></button>
       <button class="sb-item" data-tab="relatorios" onclick="setTab('relatorios')"><span class="sb-ic">📑</span><span class="sb-txt">Relatórios</span></button>
+      <button class="sb-item" data-tab="funil" onclick="setTab('funil')"><span class="sb-ic">🚦</span><span class="sb-txt">Funil &amp; Taxa de Passagem</span></button>
+      <button class="sb-item" data-tab="taxapassagem" onclick="setTab('taxapassagem')"><span class="sb-ic">📉</span><span class="sb-txt">Taxa de Passagem</span></button>
       <div class="sb-grp">Cultura &amp; Operação</div>
       <button class="sb-item" data-tab="regras" onclick="setTab('regras')"><span class="sb-ic">📋</span><span class="sb-txt">Regras e Combinados</span></button>
       <button class="sb-item sb-parent" data-tab="processos" onclick="setTab('processos')"><span class="sb-ic">📚</span><span class="sb-txt">Processos</span><span class="sb-caret">▶</span></button>
@@ -874,6 +876,22 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     </div>
   </div>
 
+  <div id="tab-funil" class="tab-content">
+    <div class="recordes-hero">
+      <h2>🚦 Funil &amp; Taxa de Passagem</h2>
+      <div class="subtitle">Quantos leads cada vendedor precisa receber por hora pra fazer 2 vendas/hora</div>
+    </div>
+    <div id="funilContent" style="padding:4px 0"></div>
+  </div>
+
+  <div id="tab-taxapassagem" class="tab-content">
+    <div class="recordes-hero">
+      <h2>📉 Taxa de Passagem</h2>
+      <div class="subtitle">O que fica e o que sai em cada etapa · por vendedor e ao longo do tempo</div>
+    </div>
+    <div id="taxaPassagemContent" style="padding:4px 0"></div>
+  </div>
+
   <div id="tab-regras" class="tab-content">
     <div class="recordes-hero">
       <h2>📋 Regras e Combinados</h2>
@@ -1095,6 +1113,42 @@ let DADOS = { maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVended
 
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBV0F7S_7b1qi9WFTeGORVnJZ6J76tYEvPqAmWQjtwIsSv-dgbuOq_Qqef4YWNKIz0D1F8n_dqHK_F/pub?gid=1346722959&single=true&output=csv';
 
+// ===== Planilha de Eventos (funil / taxa de passagem) =====
+// Publicada via Arquivo > Compartilhar > Publicar na web > aba Eventos_Unnichat > CSV
+// IMPORTANTE: confirmar o gid da aba Eventos_Unnichat. Se a aba não for a primeira,
+// troque o gid abaixo pelo número que aparece na URL do Sheets (#gid=XXXX).
+const EVENTOS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQu8xkQgS7fFMldOUa1ThCNiqQXHK0XROrxN7sim2gObsdJ3UIDV3396X0jWbx8fYBO2KAhYDormkvn/pub?output=csv';
+
+// Etapas do funil, em ordem
+const FUNIL_ETAPAS = [
+  { key: '1', label: '1. Respondeu 1ª Mensagem' },
+  { key: '2', label: '2. Em Contato' },
+  { key: '3', label: '3. Negociação' },
+  { key: '4', label: '4. Link Pgto Enviado' }
+];
+const META_VENDAS_HORA = 2; // pergunta-mãe: 2 vendas/hora por vendedor
+
+// Mapeia o nome do "Proprietario" na planilha de Eventos para o vendedor interno do dash
+function mapearProprietario(nome){
+  if(!nome) return null;
+  const s = String(nome).toLowerCase().trim();
+  if(s.includes('joão guilherme') || s.includes('joao guilherme')) return 'JoaoG';
+  if(s.includes('joão paulo') || s.includes('joao paulo')) return 'JoaoP';
+  if(s.includes('trinchao') || s.includes('trinchão') || s.includes('guilherme')) return 'Guilherme';
+  if(s.includes('wallison') || s.includes('walisson') || s.includes('henrique')) return 'Walisson';
+  if(s.includes('lorena') || s.includes('ruas')) return 'Lorena';
+  if(s.includes('felipe') || s.includes('padovani')) return 'Felipe';
+  if(s.includes('pedro') || s.includes('barach')) return 'Pedro';
+  return null;
+}
+
+// Extrai o número da etapa a partir do texto "Etapa CRM" (ex: "2. Em Contato" -> "2")
+function etapaNum(txt){
+  if(!txt) return null;
+  const m = String(txt).trim().match(/^(\d+)/);
+  return m ? m[1] : null;
+}
+
 const VENDEDORES = ['Pedro','Felipe','JoaoG','JoaoP','Guilherme','Lorena','Walisson'];
 const VENDOR_COLORS = {
   Pedro: '#3b82f6',
@@ -1118,6 +1172,7 @@ const HOJE = (() => {
   return `${y}-${m}-${dia}`;
 })();
 
+let EVENTOS = null;
 let currentMonth = 'maio';
 let currentVendor = 'geral';
 
@@ -2460,6 +2515,8 @@ function renderAll(){
   renderRelatorios();
   renderInsights();
   renderFaturamentoDiario();
+  renderFunil();
+  renderTaxaPassagem();
 }
 
 // ========== RELATÓRIOS SEMANAIS ==========
@@ -3590,6 +3647,274 @@ function fotoVendDash(v, cls){
   if(src) return `<div class="${cls}"><img src="${src}" alt="${displayName(v)}"></div>`;
   return `<div class="${cls}">${displayName(v)[0]}</div>`;
 }
+
+// ===== Render da aba Funil & Taxa de Passagem =====
+
+// ===== Render da aba Taxa de Passagem =====
+function renderTaxaPassagem(){
+  const el = document.getElementById('taxaPassagemContent');
+  if(!el) return;
+
+  if(!EVENTOS || !EVENTOS.porVendedor){
+    el.innerHTML = `<div class="card" style="padding:24px;text-align:center;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:8px">📉</div>
+      <div style="font-weight:700;color:var(--text-strong);margin-bottom:6px">Planilha de eventos não carregada</div>
+      <div style="font-size:13px;line-height:1.6">A aba Taxa de Passagem usa a planilha <b>[G2] Banco de Eventos</b>.
+      Confira a URL/gid em <code>EVENTOS_CSV_URL</code> e veja o log <code>[Eventos]</code> no Console (F12).</div>
+    </div>`;
+    return;
+  }
+
+  const f = calcularFunil();
+  if(!f){ el.innerHTML = '<div class="card" style="padding:20px;color:var(--muted)">Sem dados.</div>'; return; }
+
+  const pct = x => (x*100).toFixed(1).replace('.0','') + '%';
+  const ETAPAS_LABEL = { '1':'Respondeu 1ª Msg', '2':'Em Contato', '3':'Negociação', '4':'Link Pgto', 'venda':'Venda' };
+  const PASSOS = [
+    { de:'1', para:'2', taxa:'1->2' },
+    { de:'2', para:'3', taxa:'2->3' },
+    { de:'3', para:'4', taxa:'3->4' },
+    { de:'4', para:'venda', taxa:'4->venda' }
+  ];
+
+  // Agregado da equipe por etapa
+  const tot = {'1':0,'2':0,'3':0,'4':0,'venda':0};
+  VENDEDORES.forEach(v=>{
+    const p=f.porVendedor[v];
+    ['1','2','3','4'].forEach(k=> tot[k]+=p.etapas[k]);
+    tot['venda']+=p.vendas;
+  });
+
+  // ---- BLOCO 1: O que fica e o que sai (retenção da equipe) ----
+  let b1 = `<div class="card" style="padding:20px;margin-bottom:16px">
+    <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">O que fica e o que sai · equipe</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Em cada passagem: quantos avançam (ficam) e quantos não avançam (saem)</div>`;
+  PASSOS.forEach(s=>{
+    const entrou = tot[s.de];
+    const passou = Math.min(tot[s.para], entrou);
+    const saiu = Math.max(0, entrou - passou);
+    const taxa = entrou>0 ? passou/entrou : 0;
+    const wFica = entrou>0 ? (passou/entrou)*100 : 0;
+    b1 += `<div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px">
+        <span style="color:var(--text);font-weight:600">${ETAPAS_LABEL[s.de]} → ${ETAPAS_LABEL[s.para]}</span>
+        <span style="color:var(--text-strong);font-weight:700">${pct(taxa)}</span>
+      </div>
+      <div style="display:flex;height:22px;border-radius:6px;overflow:hidden;background:var(--bg2)">
+        <div style="width:${wFica}%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">${passou>0?`✓ ${passou}`:''}</div>
+        <div style="flex:1;background:var(--red);opacity:.55;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">${saiu>0?`✗ ${saiu}`:''}</div>
+      </div>
+    </div>`;
+  });
+  b1 += `</div>`;
+
+  // ---- BLOCO 2: Comparação entre vendedores (matriz de taxas) ----
+  let b2 = `<div class="card" style="padding:0;overflow-x:auto;margin-bottom:16px">
+    <div style="padding:16px 16px 4px;font-weight:800;color:var(--text-strong);font-size:15px">Comparação entre vendedores</div>
+    <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">Taxa de passagem em cada etapa · verde = acima da média da equipe</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
+      <th style="padding:10px 12px">VENDEDOR</th>
+      <th style="padding:10px 8px;text-align:center">1→2</th>
+      <th style="padding:10px 8px;text-align:center">2→3</th>
+      <th style="padding:10px 8px;text-align:center">3→4</th>
+      <th style="padding:10px 8px;text-align:center">4→Venda</th>
+      <th style="padding:10px 8px;text-align:center">Global</th>
+    </tr></thead><tbody>`;
+  // médias por passo
+  const med = {};
+  PASSOS.forEach(s=>{
+    const vals = VENDEDORES.map(v=>f.porVendedor[v].taxas[s.taxa]).filter(x=>x>0);
+    med[s.taxa] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+  });
+  VENDEDORES.forEach(v=>{
+    const p=f.porVendedor[v];
+    const cor=VENDOR_COLORS[v]||'var(--accent)';
+    const cel=(taxaKey)=>{
+      const val=p.taxas[taxaKey];
+      const acima = val>0 && val>=med[taxaKey];
+      const c = val===0 ? 'var(--muted)' : (acima ? 'var(--green)' : 'var(--text)');
+      const w = val>0 && acima ? '700' : '500';
+      return `<td style="padding:9px 8px;text-align:center;color:${c};font-weight:${w}">${pct(val)}</td>`;
+    };
+    b2 += `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 12px;font-weight:700;color:var(--text-strong)"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${cor};margin-right:7px"></span>${displayName(v)}</td>
+      ${cel('1->2')}${cel('2->3')}${cel('3->4')}${cel('4->venda')}
+      <td style="padding:9px 8px;text-align:center;font-weight:800;color:var(--text-strong)">${pct(p.taxaGlobal)}</td>
+    </tr>`;
+  });
+  // linha média
+  b2 += `<tr style="background:var(--bg2)">
+    <td style="padding:9px 12px;font-weight:700;color:var(--muted)">MÉDIA EQUIPE</td>
+    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(med['1->2'])}</td>
+    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(med['2->3'])}</td>
+    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(med['3->4'])}</td>
+    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(med['4->venda'])}</td>
+    <td style="padding:9px 8px;text-align:center;color:var(--muted)">—</td>
+  </tr>`;
+  b2 += `</tbody></table></div>`;
+
+  // ---- BLOCO 3: Evolução no tempo (taxa global por dia) ----
+  let b3 = `<div class="card" style="padding:20px">
+    <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">Evolução no tempo</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Leads na etapa 1 e taxa global da equipe por dia</div>`;
+  const dias = Object.keys(EVENTOS.porDia || {}).sort();
+  if(dias.length === 0){
+    b3 += `<div style="color:var(--muted);font-size:13px">Sem dados diários ainda.</div>`;
+  } else {
+    // calcula por dia: total etapa1 e taxa global agregada
+    const linhas = dias.map(dk=>{
+      const dd = EVENTOS.porDia[dk];
+      const t={'1':0,'2':0,'3':0,'4':0};
+      Object.values(dd).forEach(vd=>{
+        ['1','2','3','4'].forEach(k=> t[k]+= (vd[k]?vd[k].size:0));
+      });
+      const s=(a,b)=>b>0?Math.min(a/b,1):0;
+      const tg = s(t['2'],t['1'])*s(t['3'],t['2'])*s(t['4'],t['3']);
+      return { dk, leads:t['1'], tg };
+    });
+    const maxLeads = Math.max(1, ...linhas.map(l=>l.leads));
+    linhas.forEach(l=>{
+      const [a,m,d]=l.dk.split('-');
+      const w=(l.leads/maxLeads)*100;
+      b3 += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px">
+        <span style="width:48px;color:var(--muted)">${d}/${m}</span>
+        <div style="flex:1;height:16px;background:var(--bg2);border-radius:6px;overflow:hidden">
+          <div style="height:100%;width:${w}%;background:var(--accent);border-radius:6px"></div>
+        </div>
+        <span style="width:70px;text-align:right;color:var(--text)">${l.leads} leads</span>
+        <span style="width:60px;text-align:right;color:var(--text-strong);font-weight:700">${pct(l.tg)}</span>
+      </div>`;
+    });
+  }
+  b3 += `</div>`;
+
+  el.innerHTML = b1 + b2 + b3;
+}
+
+function renderFunil(){
+  const el = document.getElementById('funilContent');
+  if(!el) return;
+
+  if(!EVENTOS || !EVENTOS.porVendedor){
+    el.innerHTML = `<div class="card" style="padding:24px;text-align:center;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:8px">🚦</div>
+      <div style="font-weight:700;color:var(--text-strong);margin-bottom:6px">Planilha de eventos não carregada</div>
+      <div style="font-size:13px;line-height:1.6">Verifique se a planilha <b>[G2] Banco de Eventos</b> está publicada na web como CSV
+      (aba <b>Eventos_Unnichat</b>) e se a URL/gid em <code>EVENTOS_CSV_URL</code> está correta.<br>
+      Abra o Console (F12) pra ver o log <code>[Eventos]</code>.</div>
+    </div>`;
+    return;
+  }
+
+  const f = calcularFunil();
+  if(!f){ el.innerHTML = '<div class="card" style="padding:20px;color:var(--muted)">Sem dados de funil.</div>'; return; }
+
+  const pct = x => (x*100).toFixed(1).replace('.0','') + '%';
+  const num = x => Number.isFinite(x) ? (Math.round(x*10)/10).toString().replace('.0','') : '—';
+  const horas = f.horasAtivas;
+
+  // Agregado da equipe (soma das etapas) pro funil visual macro
+  const totEt = {'1':0,'2':0,'3':0,'4':0};
+  let totVendas = 0;
+  VENDEDORES.forEach(v=>{
+    const p = f.porVendedor[v];
+    FUNIL_ETAPAS.forEach(e=> totEt[e.key]+= p.etapas[e.key]);
+    totVendas += p.vendas;
+  });
+  const etapasViz = FUNIL_ETAPAS.map(e=>({label:e.label, key:e.key, n:totEt[e.key]}));
+  etapasViz.push({label:'✅ Venda', key:'venda', n:totVendas});
+  const maxN = Math.max(1, ...etapasViz.map(x=>x.n));
+
+  // ---- Funil visual macro ----
+  let funilHtml = `<div class="card" style="padding:20px;margin-bottom:16px">
+    <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:14px">Funil da equipe · período (${horas}h ativas)</div>`;
+  etapasViz.forEach((e,i)=>{
+    const w = Math.max(6, (e.n/maxN)*100);
+    const taxa = i>0 && etapasViz[i-1].n>0 ? (e.n/etapasViz[i-1].n) : null;
+    const cor = e.key==='venda' ? 'var(--green)' : 'var(--accent)';
+    funilHtml += `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+        <span style="color:var(--text)">${e.label}</span>
+        <span style="color:var(--text-strong);font-weight:700">${e.n}${taxa!==null?` <span style="color:var(--muted);font-weight:500">· ${pct(taxa)} da anterior</span>`:''}</span>
+      </div>
+      <div style="height:14px;background:var(--bg2);border-radius:7px;overflow:hidden">
+        <div style="height:100%;width:${w}%;background:${cor};border-radius:7px;transition:width .4s"></div>
+      </div>
+    </div>`;
+  });
+  funilHtml += `</div>`;
+
+  // ---- Tabela por vendedor ----
+  let tab = `<div class="card" style="padding:0;overflow-x:auto;margin-bottom:16px">
+    <table class="rel-table" style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
+      <th style="padding:10px 12px">VENDEDOR</th>
+      <th style="padding:10px 8px;text-align:center">Et.1</th>
+      <th style="padding:10px 8px;text-align:center">Et.2</th>
+      <th style="padding:10px 8px;text-align:center">Et.3</th>
+      <th style="padding:10px 8px;text-align:center">Et.4</th>
+      <th style="padding:10px 8px;text-align:center">Vendas</th>
+      <th style="padding:10px 8px;text-align:center">1→2</th>
+      <th style="padding:10px 8px;text-align:center">2→3</th>
+      <th style="padding:10px 8px;text-align:center">3→4</th>
+      <th style="padding:10px 8px;text-align:center">4→V</th>
+      <th style="padding:10px 8px;text-align:center">Taxa global</th>
+    </tr></thead><tbody>`;
+  VENDEDORES.forEach(v=>{
+    const p = f.porVendedor[v];
+    const cor = VENDOR_COLORS[v] || 'var(--accent)';
+    tab += `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 12px;font-weight:700;color:var(--text-strong)"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${cor};margin-right:7px"></span>${displayName(v)}</td>
+      <td style="padding:9px 8px;text-align:center">${p.etapas['1']}</td>
+      <td style="padding:9px 8px;text-align:center">${p.etapas['2']}</td>
+      <td style="padding:9px 8px;text-align:center">${p.etapas['3']}</td>
+      <td style="padding:9px 8px;text-align:center">${p.etapas['4']}</td>
+      <td style="padding:9px 8px;text-align:center;font-weight:700;color:var(--green)">${p.vendas}</td>
+      <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(p.taxas['1->2'])}</td>
+      <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(p.taxas['2->3'])}</td>
+      <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(p.taxas['3->4'])}</td>
+      <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(p.taxas['4->venda'])}</td>
+      <td style="padding:9px 8px;text-align:center;font-weight:800;color:var(--text-strong)">${pct(p.taxaGlobal)}</td>
+    </tr>`;
+  });
+  tab += `</tbody></table></div>`;
+
+  // ---- Card-resposta: quantos leads/h pra 2 vendas/h ----
+  let resp = `<div class="card" style="padding:20px">
+    <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">🎯 Quantos leads/hora pra fazer 2 vendas/hora?</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Fórmula reversa: leads/h = 2 ÷ (taxa global do vendedor). O gap mostra quanto falta ou sobra no volume atual.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">`;
+  VENDEDORES.forEach(v=>{
+    const p = f.porVendedor[v];
+    const cor = VENDOR_COLORS[v] || 'var(--accent)';
+    const foto = (VENDOR_PHOTOS && VENDOR_PHOTOS[v]) ? VENDOR_PHOTOS[v] : '';
+    const temTaxa = p.taxaGlobal > 0;
+    const nec = temTaxa ? num(p.leadsHoraNecessarios) : '—';
+    let gapHtml;
+    if(!temTaxa){
+      gapHtml = `<span style="color:var(--muted)">sem dados suficientes</span>`;
+    } else if(p.gap > 0.05){
+      gapHtml = `<span style="color:var(--red);font-weight:700">faltam ${num(p.gap)} leads/h</span>`;
+    } else {
+      gapHtml = `<span style="color:var(--green);font-weight:700">volume ok ✓</span>`;
+    }
+    resp += `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+        <div style="width:30px;height:30px;border-radius:50%;background:${cor} center/cover ${foto?`url('${foto}')`:''};border:2px solid ${cor}"></div>
+        <div style="font-weight:800;color:var(--text-strong)">${displayName(v)}</div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:3px"><span>Recebe hoje</span><span style="color:var(--text)">${num(p.leadsHora)} leads/h</span></div>
+      <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:3px"><span>Faz hoje</span><span style="color:var(--text)">${num(p.vendasHora)} vendas/h</span></div>
+      <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px"><span>Precisa receber</span><span style="color:var(--text-strong);font-weight:700">${nec} leads/h</span></div>
+      <div style="text-align:center;font-size:13px;padding-top:8px;border-top:1px solid var(--border)">${gapHtml}</div>
+    </div>`;
+  });
+  resp += `</div></div>`;
+
+  el.innerHTML = funilHtml + tab + resp;
+}
+
 function renderRelEventos(){
   const tbl = document.getElementById('relEventosTabela');
   if(!tbl) return;
@@ -4388,6 +4713,127 @@ function processarCSV(csvText){
   return acc;
 }
 
+// ===== Processamento da planilha de Eventos =====
+// Conta, por vendedor e por etapa, os EMAILS ÚNICOS que entraram em cada etapa.
+// Estrutura de retorno:
+// { porVendedor: { JoaoG: { '1': Set, '2': Set, '3': Set, '4': Set }, ... },
+//   periodo: { primeiraData, ultimaData, horasAtivas } }
+function processarEventos(csvText){
+  const rows = parseCSV(csvText);
+  if(rows.length < 2) return null;
+
+  const header = rows[0].map(h => String(h).trim().toLowerCase());
+  const idxData  = header.findIndex(h => h === 'data');
+  const idxHora  = header.findIndex(h => h === 'hora');
+  const idxEmail = header.findIndex(h => h === 'email');
+  const idxProp  = header.findIndex(h => h.includes('propriet'));
+  const idxEtapa = header.findIndex(h => h.includes('etapa'));
+
+  if(idxEmail < 0 || idxProp < 0 || idxEtapa < 0){
+    console.warn('[Eventos] Colunas não encontradas. Cabeçalhos:', header.join(', '));
+    return null;
+  }
+
+  const porVendedor = {};
+  VENDEDORES.forEach(v => {
+    porVendedor[v] = {};
+    FUNIL_ETAPAS.forEach(e => porVendedor[v][e.key] = new Set());
+  });
+
+  const porDia = {}; // dataKey -> { vendedor -> { etapa -> Set(emails) } }
+
+  let minTs = null, maxTs = null;
+  const horasSet = new Set(); // chaves "YYYY-MM-DD HH" pra contar horas ativas
+
+  for(let i = 1; i < rows.length; i++){
+    const row = rows[i];
+    if(!row || row.length === 0) continue;
+    const vend = mapearProprietario(row[idxProp]);
+    if(!vend || !porVendedor[vend]) continue;
+
+    const etapa = etapaNum(row[idxEtapa]);
+    if(etapa === null || !porVendedor[vend][etapa]) continue;
+
+    const email = String(row[idxEmail]||'').trim().toLowerCase();
+    if(!email) continue;
+
+    // Conta o lead (email único) como tendo passado por aquela etapa
+    porVendedor[vend][etapa].add(email);
+
+    // Janela de tempo (pra normalizar por hora)
+    const data = idxData >= 0 ? parseData(row[idxData]) : null;
+    const hora = idxHora >= 0 ? parseHora(row[idxHora]) : 0;
+    if(data){
+      const ts = new Date(data.ano, data.mes-1, data.dia, Math.floor(hora)).getTime();
+      if(minTs === null || ts < minTs) minTs = ts;
+      if(maxTs === null || ts > maxTs) maxTs = ts;
+      const hk = `${data.ano}-${data.mes}-${data.dia} ${Math.floor(hora)}`;
+      horasSet.add(hk);
+
+      // Acúmulo por dia (pra evolução no tempo)
+      const dataKey = `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}`;
+      if(!porDia[dataKey]) porDia[dataKey] = {};
+      if(!porDia[dataKey][vend]){
+        porDia[dataKey][vend] = {};
+        FUNIL_ETAPAS.forEach(e => porDia[dataKey][vend][e.key] = new Set());
+      }
+      porDia[dataKey][vend][etapa].add(email);
+    }
+  }
+
+  return {
+    porVendedor,
+    porDia,
+    periodo: {
+      primeiraData: minTs ? new Date(minTs) : null,
+      ultimaData: maxTs ? new Date(maxTs) : null,
+      horasAtivas: horasSet.size || 1
+    }
+  };
+}
+
+// Calcula taxas de passagem por vendedor cruzando eventos (etapas) + vendas (DADOS).
+// Retorna, por vendedor:
+//   etapas: { '1': n, '2': n, '3': n, '4': n }  (emails únicos por etapa)
+//   vendas: nº de vendas do mês (da planilha de vendas)
+//   taxas: { '1->2', '2->3', '3->4', '4->venda' } em fração (0..1)
+//   taxaGlobal: produto das taxas (lead da etapa 1 -> venda)
+//   horasAtivas, leadsHora, vendasHora
+//   leadsHoraNecessarios: pra bater META_VENDAS_HORA
+//   gap: leadsHoraNecessarios - leadsHora
+function calcularFunil(){
+  if(!EVENTOS || !EVENTOS.porVendedor) return null;
+  const mes = DADOS[currentMonth];
+  const horas = EVENTOS.periodo.horasAtivas || 1;
+  const out = { porVendedor: {}, horasAtivas: horas, periodo: EVENTOS.periodo };
+
+  VENDEDORES.forEach(v => {
+    const ev = EVENTOS.porVendedor[v] || {};
+    const etapas = {};
+    FUNIL_ETAPAS.forEach(e => etapas[e.key] = (ev[e.key] ? ev[e.key].size : 0));
+
+    const vendas = (mes && mes.porVendedor[v]) ? mes.porVendedor[v].qtd : 0;
+
+    const safe = (a,b) => (b > 0 ? Math.min(a/b, 1) : 0);
+    const taxas = {
+      '1->2': safe(etapas['2'], etapas['1']),
+      '2->3': safe(etapas['3'], etapas['2']),
+      '3->4': safe(etapas['4'], etapas['3']),
+      '4->venda': safe(vendas, etapas['4'])
+    };
+    const taxaGlobal = taxas['1->2'] * taxas['2->3'] * taxas['3->4'] * taxas['4->venda'];
+
+    const leadsHora = etapas['1'] / horas;
+    const vendasHora = vendas / horas;
+    const leadsHoraNecessarios = taxaGlobal > 0 ? (META_VENDAS_HORA / taxaGlobal) : null;
+    const gap = leadsHoraNecessarios !== null ? (leadsHoraNecessarios - leadsHora) : null;
+
+    out.porVendedor[v] = { etapas, vendas, taxas, taxaGlobal, leadsHora, vendasHora, leadsHoraNecessarios, gap };
+  });
+
+  return out;
+}
+
 async function carregarDados(forceRefresh = false){
   const dot = document.getElementById('liveDot');
   const status = document.getElementById('updateStatus');
@@ -4413,6 +4859,26 @@ async function carregarDados(forceRefresh = false){
     const novosDados = processarCSV(text);
     console.log('[Dashboard] Dados processados. Maio:', novosDados.maio.totalFaturamento, 'em', novosDados.maio.totalVendas, 'vendas');
     DADOS = novosDados;
+
+    // Carrega a planilha de Eventos (funil). Não bloqueia o dash se falhar.
+    try {
+      const urlEv = EVENTOS_CSV_URL + (forceRefresh ? '&_t=' + Date.now() : '');
+      console.log('[Eventos] Fetch:', urlEv);
+      const respEv = await fetch(urlEv, { cache: forceRefresh ? 'no-store' : 'default' });
+      if(respEv.ok){
+        const textEv = await respEv.text();
+        console.log('[Eventos] CSV recebido. Tamanho:', textEv.length);
+        EVENTOS = processarEventos(textEv);
+        if(EVENTOS) console.log('[Eventos] Processado. Horas ativas:', EVENTOS.periodo.horasAtivas);
+        else console.warn('[Eventos] processarEventos retornou null');
+      } else {
+        console.warn('[Eventos] HTTP', respEv.status, '— funil ficará indisponível');
+        EVENTOS = null;
+      }
+    } catch(evErr){
+      console.warn('[Eventos] Erro ao carregar (funil indisponível):', evErr.message);
+      EVENTOS = null;
+    }
     
     if(dot) dot.className = 'live-dot';
     const agora = new Date();
