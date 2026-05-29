@@ -3722,109 +3722,101 @@ function renderTaxaPassagem(){
   if(!f){ el.innerHTML = '<div class="card" style="padding:20px;color:var(--muted)">Sem dados.</div>'; return; }
 
   const pct = x => (x*100).toFixed(1).replace('.0','') + '%';
-  const ETAPAS_LABEL = { '1':'Respondeu 1ª Msg', '2':'Em Contato', '3':'Negociação', '4':'Link Pgto', 'venda':'Venda' };
-  // BASE ETAPA 2: a taxa de conversão real parte de quem chegou em "Em Contato"
-  const PASSOS = [
-    { de:'2', para:'3', taxa:'2->3' },
-    { de:'3', para:'4', taxa:'3->4' },
-    { de:'4', para:'venda', taxa:'4->venda' }
-  ];
-  // Taxa global a partir da etapa 2 (ignora a passagem 1->2)
-  const taxaGlobal2 = p => p.taxas['2->3'] * p.taxas['3->4'] * p.taxas['4->venda'];
+  const num = x => Number.isFinite(x) ? (Math.round(x*10)/10).toString().replace('.0','') : '—';
+  const horas = f.horasAtivas;
 
-  // Agregado da equipe por etapa
-  const tot = {'1':0,'2':0,'3':0,'4':0,'venda':0};
-  VENDEDORES.forEach(v=>{
-    const p=f.porVendedor[v];
-    ['1','2','3','4'].forEach(k=> tot[k]+=p.etapas[k]);
-    tot['venda']+=p.vendas;
-  });
+  // MÉTRICA ÚNICA: Em Contato (etapa 2) -> Venda
+  // taxa = vendas / emails únicos que chegaram em Em Contato
+  const taxaC2V = v => {
+    const p = f.porVendedor[v];
+    return p.etapas['2'] > 0 ? Math.min(p.vendas / p.etapas['2'], 1) : 0;
+  };
 
-  // ---- BLOCO 1: O que fica e o que sai (retenção da equipe) ----
+  // Agregado equipe
+  let totC = 0, totV = 0;
+  VENDEDORES.forEach(v=>{ totC += f.porVendedor[v].etapas['2']; totV += f.porVendedor[v].vendas; });
+  const taxaEquipe = totC > 0 ? Math.min(totV/totC, 1) : 0;
+
+  // ---- BLOCO 1: O que fica e o que sai (Em Contato -> Venda) ----
+  const ficou = Math.min(totV, totC);
+  const saiu = Math.max(0, totC - ficou);
+  const wFica = totC>0 ? (ficou/totC)*100 : 0;
   let b1 = `<div class="card" style="padding:20px;margin-bottom:16px">
     <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">O que fica e o que sai · equipe</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">A partir de <b>Em Contato</b> (lead único trabalhável): quantos avançam (ficam) e quantos não (saem)</div>`;
-  PASSOS.forEach(s=>{
-    const entrou = tot[s.de];
-    const passou = Math.min(tot[s.para], entrou);
-    const saiu = Math.max(0, entrou - passou);
-    const taxa = entrou>0 ? passou/entrou : 0;
-    const wFica = entrou>0 ? (passou/entrou)*100 : 0;
-    b1 += `<div style="margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px">
-        <span style="color:var(--text);font-weight:600">${ETAPAS_LABEL[s.de]} → ${ETAPAS_LABEL[s.para]}</span>
-        <span style="color:var(--text-strong);font-weight:700">${pct(taxa)}</span>
-      </div>
-      <div style="display:flex;height:22px;border-radius:6px;overflow:hidden;background:var(--bg2)">
-        <div style="width:${wFica}%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">${passou>0?`✓ ${passou}`:''}</div>
-        <div style="flex:1;background:var(--red);opacity:.55;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">${saiu>0?`✗ ${saiu}`:''}</div>
-      </div>
-    </div>`;
-  });
-  b1 += `</div>`;
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">De cada lead em <b>Em Contato</b>: quantos fecharam venda (ficam) e quantos não (saem)</div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px">
+      <span style="color:var(--text);font-weight:600">Em Contato → Venda</span>
+      <span style="color:var(--text-strong);font-weight:700">${pct(taxaEquipe)}</span>
+    </div>
+    <div style="display:flex;height:26px;border-radius:6px;overflow:hidden;background:var(--bg2)">
+      <div style="width:${wFica}%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">${ficou>0?`✓ ${ficou} vendas`:''}</div>
+      <div style="flex:1;background:var(--red);opacity:.55;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">${saiu>0?`✗ ${saiu} não fecharam`:''}</div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">${totC} leads em Em Contato · ${totV} vendas</div>
+  </div>`;
 
-  // ---- BLOCO 2: Comparação entre vendedores (matriz de taxas) ----
+  // ---- BLOCO 2: Comparação entre vendedores (taxa única) ----
+  const taxas = {};
+  VENDEDORES.forEach(v=> taxas[v]=taxaC2V(v));
+  const vals = VENDEDORES.map(v=>taxas[v]).filter(x=>x>0);
+  const media = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+  // ranking por taxa desc
+  const ord = [...VENDEDORES].sort((a,b)=> taxas[b]-taxas[a]);
   let b2 = `<div class="card" style="padding:0;overflow-x:auto;margin-bottom:16px">
     <div style="padding:16px 16px 4px;font-weight:800;color:var(--text-strong);font-size:15px">Comparação entre vendedores</div>
-    <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">Conversão real a partir de <b>Em Contato</b> · verde = acima da média da equipe</div>
+    <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">Taxa de conversão <b>Em Contato → Venda</b> · verde = acima da média da equipe</div>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
       <th style="padding:10px 12px">VENDEDOR</th>
-      <th style="padding:10px 8px;text-align:center">2→3</th>
-      <th style="padding:10px 8px;text-align:center">3→4</th>
-      <th style="padding:10px 8px;text-align:center">4→Venda</th>
-      <th style="padding:10px 8px;text-align:center">Global</th>
+      <th style="padding:10px 8px;text-align:center">Em Contato</th>
+      <th style="padding:10px 8px;text-align:center">Vendas</th>
+      <th style="padding:10px 8px;text-align:center">Em Contato → Venda</th>
     </tr></thead><tbody>`;
-  // médias por passo
-  const med = {};
-  PASSOS.forEach(s=>{
-    const vals = VENDEDORES.map(v=>f.porVendedor[v].taxas[s.taxa]).filter(x=>x>0);
-    med[s.taxa] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
-  });
-  VENDEDORES.forEach(v=>{
+  ord.forEach(v=>{
     const p=f.porVendedor[v];
     const cor=VENDOR_COLORS[v]||'var(--accent)';
-    const cel=(taxaKey)=>{
-      const val=p.taxas[taxaKey];
-      const acima = val>0 && val>=med[taxaKey];
-      const c = val===0 ? 'var(--muted)' : (acima ? 'var(--green)' : 'var(--text)');
-      const w = val>0 && acima ? '700' : '500';
-      return `<td style="padding:9px 8px;text-align:center;color:${c};font-weight:${w}">${pct(val)}</td>`;
-    };
+    const t=taxas[v];
+    const acima = t>0 && t>=media;
+    const c = t===0 ? 'var(--muted)' : (acima ? 'var(--green)' : 'var(--text-strong)');
     b2 += `<tr style="border-bottom:1px solid var(--border)">
       <td style="padding:9px 12px;font-weight:700;color:var(--text-strong)"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${cor};margin-right:7px"></span>${displayName(v)}</td>
-      ${cel('2->3')}${cel('3->4')}${cel('4->venda')}
-      <td style="padding:9px 8px;text-align:center;font-weight:800;color:var(--text-strong)">${pct(taxaGlobal2(p))}</td>
+      <td style="padding:9px 8px;text-align:center;color:var(--text)">${p.etapas['2']}</td>
+      <td style="padding:9px 8px;text-align:center;font-weight:700;color:var(--green)">${p.vendas}</td>
+      <td style="padding:9px 8px;text-align:center;font-weight:800;color:${c}">${pct(t)}</td>
     </tr>`;
   });
-  // linha média
   b2 += `<tr style="background:var(--bg2)">
     <td style="padding:9px 12px;font-weight:700;color:var(--muted)">MÉDIA EQUIPE</td>
-    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(med['2->3'])}</td>
-    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(med['3->4'])}</td>
-    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(med['4->venda'])}</td>
-    <td style="padding:9px 8px;text-align:center;color:var(--muted)">—</td>
+    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${totC}</td>
+    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${totV}</td>
+    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(taxaEquipe)}</td>
   </tr>`;
   b2 += `</tbody></table></div>`;
 
-  // ---- BLOCO 3: Evolução no tempo (taxa global por dia) ----
-  let b3 = `<div class="card" style="padding:20px">
+  // ---- BLOCO 3: Evolução no tempo (taxa Em Contato -> Venda por dia) ----
+  let b3 = `<div class="card" style="padding:20px;margin-bottom:16px">
     <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">Evolução no tempo</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Leads em <b>Em Contato</b> e taxa de conversão real da equipe por dia</div>`;
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Leads em <b>Em Contato</b> e taxa Em Contato → Venda da equipe por dia</div>`;
   const dias = Object.keys(EVENTOS.porDia || {}).filter(dentroIntervalo).sort();
   if(dias.length === 0){
     b3 += `<div style="color:var(--muted);font-size:13px">Sem dados diários ainda.</div>`;
   } else {
-    // calcula por dia: total etapa2 (base) e taxa de conversão real (2->3->4->venda)
+    const vendasDia = dk => {
+      let q=0;
+      ['maio','abril'].forEach(mk=>{
+        const mes=DADOS[mk]; if(!mes) return;
+        const dia=mes.porDia[dk];
+        if(dia) Object.values(dia.porVendedor).forEach(x=> q+=x.qtd);
+      });
+      return q;
+    };
     const linhas = dias.map(dk=>{
       const dd = EVENTOS.porDia[dk];
-      const t={'2':0,'3':0,'4':0};
-      Object.values(dd).forEach(vd=>{
-        ['2','3','4'].forEach(k=> t[k]+= (vd[k]?vd[k].size:0));
-      });
-      const s=(a,b)=>b>0?Math.min(a/b,1):0;
-      const tg = s(t['3'],t['2'])*s(t['4'],t['3']);
-      return { dk, leads:t['2'], tg };
+      let c2=0;
+      Object.values(dd).forEach(vd=>{ c2 += (vd['2']?vd['2'].size:0); });
+      const vd = vendasDia(dk);
+      const tg = c2>0 ? Math.min(vd/c2,1) : 0;
+      return { dk, leads:c2, vendas:vd, tg };
     });
     const maxLeads = Math.max(1, ...linhas.map(l=>l.leads));
     linhas.forEach(l=>{
@@ -3835,46 +3827,39 @@ function renderTaxaPassagem(){
         <div style="flex:1;height:16px;background:var(--bg2);border-radius:6px;overflow:hidden">
           <div style="height:100%;width:${w}%;background:var(--accent);border-radius:6px"></div>
         </div>
-        <span style="width:70px;text-align:right;color:var(--text)">${l.leads} leads</span>
+        <span style="width:80px;text-align:right;color:var(--text)">${l.leads} contato</span>
         <span style="width:60px;text-align:right;color:var(--text-strong);font-weight:700">${pct(l.tg)}</span>
       </div>`;
     });
   }
   b3 += `</div>`;
 
-
-  // ---- BLOCO 4: Quantos leads/h pra 2 vendas/h (BASE ETAPA 2) ----
-  const horas = f.horasAtivas;
-  const num = x => Number.isFinite(x) ? (Math.round(x*10)/10).toString().replace('.0','') : '—';
+  // ---- BLOCO 4: Quantos leads/h em Em Contato pra 2 vendas/h ----
   let b4 = `<div class="card" style="padding:20px">
     <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">🎯 Quantos leads/hora pra fazer 2 vendas/hora?</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Base: leads que chegaram em <b>Em Contato</b> · ${f.nDias} dia(s) · ${HORAS_POR_DIA}h/dia. Fórmula: leads/h = 2 ÷ (conversão real a partir de Em Contato).</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Base: leads em <b>Em Contato</b> · ${f.nDias} dia(s) · ${HORAS_POR_DIA}h/dia. Fórmula: leads/h = 2 ÷ (taxa Em Contato → Venda).</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">`;
   VENDEDORES.forEach(v=>{
     const p = f.porVendedor[v];
     const cor = VENDOR_COLORS[v] || 'var(--accent)';
     const foto = (VENDOR_PHOTOS && VENDOR_PHOTOS[v]) ? VENDOR_PHOTOS[v] : '';
-    const tg2 = taxaGlobal2(p);            // conversão real a partir da etapa 2
-    const leadsHora2 = p.etapas['2'] / horas; // leads = quem chegou em Em Contato
-    const temTaxa = tg2 > 0;
-    const nec = temTaxa ? num(META_VENDAS_HORA / tg2) : '—';
-    const necVal = temTaxa ? (META_VENDAS_HORA / tg2) : null;
+    const t = taxaC2V(v);
+    const leadsHora2 = p.etapas['2'] / horas;
+    const temTaxa = t > 0;
+    const necVal = temTaxa ? (META_VENDAS_HORA / t) : null;
+    const nec = temTaxa ? num(necVal) : '—';
     const gap = necVal !== null ? (necVal - leadsHora2) : null;
     let gapHtml;
-    if(!temTaxa){
-      gapHtml = `<span style="color:var(--muted)">sem dados suficientes</span>`;
-    } else if(gap > 0.05){
-      gapHtml = `<span style="color:var(--red);font-weight:700">faltam ${num(gap)} leads/h</span>`;
-    } else {
-      gapHtml = `<span style="color:var(--green);font-weight:700">volume ok ✓</span>`;
-    }
+    if(!temTaxa){ gapHtml = `<span style="color:var(--muted)">sem dados suficientes</span>`; }
+    else if(gap > 0.05){ gapHtml = `<span style="color:var(--red);font-weight:700">faltam ${num(gap)} leads/h</span>`; }
+    else { gapHtml = `<span style="color:var(--green);font-weight:700">volume ok ✓</span>`; }
     b4 += `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px">
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
         <div style="width:30px;height:30px;border-radius:50%;background:${cor} center/cover ${foto?`url('${foto}')`:''};border:2px solid ${cor}"></div>
         <div style="font-weight:800;color:var(--text-strong)">${displayName(v)}</div>
       </div>
       <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:3px"><span>Em Contato hoje</span><span style="color:var(--text)">${num(leadsHora2)} leads/h</span></div>
-      <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:3px"><span>Faz hoje</span><span style="color:var(--text)">${num(p.vendasHora)} vendas/h</span></div>
+      <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:3px"><span>Conversão</span><span style="color:var(--text)">${pct(t)}</span></div>
       <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px"><span>Precisa em Contato</span><span style="color:var(--text-strong);font-weight:700">${nec} leads/h</span></div>
       <div style="text-align:center;font-size:13px;padding-top:8px;border-top:1px solid var(--border)">${gapHtml}</div>
     </div>`;
@@ -3883,7 +3868,6 @@ function renderTaxaPassagem(){
 
   el.innerHTML = barraFiltro('tpf') + b1 + b2 + b3 + b4;
 }
-
 function renderFunil(){
   const el = document.getElementById('funilContent');
   if(!el) return;
