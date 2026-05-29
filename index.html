@@ -3803,10 +3803,11 @@ function renderTaxaPassagem(){
   } else {
     const vendasDia = dk => {
       let q=0;
-      ['maio','abril'].forEach(mk=>{
-        const mes=DADOS[mk]; if(!mes) return;
+      ['maio','abril'].some(mk=>{
+        const mes=DADOS[mk]; if(!mes) return false;
         const dia=mes.porDia[dk];
-        if(dia) Object.values(dia.porVendedor).forEach(x=> q+=x.qtd);
+        if(dia){ Object.values(dia.porVendedor).forEach(x=> q+=x.qtd); return true; }
+        return false;
       });
       return q;
     };
@@ -4911,12 +4912,17 @@ function etapasNoFiltro(vend, dias){
 
 // Soma as vendas de um vendedor nos dias do filtro (cruzando com DADOS por dia)
 function vendasNoFiltro(vend, dias){
+  // Só conta vendas em dias que TÊM eventos (mesma janela dos leads).
+  // Evita dado sujo: venda de um dia sem eventos correspondentes não entra.
+  // `dias` = dias de eventos dentro do filtro atual.
+  const diasComEventos = new Set(dias);
   let total = 0;
-  ['maio','abril'].forEach(mk => {
-    const mes = DADOS[mk];
-    if(!mes) return;
-    Object.entries(mes.porDia).forEach(([dk, dia]) => {
-      if(dentroIntervalo(dk) && dia.porVendedor[vend]) total += dia.porVendedor[vend].qtd;
+  diasComEventos.forEach(dk => {
+    ['maio','abril'].some(mk => {
+      const mes = DADOS[mk];
+      if(!mes || !mes.porDia[dk]) return false;
+      if(mes.porDia[dk].porVendedor[vend]) total += mes.porDia[dk].porVendedor[vend].qtd;
+      return true; // o dia só existe em um mês; para no primeiro encontrado
     });
   });
   return total;
