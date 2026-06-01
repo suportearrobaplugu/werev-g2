@@ -603,8 +603,9 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
         <button id="themeToggle" onclick="toggleTheme()" class="header-btn theme-btn" title="Alternar tema claro/escuro">🌙</button>
       </div>
       <div class="month-toggle">
+        <button class="month-tab active" onclick="setMonth('junho')">Junho</button>
+        <button class="month-tab" onclick="setMonth('maio')">Maio</button>
         <button class="month-tab" onclick="setMonth('abril')">Abril</button>
-        <button class="month-tab active" onclick="setMonth('maio')">Maio</button>
       </div>
     </div>
   </div>
@@ -1109,7 +1110,7 @@ function updateChartsTheme(){
   }
 }
 
-let DADOS = { maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} } };
+let DADOS = { junho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} } };
 
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBV0F7S_7b1qi9WFTeGORVnJZ6J76tYEvPqAmWQjtwIsSv-dgbuOq_Qqef4YWNKIz0D1F8n_dqHK_F/pub?gid=1346722959&single=true&output=csv';
 
@@ -1180,7 +1181,18 @@ const HOJE = (() => {
 })();
 
 let EVENTOS = null;
-let currentMonth = 'maio';
+let currentMonth = 'junho';
+// Número do mês (2026) para cada chave
+const MES_NUM = { junho: 6, maio: 5, abril: 4 };
+function mesNum(m){ return MES_NUM[m] || 6; }
+// Mês corrente real (o que contém o dia de HOJE). Usado p/ "Hoje", projeção, dias úteis.
+const MES_CORRENTE = (() => {
+  const m = new Date().getMonth()+1;
+  if(m === 6) return 'junho';
+  if(m === 5) return 'maio';
+  if(m === 4) return 'abril';
+  return 'junho';
+})();
 let currentVendor = 'geral';
 
 function fmtMoney(v){return 'R$ ' + Math.round(v).toLocaleString('pt-BR')}
@@ -1243,7 +1255,7 @@ function renderHoje(){
   const d = DADOS[currentMonth];
   // Para Maio, usa hoje; para Abril, usa último dia disponível
   let diaKey;
-  if(currentMonth === 'maio'){
+  if(currentMonth === MES_CORRENTE){
     diaKey = HOJE;
   } else {
     const dias = Object.keys(d.porDia).sort();
@@ -1423,7 +1435,7 @@ function renderChartVendedores(){
 function renderChartEvolucao(){
   const d = DADOS[currentMonth];
   const ano = 2026;
-  const mes = currentMonth === 'maio' ? 5 : 4;
+  const mes = mesNum(currentMonth);
   const ultimoDia = new Date(ano, mes, 0).getDate();
   
   // Pré-calcular dias úteis do mês inteiro
@@ -1523,7 +1535,7 @@ function renderChartEvolucao(){
     {label:'🥉 Bronze',data:bronze,borderColor:'#d97706',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5}
   ];
   
-  if(currentMonth === 'maio' && hojeIdx){
+  if(currentMonth === MES_CORRENTE && hojeIdx){
     // Linhas reajustadas: cor com brilho + ponto destacado + tracejado bem diferente
     datasets.push(
       {label:'🥇 Ouro reajustada',data:ouroReaj,borderColor:'#fcd34d',borderDash:[10,3,2,3],fill:false,pointRadius:2,pointBackgroundColor:'#fcd34d',borderWidth:2.5,spanGaps:false,segment:{borderColor:ctx=>'#fcd34d'}},
@@ -1536,7 +1548,7 @@ function renderChartEvolucao(){
   const hojeMarkerPlugin = {
     id: 'hojeMarker',
     afterDraw(chart){
-      if(currentMonth !== 'maio' || !hojeIdx) return;
+      if(currentMonth !== MES_CORRENTE || !hojeIdx) return;
       const {ctx, chartArea: {top, bottom}, scales: {x}} = chart;
       const idx = hojeIdx - 1; // labels indexados de 0
       const xPos = x.getPixelForValue(idx);
@@ -1587,7 +1599,7 @@ function renderDaySelector(){
   sel.innerHTML = '';
   // adicionar HOJE como default em maio se não tiver
   let diaPadrao;
-  if(currentMonth === 'maio' && d.porDia[HOJE]){
+  if(currentMonth === MES_CORRENTE && d.porDia[HOJE]){
     diaPadrao = HOJE;
   } else {
     diaPadrao = dias[dias.length-1] || '';
@@ -2171,10 +2183,10 @@ function renderProjecao(){
   const label = document.getElementById('projecaoLabel');
   
   const ano = 2026;
-  const mes = currentMonth === 'maio' ? 5 : 4;
+  const mes = mesNum(currentMonth);
   
-  // Em Abril, mostramos retrospectivo (não tem mais dias). Pula a seção.
-  const restantes = currentMonth === 'maio' ? diasUteisRestantes(mes, ano) : [];
+  // Só o mês corrente tem dias úteis restantes; meses passados são retrospectivos.
+  const restantes = currentMonth === MES_CORRENTE ? diasUteisRestantes(mes, ano) : [];
   
   if(restantes.length === 0){
     label.textContent = '(mês encerrado ou não aplicável)';
@@ -2540,7 +2552,7 @@ function getSemanasFechadasIso(){
   
   // Coletar todas as datas com vendas
   const datasComVendas = new Set();
-  ['maio','abril'].forEach(mesKey => {
+  ['junho','maio','abril'].forEach(mesKey => {
     Object.keys(DADOS[mesKey].porDia).forEach(dt => datasComVendas.add(dt));
   });
   
@@ -2601,7 +2613,7 @@ function gerarRelatorioSemana(seg, dom){
   
   for(let h = 9; h <= 21; h++) stats.porHora[h] = 0;
   
-  ['maio','abril'].forEach(mesKey => {
+  ['junho','maio','abril'].forEach(mesKey => {
     Object.entries(DADOS[mesKey].porDia).forEach(([dt, info]) => {
       if(dt >= segStr && dt <= domStr){
         stats.fat += info.total || 0;
@@ -3376,7 +3388,7 @@ function calcStatsSemana(offset){
   const stats = { fat: 0, qtd: 0, ticket: 0, porVendedor: {}, label: '' };
   VENDEDORES.forEach(v => { stats.porVendedor[v] = { valor: 0, qtd: 0 }; });
   
-  ['maio','abril'].forEach(mesKey => {
+  ['junho','maio','abril'].forEach(mesKey => {
     Object.entries(DADOS[mesKey].porDia).forEach(([dt, info]) => {
       if(dt >= segStr && dt <= domStr){
         stats.fat += info.total || 0;
@@ -3521,10 +3533,16 @@ function renderInsights(){
   let labelComp = '';
   
   if(insightsPeriod === 'mes'){
-    const atual = calcStatsMes('maio');
-    const anterior = calcStatsMes('abril');
-    insights = gerarInsights(atual, anterior, 'em Maio', 'em Abril');
-    labelComp = 'MAI vs ABR';
+    const ORDEM = ['abril','maio','junho'];
+    const NOME = { abril:'Abril', maio:'Maio', junho:'Junho' };
+    const ABREV = { abril:'ABR', maio:'MAI', junho:'JUN' };
+    const idx = ORDEM.indexOf(currentMonth);
+    const mAtual = currentMonth;
+    const mAnterior = idx > 0 ? ORDEM[idx-1] : 'maio';
+    const atual = calcStatsMes(mAtual);
+    const anterior = calcStatsMes(mAnterior);
+    insights = gerarInsights(atual, anterior, `em ${NOME[mAtual]}`, `em ${NOME[mAnterior]}`);
+    labelComp = `${ABREV[mAtual]} vs ${ABREV[mAnterior]}`;
   } else {
     const atual = calcStatsSemana(0);
     const anterior = calcStatsSemana(1);
@@ -3832,7 +3850,7 @@ function renderTaxaPassagem(){
   } else {
     const vendasDia = dk => {
       let q=0;
-      ['maio','abril'].some(mk=>{
+      ['junho','maio','abril'].some(mk=>{
         const mes=DADOS[mk]; if(!mes) return false;
         const dia=mes.porDia[dk];
         if(dia){ Object.values(dia.porVendedor).forEach(x=> q+=x.qtd); return true; }
@@ -4356,7 +4374,7 @@ try{
 function calcularRecordes(){
   // Cria uma lista plana com (vendedor, data, valor, qtd, ticket) pra cada par vendedor-dia
   const dias = [];
-  ['maio','abril'].forEach(mes => {
+  ['junho','maio','abril'].forEach(mes => {
     Object.entries(DADOS[mes].porDia).forEach(([data, dia]) => {
       VENDEDORES.forEach(v => {
         const vendasV = (dia.vendas||[]).filter(x => x.vendedor === v);
@@ -4491,7 +4509,7 @@ function getISOWeek(dateStr){
 function calcularRecordesPeriodo(){
   // Junta TODAS as vendas (Abril + Maio) com vendedor e data
   const todasVendas = [];
-  ['maio','abril'].forEach(mesKey => {
+  ['junho','maio','abril'].forEach(mesKey => {
     Object.entries(DADOS[mesKey].porDia).forEach(([data, info]) => {
       (info.vendas||[]).forEach(v => {
         todasVendas.push({ data, vendedor: v.vendedor, valor: v.valor });
@@ -4758,6 +4776,7 @@ function processarCSV(csvText){
   
   // Inicializar estrutura
   const acc = {
+    junho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} },
     maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} },
     abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }
   };
@@ -4776,7 +4795,8 @@ function processarCSV(csvText){
     if(!data || data.ano !== 2026) continue;
     
     let mesKey;
-    if(data.mes === 5) mesKey = 'maio';
+    if(data.mes === 6) mesKey = 'junho';
+    else if(data.mes === 5) mesKey = 'maio';
     else if(data.mes === 4) mesKey = 'abril';
     else continue;
     
@@ -4957,7 +4977,7 @@ function vendasNoFiltro(vend, dias){
   const diasComEventos = new Set(dias);
   let total = 0;
   diasComEventos.forEach(dk => {
-    ['maio','abril'].some(mk => {
+    ['junho','maio','abril'].some(mk => {
       const mes = DADOS[mk];
       if(!mes || !mes.porDia[dk]) return false;
       if(mes.porDia[dk].porVendedor[vend]) total += mes.porDia[dk].porVendedor[vend].qtd;
