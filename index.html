@@ -1461,10 +1461,12 @@ function renderChartEvolucao(){
   const realizado = [];
   const ouro = [], prata = [], bronze = [];
   const ouroReaj = [], prataReaj = [], bronzeReaj = [];
+  const tri = [];
   
   let acumRealizado = 0;
   let acumOuro = 0, acumPrata = 0, acumBronze = 0;
   let acumOuroReaj = 0, acumPrataReaj = 0, acumBronzeReaj = 0;
+  let acumTri = 0;
   
   // Faturamento atual (até ontem) para cálculo da linha reajustada
   let fatAteOntem = 0;
@@ -1485,6 +1487,7 @@ function renderChartEvolucao(){
   const ritmoOuro = META_OURO / totalDU;
   const ritmoPrata = META_PRATA / totalDU;
   const ritmoBronze = META_BRONZE / totalDU;
+  const ritmoTri = META_TRIMESTRE / totalDU; // linha 3 meses: atinge 2,2MM no fim do mês, em dias úteis
   
   for(let i=1;i<=ultimoDia;i++){
     const dataKey = `${ano}-${String(mes).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
@@ -1499,10 +1502,12 @@ function renderChartEvolucao(){
       acumOuro += ritmoOuro;
       acumPrata += ritmoPrata;
       acumBronze += ritmoBronze;
+      acumTri += ritmoTri;
     }
     ouro.push(acumOuro);
     prata.push(acumPrata);
     bronze.push(acumBronze);
+    tri.push(acumTri);
     
     // Linha reajustada: até ontem segue o realizado; a partir de hoje, ritmo necessário
     if(hojeIdx && i < hojeIdx){
@@ -1539,7 +1544,7 @@ function renderChartEvolucao(){
     {label:'🥇 Ouro',data:ouro,borderColor:'#fbbf24',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5},
     {label:'🥈 Prata',data:prata,borderColor:'#cbd5e1',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5},
     {label:'🥉 Bronze',data:bronze,borderColor:'#d97706',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:1.5},
-    {label:'🎯 Meta 3 meses (2,2MM)',data:labels.map(()=>META_TRIMESTRE),borderColor:'#ffffff',borderDash:[3,3],fill:false,pointRadius:0,borderWidth:1}
+    {label:'🎯 Meta 3 meses (2,2MM)',data:tri,borderColor:'#ffffff',borderDash:[3,3],fill:false,pointRadius:0,borderWidth:1}
   ];
   
   if(currentMonth === MES_CORRENTE && hojeIdx){
