@@ -620,6 +620,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div class="sb-grp">Análise</div>
       <button class="sb-item active" data-tab="dashboard" onclick="setTab('dashboard')"><span class="sb-ic">📊</span><span class="sb-txt">Dashboard</span></button>
       <button class="sb-item" data-tab="recordes" onclick="setTab('recordes')"><span class="sb-ic">🏆</span><span class="sb-txt">Quadro dos Recordes</span></button>
+      <button class="sb-item" data-tab="times" onclick="setTab('times')"><span class="sb-ic">⚔️</span><span class="sb-txt">Competição de Times</span></button>
       <button class="sb-item" data-tab="faturamento" onclick="setTab('faturamento')"><span class="sb-ic">📈</span><span class="sb-txt">Faturamento Diário</span></button>
       <button class="sb-item" data-tab="relatorios" onclick="setTab('relatorios')"><span class="sb-ic">📑</span><span class="sb-txt">Relatórios</span></button>
       <button class="sb-item" data-tab="funil" onclick="setTab('funil')"><span class="sb-ic">🚦</span><span class="sb-txt">Funil &amp; Taxa de Passagem</span></button>
@@ -779,6 +780,14 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 
     <div class="section-title">Recordes de Semana e Mês</div>
     <div class="recordes-grid" id="recordesPeriodoGrid"></div>
+  </div>
+
+  <div id="tab-times" class="tab-content">
+    <div class="recordes-hero">
+      <h2>⚔️ Competição de Times</h2>
+      <div class="subtitle">Selva 🐆 vs Quartel 🎖️ · placar do mês</div>
+    </div>
+    <div id="timesContent" style="padding:4px 0"></div>
   </div>
 
   <div id="tab-faturamento" class="tab-content">
@@ -1157,6 +1166,15 @@ function etapaNum(txt){
 }
 
 const VENDEDORES = ['Pedro','Felipe','JoaoG','JoaoP','Guilherme','Lorena','Walisson','Thalita'];
+// Competição de times
+const TIMES = {
+  Selva:   { nome:'Selva',   emoji:'🐆', cor:'#22c55e', membros:['Pedro','Felipe','Lorena','Walisson'] },
+  Quartel: { nome:'Quartel', emoji:'🎖️', cor:'#f59e0b', membros:['JoaoG','JoaoP','Guilherme','Thalita'] }
+};
+function timeDoVendedor(v){
+  for(const k in TIMES){ if(TIMES[k].membros.includes(v)) return k; }
+  return null;
+}
 const VENDOR_COLORS = {
   Pedro: '#3b82f6',
   Felipe: '#a855f7',
@@ -2547,6 +2565,7 @@ function renderAll(){
   renderInsights();
   renderFaturamentoDiario();
   renderMetaCards();
+  renderTimes();
   renderFunil();
   renderTaxaPassagem();
 }
@@ -3940,6 +3959,93 @@ function renderTaxaPassagem(){
   el.innerHTML = barraFiltro('tpf') + b1 + b2 + b3 + b4;
 }
 // Preenche os cards de Metas — Cenário Mensal dinamicamente (ouro/prata/bronze)
+
+// ===== Render da aba Competição de Times (Selva vs Quartel) =====
+function renderTimes(){
+  const el = document.getElementById('timesContent');
+  if(!el) return;
+  const d = DADOS[currentMonth];
+  if(!d){ el.innerHTML = '<div class="card" style="padding:20px;color:var(--muted)">Sem dados.</div>'; return; }
+
+  // Agrega por time
+  const agg = {};
+  Object.keys(TIMES).forEach(k=> agg[k] = { fat:0, qtd:0, membros:[] });
+  VENDEDORES.forEach(v=>{
+    const tk = timeDoVendedor(v);
+    if(!tk) return;
+    const info = d.porVendedor[v] || { valor:0, qtd:0 };
+    agg[tk].fat += info.valor || 0;
+    agg[tk].qtd += info.qtd || 0;
+    agg[tk].membros.push({ v, fat:info.valor||0, qtd:info.qtd||0 });
+  });
+
+  const keys = Object.keys(TIMES);
+  const [aK, bK] = keys;
+  const a = agg[aK], b = agg[bK];
+  const totalFat = a.fat + b.fat;
+  const liderKey = a.fat === b.fat ? null : (a.fat > b.fat ? aK : bK);
+  const difFat = Math.abs(a.fat - b.fat);
+
+  // ---- Placar topo ----
+  const cardTime = (k, ag, lider) => {
+    const t = TIMES[k];
+    const pctBarra = totalFat>0 ? (ag.fat/totalFat*100) : 50;
+    return `<div style="flex:1;background:var(--bg2);border:2px solid ${lider?t.cor:'var(--border)'};border-radius:14px;padding:18px;position:relative">
+      ${lider?`<div style="position:absolute;top:-11px;left:18px;background:${t.cor};color:#0a0e1a;font-size:11px;font-weight:800;padding:2px 10px;border-radius:10px">LIDERANDO 👑</div>`:''}
+      <div style="font-size:13px;color:var(--muted);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px">${t.emoji} ${t.nome}</div>
+      <div style="font-size:30px;font-weight:800;color:${t.cor};line-height:1.1">${fmtMoney(ag.fat)}</div>
+      <div style="font-size:13px;color:var(--text);margin-top:4px">${ag.qtd} vendas · ${ag.membros.length} no time</div>
+    </div>`;
+  };
+
+  let placar = `<div class="card" style="padding:20px;margin-bottom:16px">
+    <div style="display:flex;gap:14px;align-items:stretch">
+      ${cardTime(aK, a, liderKey===aK)}
+      <div style="display:flex;align-items:center;font-size:22px;font-weight:800;color:var(--muted)">×</div>
+      ${cardTime(bK, b, liderKey===bK)}
+    </div>`;
+  // barra de proporção
+  const pa = totalFat>0 ? (a.fat/totalFat*100) : 50;
+  placar += `<div style="margin-top:18px">
+    <div style="display:flex;height:22px;border-radius:8px;overflow:hidden;background:var(--bg2)">
+      <div style="width:${pa}%;background:${TIMES[aK].cor};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#0a0e1a">${pa>12?Math.round(pa)+'%':''}</div>
+      <div style="flex:1;background:${TIMES[bK].cor};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#0a0e1a">${(100-pa)>12?Math.round(100-pa)+'%':''}</div>
+    </div>
+    <div style="text-align:center;font-size:13px;color:var(--muted);margin-top:10px">
+      ${liderKey ? `${TIMES[liderKey].emoji} <b style="color:${TIMES[liderKey].cor}">${TIMES[liderKey].nome}</b> na frente por <b>${fmtMoney(difFat)}</b>` : 'Empate técnico! 🔥'}
+    </div>
+  </div></div>`;
+
+  // ---- Composição dos times (membros ordenados por faturamento) ----
+  const blocoTime = (k, ag) => {
+    const t = TIMES[k];
+    const membros = [...ag.membros].sort((x,y)=> y.fat-x.fat);
+    let linhas = membros.map(m=>{
+      const cor = VENDOR_COLORS[m.v] || t.cor;
+      const foto = (VENDOR_PHOTOS && VENDOR_PHOTOS[m.v]) ? VENDOR_PHOTOS[m.v] : '';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <div style="width:30px;height:30px;border-radius:50%;background:${cor} center/cover ${foto?`url('${foto}')`:''};border:2px solid ${cor};flex-shrink:0"></div>
+        <div style="flex:1;font-weight:700;color:var(--text-strong)">${displayName(m.v)}</div>
+        <div style="text-align:right">
+          <div style="font-weight:700;color:var(--text-strong)">${fmtMoney(m.fat)}</div>
+          <div style="font-size:11px;color:var(--muted)">${m.qtd} vendas</div>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div style="flex:1;min-width:280px" class="card">
+      <div style="padding:16px 16px 4px;font-weight:800;font-size:15px;color:${t.cor}">${t.emoji} ${t.nome}</div>
+      <div style="padding:0 16px 12px">${linhas}</div>
+    </div>`;
+  };
+
+  let comp = `<div style="display:flex;gap:16px;flex-wrap:wrap">
+    ${blocoTime(aK, a)}
+    ${blocoTime(bK, b)}
+  </div>`;
+
+  el.innerHTML = placar + comp;
+}
+
 function renderMetaCards(){
   const n = VENDEDORES.length || 1;
   const cfg = [
