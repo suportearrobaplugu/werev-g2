@@ -1099,7 +1099,22 @@ applyTheme(getInitialTheme());
 // Re-aplicar quando DOM estiver pronto (pra garantir que logos peguem)
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme(getInitialTheme());
+  aplicarNomeTenant();
 });
+
+// Atualiza os textos do dash com o nome do time (tenant) ativo
+function aplicarNomeTenant(){
+  const nome = TENANT.nome || 'Comercial - G2';
+  try {
+    document.title = 'Werev — Central de Inteligência ' + nome;
+    const h1span = document.querySelector('h1 span');
+    if(h1span) h1span.textContent = nome;
+    const tagline = document.querySelector('.footer-tagline');
+    if(tagline) tagline.textContent = 'Central de Inteligência ' + nome + ' — Diretoria & Gerência de Vendas';
+    const eyebrow = document.querySelector('.pm-eyebrow');
+    if(eyebrow) eyebrow.textContent = 'Central de Inteligência ' + nome.replace(' - ', ' · ');
+  } catch(e){ console.warn('[Tenant] erro ao aplicar nome:', e); }
+}
 
 // Helper pra pegar cores adaptadas ao tema (usado nos charts)
 function themeColors(){
@@ -1122,13 +1137,41 @@ function updateChartsTheme(){
 
 let DADOS = { junho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} } };
 
-const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBV0F7S_7b1qi9WFTeGORVnJZ6J76tYEvPqAmWQjtwIsSv-dgbuOq_Qqef4YWNKIz0D1F8n_dqHK_F/pub?gid=1346722959&single=true&output=csv';
+// ===== MULTI-TENANT: cada time tem suas próprias planilhas =====
+// Para adicionar um novo time, copie um bloco abaixo e troque o id, nome e URLs.
+// Acesse via ?time=ID na URL. Ex: .../werev-g2/?time=g2  (sem parâmetro = TENANT_PADRAO)
+const TENANTS = {
+  g2: {
+    nome: 'Comercial - G2',
+    vendas: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBV0F7S_7b1qi9WFTeGORVnJZ6J76tYEvPqAmWQjtwIsSv-dgbuOq_Qqef4YWNKIz0D1F8n_dqHK_F/pub?gid=1346722959&single=true&output=csv',
+    eventos: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQu8xkQgS7fFMldOUa1ThCNiqQXHK0XROrxN7sim2gObsdJ3UIDV3396X0jWbx8fYBO2KAhYDormkvn/pub?output=csv'
+  }
+  // ,g3: {
+  //   nome: 'Comercial - G3',
+  //   vendas: 'COLE_AQUI_O_LINK_CSV_DE_VENDAS_DO_G3',
+  //   eventos: 'COLE_AQUI_O_LINK_CSV_DE_EVENTOS_DO_G3'
+  // }
+};
+const TENANT_PADRAO = 'g2';
+
+// Lê o time da URL (?time=xxx). Se não existir ou for inválido, usa o padrão.
+function getTenantId(){
+  try {
+    const p = new URLSearchParams(window.location.search).get('time');
+    if(p && TENANTS[p.toLowerCase()]) return p.toLowerCase();
+  } catch(e){}
+  return TENANT_PADRAO;
+}
+const TENANT_ID = getTenantId();
+const TENANT = TENANTS[TENANT_ID] || TENANTS[TENANT_PADRAO];
+
+const CSV_URL = TENANT.vendas;
 
 // ===== Planilha de Eventos (funil / taxa de passagem) =====
 // Publicada via Arquivo > Compartilhar > Publicar na web > aba Eventos_Unnichat > CSV
 // IMPORTANTE: confirmar o gid da aba Eventos_Unnichat. Se a aba não for a primeira,
 // troque o gid abaixo pelo número que aparece na URL do Sheets (#gid=XXXX).
-const EVENTOS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQu8xkQgS7fFMldOUa1ThCNiqQXHK0XROrxN7sim2gObsdJ3UIDV3396X0jWbx8fYBO2KAhYDormkvn/pub?output=csv';
+const EVENTOS_CSV_URL = TENANT.eventos;
 
 // Etapas do funil, em ordem
 const FUNIL_ETAPAS = [
@@ -3778,34 +3821,31 @@ function renderTaxaPassagem(){
   const num = x => Number.isFinite(x) ? (Math.round(x*10)/10).toString().replace('.0','') : '—';
   const horas = f.horasAtivas;
 
+  // Avatar com foto do vendedor
+  const avatar = v => {
+    const cor = VENDOR_COLORS[v] || 'var(--accent)';
+    const foto = (VENDOR_PHOTOS && VENDOR_PHOTOS[v]) ? VENDOR_PHOTOS[v] : '';
+    return `<span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${cor} center/cover ${foto?`url('${foto}')`:''};border:2px solid ${cor};margin-right:8px;vertical-align:middle;flex-shrink:0"></span>`;
+  };
+
   // MÉTRICA ÚNICA: Em Contato (etapa 2) -> Venda
-  // taxa = vendas / emails únicos que chegaram em Em Contato
   const taxaC2V = v => {
     const p = f.porVendedor[v];
     return p.etapas['2'] > 0 ? Math.min(p.vendas / p.etapas['2'], 1) : 0;
   };
-  // MÉTRICA: Negociação (etapa 3) -> Venda
-  const taxaN2V = v => {
-    const p = f.porVendedor[v];
-    return p.etapas['3'] > 0 ? Math.min(p.vendas / p.etapas['3'], 1) : 0;
-  };
 
   // Agregado equipe
-  let totC = 0, totV = 0, totN = 0;
-  VENDEDORES.forEach(v=>{ totC += f.porVendedor[v].etapas['2']; totN += f.porVendedor[v].etapas['3']; totV += f.porVendedor[v].vendas; });
+  let totC = 0, totV = 0;
+  VENDEDORES.forEach(v=>{ totC += f.porVendedor[v].etapas['2']; totV += f.porVendedor[v].vendas; });
   const taxaEquipe = totC > 0 ? Math.min(totV/totC, 1) : 0;
-  const taxaEquipeN = totN > 0 ? Math.min(totV/totN, 1) : 0;
 
   // ---- BLOCO 1: O que fica e o que sai (Em Contato -> Venda) ----
   const ficou = Math.min(totV, totC);
   const saiu = Math.max(0, totC - ficou);
   const wFica = totC>0 ? (ficou/totC)*100 : 0;
-  const ficouN = Math.min(totV, totN);
-  const saiuN = Math.max(0, totN - ficouN);
-  const wFicaN = totN>0 ? (ficouN/totN)*100 : 0;
   let b1 = `<div class="card" style="padding:20px;margin-bottom:16px">
     <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">O que fica e o que sai · equipe</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Quantos leads de cada etapa fecharam venda (ficam) e quantos não (saem)</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">De cada lead em <b>Em Contato</b>: quantos fecharam venda (ficam) e quantos não (saem)</div>
     <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px">
       <span style="color:var(--text);font-weight:600">Em Contato → Venda</span>
       <span style="color:var(--text-strong);font-weight:700">${pct(taxaEquipe)}</span>
@@ -3814,71 +3854,49 @@ function renderTaxaPassagem(){
       <div style="width:${wFica}%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">${ficou>0?`✓ ${ficou} vendas`:''}</div>
       <div style="flex:1;background:var(--red);opacity:.55;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">${saiu>0?`✗ ${saiu} não fecharam`:''}</div>
     </div>
-    <div style="font-size:12px;color:var(--muted);margin-top:8px;margin-bottom:18px">${totC} leads em Em Contato · ${totV} vendas</div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px">
-      <span style="color:var(--text);font-weight:600">3. Negociação → Venda</span>
-      <span style="color:var(--text-strong);font-weight:700">${pct(taxaEquipeN)}</span>
-    </div>
-    <div style="display:flex;height:26px;border-radius:6px;overflow:hidden;background:var(--bg2)">
-      <div style="width:${wFicaN}%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">${ficouN>0?`✓ ${ficouN} vendas`:''}</div>
-      <div style="flex:1;background:var(--red);opacity:.55;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">${saiuN>0?`✗ ${saiuN} não fecharam`:''}</div>
-    </div>
-    <div style="font-size:12px;color:var(--muted);margin-top:8px">${totN} leads em Negociação · ${totV} vendas</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">${totC} leads em Em Contato · ${totV} vendas</div>
   </div>`;
 
-  // ---- BLOCO 2: Comparação entre vendedores (taxa única) ----
-  const taxas = {}, taxasN = {};
-  VENDEDORES.forEach(v=>{ taxas[v]=taxaC2V(v); taxasN[v]=taxaN2V(v); });
+  // ---- BLOCO 2: Comparação entre vendedores (Em Contato -> Venda) ----
+  const taxas = {};
+  VENDEDORES.forEach(v=> taxas[v]=taxaC2V(v));
   const vals = VENDEDORES.map(v=>taxas[v]).filter(x=>x>0);
   const media = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
-  const valsN = VENDEDORES.map(v=>taxasN[v]).filter(x=>x>0);
-  const mediaN = valsN.length ? valsN.reduce((a,b)=>a+b,0)/valsN.length : 0;
-  // ranking por taxa Em Contato -> Venda desc
   const ord = [...VENDEDORES].sort((a,b)=> taxas[b]-taxas[a]);
   let b2 = `<div class="card" style="padding:0;overflow-x:auto;margin-bottom:16px">
     <div style="padding:16px 16px 4px;font-weight:800;color:var(--text-strong);font-size:15px">Comparação entre vendedores</div>
-    <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">Taxas de conversão para venda · verde = acima da média da equipe</div>
+    <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">Taxa de conversão <b>Em Contato → Venda</b> · verde = acima da média da equipe</div>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
       <th style="padding:10px 12px">VENDEDOR</th>
       <th style="padding:10px 8px;text-align:center">Em Contato</th>
-      <th style="padding:10px 8px;text-align:center">Negociação</th>
       <th style="padding:10px 8px;text-align:center">Vendas</th>
       <th style="padding:10px 8px;text-align:center">Em Contato → Venda</th>
-      <th style="padding:10px 8px;text-align:center">3. Negociação → Venda</th>
     </tr></thead><tbody>`;
   ord.forEach(v=>{
     const p=f.porVendedor[v];
-    const cor=VENDOR_COLORS[v]||'var(--accent)';
     const t=taxas[v];
     const acima = t>0 && t>=media;
     const c = t===0 ? 'var(--muted)' : (acima ? 'var(--green)' : 'var(--text-strong)');
-    const tn=taxasN[v];
-    const acimaN = tn>0 && tn>=mediaN;
-    const cn = tn===0 ? 'var(--muted)' : (acimaN ? 'var(--green)' : 'var(--text-strong)');
     b2 += `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:9px 12px;font-weight:700;color:var(--text-strong)"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${cor};margin-right:7px"></span>${displayName(v)}</td>
+      <td style="padding:9px 12px;font-weight:700;color:var(--text-strong)"><span style="display:inline-flex;align-items:center">${avatar(v)}${displayName(v)}</span></td>
       <td style="padding:9px 8px;text-align:center;color:var(--text)">${p.etapas['2']}</td>
-      <td style="padding:9px 8px;text-align:center;color:var(--text)">${p.etapas['3']}</td>
       <td style="padding:9px 8px;text-align:center;font-weight:700;color:var(--green)">${p.vendas}</td>
       <td style="padding:9px 8px;text-align:center;font-weight:800;color:${c}">${pct(t)}</td>
-      <td style="padding:9px 8px;text-align:center;font-weight:800;color:${cn}">${pct(tn)}</td>
     </tr>`;
   });
   b2 += `<tr style="background:var(--bg2)">
     <td style="padding:9px 12px;font-weight:700;color:var(--muted)">MÉDIA EQUIPE</td>
     <td style="padding:9px 8px;text-align:center;color:var(--muted)">${totC}</td>
-    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${totN}</td>
     <td style="padding:9px 8px;text-align:center;color:var(--muted)">${totV}</td>
     <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(taxaEquipe)}</td>
-    <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(taxaEquipeN)}</td>
   </tr>`;
   b2 += `</tbody></table></div>`;
 
-  // ---- BLOCO 3: Evolução no tempo (taxa Em Contato -> Venda por dia) ----
+  // ---- BLOCO 3: Evolução no tempo (Em Contato -> Venda por dia) ----
   let b3 = `<div class="card" style="padding:20px;margin-bottom:16px">
     <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">Evolução no tempo</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Por dia: leads em <b>Em Contato</b>, taxa Em Contato → Venda e 3. Negociação → Venda</div>`;
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Por dia: leads em <b>Em Contato</b> e taxa Em Contato → Venda</div>`;
   const dias = Object.keys(EVENTOS.porDia || {}).filter(dentroIntervalo).sort();
   if(dias.length === 0){
     b3 += `<div style="color:var(--muted);font-size:13px">Sem dados diários ainda.</div>`;
@@ -3895,20 +3913,13 @@ function renderTaxaPassagem(){
     };
     const linhas = dias.map(dk=>{
       const dd = EVENTOS.porDia[dk];
-      let c2=0, n3=0;
-      Object.values(dd).forEach(vd=>{ c2 += (vd['2']?vd['2'].size:0); n3 += (vd['3']?vd['3'].size:0); });
+      let c2=0;
+      Object.values(dd).forEach(vd=>{ c2 += (vd['2']?vd['2'].size:0); });
       const vd = vendasDia(dk);
       const tg = c2>0 ? Math.min(vd/c2,1) : 0;
-      const tn = n3>0 ? Math.min(vd/n3,1) : 0;
-      return { dk, leads:c2, nego:n3, vendas:vd, tg, tn };
+      return { dk, leads:c2, vendas:vd, tg };
     });
     const maxLeads = Math.max(1, ...linhas.map(l=>l.leads));
-    b3 += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:11px;color:var(--muted)">
-      <span style="width:48px"></span><div style="flex:1"></div>
-      <span style="width:80px;text-align:right">Em Contato</span>
-      <span style="width:70px;text-align:right">EC→Venda</span>
-      <span style="width:70px;text-align:right">Nego→Venda</span>
-    </div>`;
     linhas.forEach(l=>{
       const [a,m,d]=l.dk.split('-');
       const w=(l.leads/maxLeads)*100;
@@ -3918,8 +3929,7 @@ function renderTaxaPassagem(){
           <div style="height:100%;width:${w}%;background:var(--accent);border-radius:6px"></div>
         </div>
         <span style="width:80px;text-align:right;color:var(--text)">${l.leads} contato</span>
-        <span style="width:70px;text-align:right;color:var(--text-strong);font-weight:700">${pct(l.tg)}</span>
-        <span style="width:70px;text-align:right;color:var(--text-strong);font-weight:700">${pct(l.tn)}</span>
+        <span style="width:60px;text-align:right;color:var(--text-strong);font-weight:700">${pct(l.tg)}</span>
       </div>`;
     });
   }
@@ -3935,7 +3945,6 @@ function renderTaxaPassagem(){
     const cor = VENDOR_COLORS[v] || 'var(--accent)';
     const foto = (VENDOR_PHOTOS && VENDOR_PHOTOS[v]) ? VENDOR_PHOTOS[v] : '';
     const t = taxaC2V(v);
-    const tn = taxaN2V(v);
     const leadsHora2 = p.etapas['2'] / horas;
     const temTaxa = t > 0;
     const necVal = temTaxa ? (META_VENDAS_HORA / t) : null;
@@ -3951,8 +3960,7 @@ function renderTaxaPassagem(){
         <div style="font-weight:800;color:var(--text-strong)">${displayName(v)}</div>
       </div>
       <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:3px"><span>Em Contato hoje</span><span style="color:var(--text)">${num(leadsHora2)} leads/h</span></div>
-      <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:3px"><span>Em Contato → Venda</span><span style="color:var(--text)">${pct(t)}</span></div>
-      <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:3px"><span>3. Negociação → Venda</span><span style="color:var(--text)">${pct(tn)}</span></div>
+      <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:3px"><span>Conversão</span><span style="color:var(--text)">${pct(t)}</span></div>
       <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px"><span>Precisa em Contato</span><span style="color:var(--text-strong);font-weight:700">${nec} leads/h</span></div>
       <div style="text-align:center;font-size:13px;padding-top:8px;border-top:1px solid var(--border)">${gapHtml}</div>
     </div>`;
@@ -3961,9 +3969,6 @@ function renderTaxaPassagem(){
 
   el.innerHTML = barraFiltro('tpf') + b1 + b2 + b3 + b4;
 }
-// Preenche os cards de Metas — Cenário Mensal dinamicamente (ouro/prata/bronze)
-
-// ===== Render da aba Competição de Times (Selva vs Quartel) =====
 function renderTimes(){
   const el = document.getElementById('timesContent');
   if(!el) return;
