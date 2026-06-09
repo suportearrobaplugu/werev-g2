@@ -2324,7 +2324,9 @@ function renderFaturamentoDiario(){
       return `<td class="num"${ehFimDeSemana[i]?' style="background:rgba(245,158,11,.05)"':''}>${val ? Math.round(val).toLocaleString('pt-BR') : '·'}</td>`;
     }).join('');
     const tot = dias.reduce((a,dt)=> a + ((d.porDia[dt].porVendedor[v]?.valor)||0), 0);
-    return `<tr><td><span class="vend-dot" style="display:inline-block;background:${VENDOR_COLORS[v]};margin-right:6px"></span>${displayName(v)}</td>${cells}<td class="num total-col">${Math.round(tot).toLocaleString('pt-BR')}</td></tr>`;
+    const foto = (VENDOR_PHOTOS && VENDOR_PHOTOS[v]) ? VENDOR_PHOTOS[v] : '';
+    const avatar = `<span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${VENDOR_COLORS[v]} center/cover ${foto?`url('${foto}')`:''};border:2px solid ${VENDOR_COLORS[v]};margin-right:8px;vertical-align:middle;flex-shrink:0"></span>`;
+    return `<tr><td><span style="display:inline-flex;align-items:center">${avatar}${displayName(v)}</span></td>${cells}<td class="num total-col">${Math.round(tot).toLocaleString('pt-BR')}</td></tr>`;
   }).join('');
 
   const totGeral = totais.reduce((a,b)=>a+b,0);
