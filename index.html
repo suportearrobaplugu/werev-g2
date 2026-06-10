@@ -1209,6 +1209,32 @@ function etapaNum(txt){
   return m ? m[1] : null;
 }
 
+// Classifica um motivo de perda: 'operacional' (não conta contra o vendedor) ou 'vendedor'.
+// Detecta prefixo [0]/[cs] explícito; senão, classifica pelo texto.
+function classificarMotivo(motivoRaw){
+  const txt = String(motivoRaw || '').trim();
+  const low = txt.toLowerCase();
+  // prefixo explícito
+  if(/^\s*\[\s*0\s*\]/.test(txt) || /^\s*\[\s*cs\s*\]/i.test(txt)) return 'operacional';
+  // operacionais por conteúdo (sem prefixo)
+  const OPERACIONAIS = [
+    'já é cliente','ja e cliente','disparo','limpeza de base','mensagem autom',
+    'detrator','blocklist','número incorreto','numero incorreto',
+    'dúvidas/suporte','duvidas/suporte','dúvida','duvida','suporte',
+    'reembolso','cancelamento'
+  ];
+  if(OPERACIONAIS.some(k => low.includes(k))) return 'operacional';
+  // tudo o mais (inclui vazio/"não informado") conta como perda do vendedor
+  return 'vendedor';
+}
+
+// Rótulo limpo do motivo (sem prefixo) pra exibir na legenda da pizza
+function rotuloMotivo(motivoRaw){
+  let t = String(motivoRaw || '').trim();
+  t = t.replace(/^\s*\[\s*(0|cs)\s*\]\s*/i, '').trim();
+  return t || 'Motivo não informado';
+}
+
 const VENDEDORES = ['Pedro','Felipe','JoaoG','JoaoP','Guilherme','Lorena','Walisson','Thalita'];
 // Competição de times
 const TIMES = {
@@ -3893,6 +3919,77 @@ function renderTaxaPassagem(){
   </tr>`;
   b2 += `</tbody></table></div>`;
 
+  // ---- BLOCO 2.5: Motivos de perda (pizza) + Taxa de Conversão Real ----
+  let bMotivos = '';
+  const perdas = EVENTOS.perdas;
+  if(perdas && perdas.motivos){
+    const entradas = Object.entries(perdas.motivos)
+      .map(([rotulo, o]) => ({ rotulo, qtd:o.qtd, tipo:o.tipo }))
+      .sort((a,b)=> b.qtd - a.qtd);
+    const totalPerdas = entradas.reduce((a,e)=>a+e.qtd,0);
+    const opTotal = perdas.perdasOperacional || 0;
+    const vendTotal = perdas.perdasVendedor || 0;
+
+    // Taxa Real da equipe: exclui perdas operacionais do denominador
+    // base real = leads em Em Contato − perdas operacionais (não podem ir abaixo das vendas)
+    const baseReal = Math.max(totV, totC - opTotal);
+    const taxaReal = baseReal > 0 ? Math.min(totV / baseReal, 1) : 0;
+
+    // cores: vendedor = paleta; operacional = tons de cinza
+    const CORES_V = ['#3b82f6','#a855f7','#06b6d4','#14b8a6','#22c55e','#f59e0b','#ec4899','#7c3aed','#ef4444','#84cc16'];
+    const CINZAS = ['#6b7280','#9ca3af','#4b5563','#d1d5db','#374151'];
+    let ci=0, cj=0;
+    entradas.forEach(e=>{ e.cor = e.tipo==='operacional' ? CINZAS[cj++ % CINZAS.length] : CORES_V[ci++ % CORES_V.length]; });
+
+    // monta a pizza (SVG)
+    let ang = -90; const cx=90, cy=90, r=80;
+    const fatias = entradas.map(e=>{
+      const frac = totalPerdas>0 ? e.qtd/totalPerdas : 0;
+      const a0 = ang, a1 = ang + frac*360; ang = a1;
+      const rad = d => (d*Math.PI/180);
+      const x0=cx+r*Math.cos(rad(a0)), y0=cy+r*Math.sin(rad(a0));
+      const x1=cx+r*Math.cos(rad(a1)), y1=cy+r*Math.sin(rad(a1));
+      const large = (a1-a0)>180 ? 1 : 0;
+      const dPath = frac>=0.9999
+        ? `M ${cx-r} ${cy} a ${r} ${r} 0 1 1 ${2*r} 0 a ${r} ${r} 0 1 1 ${-2*r} 0`
+        : `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`;
+      return `<path d="${dPath}" fill="${e.cor}" stroke="var(--bg2)" stroke-width="1"/>`;
+    }).join('');
+
+    const legenda = entradas.map(e=>{
+      const pctF = totalPerdas>0 ? ((e.qtd/totalPerdas)*100).toFixed(1).replace('.0','') : 0;
+      const tag = e.tipo==='operacional' ? ' <span style="font-size:10px;color:var(--muted)">(operacional)</span>' : '';
+      return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:6px">
+        <span style="width:11px;height:11px;border-radius:2px;background:${e.cor};flex-shrink:0"></span>
+        <span style="flex:1;color:var(--text)">${e.rotulo}${tag}</span>
+        <span style="color:var(--text-strong);font-weight:700">${e.qtd}</span>
+        <span style="color:var(--muted);width:42px;text-align:right">${pctF}%</span>
+      </div>`;
+    }).join('');
+
+    bMotivos = `<div class="card" style="padding:20px;margin-bottom:16px">
+      <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">Motivos de perda</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${totalPerdas} perdas no recorte · <span style="color:#9ca3af">operacionais (${opTotal})</span> não contam contra o vendedor · do vendedor (${vendTotal})</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center">
+        <svg viewBox="0 0 180 180" style="width:180px;height:180px;flex-shrink:0">${fatias}</svg>
+        <div style="flex:1;min-width:240px">${legenda}</div>
+      </div>
+      <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:24px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:12px;color:var(--muted)">Taxa bruta (todas as perdas)</div>
+          <div style="font-size:22px;font-weight:800;color:var(--text)">${pct(taxaEquipe)}</div>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--muted)">🎯 Taxa de Conversão Real <span style="font-size:10px">(exclui operacionais)</span></div>
+          <div style="font-size:22px;font-weight:800;color:var(--green)">${pct(taxaReal)}</div>
+        </div>
+        <div style="flex:1;min-width:200px;align-self:center;font-size:11px;color:var(--muted)">
+          Base real = ${totC} em contato − ${opTotal} operacionais = ${baseReal} oportunidades. A taxa real reflete só leads que eram oportunidade legítima.
+        </div>
+      </div>
+    </div>`;
+  }
+
   // ---- BLOCO 3: Evolução no tempo (Em Contato -> Venda por dia) ----
   let b3 = `<div class="card" style="padding:20px;margin-bottom:16px">
     <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">Evolução no tempo</div>
@@ -3967,7 +4064,7 @@ function renderTaxaPassagem(){
   });
   b4 += `</div></div>`;
 
-  el.innerHTML = barraFiltro('tpf') + b1 + b2 + b3 + b4;
+  el.innerHTML = barraFiltro('tpf') + b1 + b2 + bMotivos + b3 + b4;
 }
 function renderTimes(){
   const el = document.getElementById('timesContent');
@@ -5010,6 +5107,8 @@ function processarEventos(csvText){
   const idxEmail = header.findIndex(h => h === 'email');
   const idxProp  = header.findIndex(h => h.includes('propriet'));
   const idxEtapa = header.findIndex(h => h.includes('etapa'));
+  const idxStatus = header.findIndex(h => h === 'status');
+  const idxMotivo = header.findIndex(h => h.includes('motivo'));
 
   if(idxEmail < 0 || idxProp < 0 || idxEtapa < 0){
     console.warn('[Eventos] Colunas não encontradas. Cabeçalhos:', header.join(', '));
@@ -5024,6 +5123,9 @@ function processarEventos(csvText){
 
   const porDia = {}; // dataKey -> { vendedor -> { etapa -> Set(emails) } }
 
+  // Perdas: por email único, guarda {motivo, tipo, vendedor, dataKey}
+  const perdasPorEmail = {};
+
   let minTs = null, maxTs = null;
   const horasSet = new Set(); // chaves "YYYY-MM-DD HH" pra contar horas ativas
 
@@ -5031,19 +5133,34 @@ function processarEventos(csvText){
     const row = rows[i];
     if(!row || row.length === 0) continue;
     const vend = mapearProprietario(row[idxProp]);
+
+    const email = String(row[idxEmail]||'').trim().toLowerCase();
+    const data = idxData >= 0 ? parseData(row[idxData]) : null;
+    const dataKey = data ? `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}` : null;
+
+    // ---- Captura de PERDA (Status = lost) — antes do filtro de etapa ----
+    const status = idxStatus >= 0 ? String(row[idxStatus]||'').trim().toLowerCase() : '';
+    if(status === 'lost' && email){
+      const motivoRaw = idxMotivo >= 0 ? row[idxMotivo] : '';
+      perdasPorEmail[email] = {
+        motivo: rotuloMotivo(motivoRaw),
+        tipo: classificarMotivo(motivoRaw),
+        vendedor: vend || null,
+        dataKey
+      };
+    }
+
     if(!vend || !porVendedor[vend]) continue;
 
     const etapa = etapaNum(row[idxEtapa]);
     if(etapa === null || !porVendedor[vend][etapa]) continue;
 
-    const email = String(row[idxEmail]||'').trim().toLowerCase();
     if(!email) continue;
 
     // Conta o lead (email único) como tendo passado por aquela etapa
     porVendedor[vend][etapa].add(email);
 
     // Janela de tempo (pra normalizar por hora)
-    const data = idxData >= 0 ? parseData(row[idxData]) : null;
     const hora = idxHora >= 0 ? parseHora(row[idxHora]) : 0;
     if(data){
       const ts = new Date(data.ano, data.mes-1, data.dia, Math.floor(hora)).getTime();
@@ -5053,7 +5170,6 @@ function processarEventos(csvText){
       horasSet.add(hk);
 
       // Acúmulo por dia (pra evolução no tempo)
-      const dataKey = `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}`;
       if(!porDia[dataKey]) porDia[dataKey] = {};
       if(!porDia[dataKey][vend]){
         porDia[dataKey][vend] = {};
@@ -5063,9 +5179,22 @@ function processarEventos(csvText){
     }
   }
 
+  // Agrega perdas por motivo e por tipo (operacional vs vendedor)
+  const motivos = {};   // rotulo -> { qtd, tipo }
+  let perdasOperacional = 0, perdasVendedor = 0;
+  const perdasOpPorVendedor = {};
+  VENDEDORES.forEach(v => perdasOpPorVendedor[v] = 0);
+  Object.values(perdasPorEmail).forEach(p => {
+    if(!motivos[p.motivo]) motivos[p.motivo] = { qtd:0, tipo:p.tipo };
+    motivos[p.motivo].qtd++;
+    if(p.tipo === 'operacional'){ perdasOperacional++; if(p.vendedor && perdasOpPorVendedor[p.vendedor]!==undefined) perdasOpPorVendedor[p.vendedor]++; }
+    else perdasVendedor++;
+  });
+
   return {
     porVendedor,
     porDia,
+    perdas: { porEmail: perdasPorEmail, motivos, perdasOperacional, perdasVendedor, perdasOpPorVendedor },
     periodo: {
       primeiraData: minTs ? new Date(minTs) : null,
       ultimaData: maxTs ? new Date(maxTs) : null,
