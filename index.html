@@ -3962,6 +3962,26 @@ function renderTaxaPassagem(){
 
     let totOpV = 0; VENDEDORES.forEach(v=> totOpV += (opV[v]||0));
 
+    // Totais da equipe pra linha de rodapé
+    let tEmContato=0, tBase=0, tVendas=0;
+    VENDEDORES.forEach(v=>{
+      const p=f.porVendedor[v];
+      tEmContato += p.etapas['2'];
+      tVendas += p.vendas;
+      tBase += Math.max(p.vendas, p.etapas['2'] - (opV[v]||0));
+    });
+    const tTaxaBruta = tEmContato>0 ? Math.min(tVendas/tEmContato,1) : 0;
+    const tTaxaReal = tBase>0 ? Math.min(tVendas/tBase,1) : 0;
+    const linhaTotal = `<tr style="background:var(--bg2);border-top:2px solid var(--border)">
+      <td style="padding:10px 12px;font-weight:800;color:var(--muted)">TOTAL EQUIPE</td>
+      <td style="padding:10px 8px;text-align:center;font-weight:700;color:var(--text)">${tEmContato}</td>
+      <td style="padding:10px 8px;text-align:center;font-weight:700;color:var(--muted)">${totOpV>0?'−'+totOpV:'·'}</td>
+      <td style="padding:10px 8px;text-align:center;font-weight:700;color:var(--text)">${tBase}</td>
+      <td style="padding:10px 8px;text-align:center;font-weight:800;color:var(--green)">${tVendas}</td>
+      <td style="padding:10px 8px;text-align:center;font-weight:700;color:var(--muted)">${pct(tTaxaBruta)}</td>
+      <td style="padding:10px 8px;text-align:center;font-weight:800;color:var(--text-strong)">${pct(tTaxaReal)}</td>
+    </tr>`;
+
     let linhasR = ordR.map(v=>{
       const p=f.porVendedor[v];
       const op = opV[v] || 0;
@@ -3996,7 +4016,7 @@ function renderTaxaPassagem(){
         <th style="padding:10px 8px;text-align:center">Vendas</th>
         <th style="padding:10px 8px;text-align:center">Taxa bruta</th>
         <th style="padding:10px 8px;text-align:center">Taxa REAL</th>
-      </tr></thead><tbody>${linhasR}</tbody></table>
+      </tr></thead><tbody>${linhasR}${linhaTotal}</tbody></table>
       <div style="padding:10px 16px 14px;font-size:11px;color:var(--muted)">Só perdas operacionais com vendedor identificado entram na conta individual (${totOpV} no total). Perdas operacionais sem dono ficam só no placar da equipe.</div>
     </div>`;
   }
