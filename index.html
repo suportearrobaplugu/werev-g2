@@ -3919,6 +3919,64 @@ function renderTaxaPassagem(){
   </tr>`;
   b2 += `</tbody></table></div>`;
 
+  // ---- BLOCO 2b: Taxa de Conversão REAL por vendedor (sem perdas operacionais) ----
+  let b2real = '';
+  {
+    const opV = (EVENTOS.perdas && EVENTOS.perdas.perdasOpPorVendedor) ? EVENTOS.perdas.perdasOpPorVendedor : {};
+    // taxa real do vendedor = vendas / (em contato − perdas operacionais dele)
+    const taxaRealV = v => {
+      const p = f.porVendedor[v];
+      const op = opV[v] || 0;
+      const base = Math.max(p.vendas, p.etapas['2'] - op);
+      return base > 0 ? Math.min(p.vendas / base, 1) : 0;
+    };
+    const taxasR = {};
+    VENDEDORES.forEach(v=> taxasR[v]=taxaRealV(v));
+    const valsR = VENDEDORES.map(v=>taxasR[v]).filter(x=>x>0);
+    const mediaR = valsR.length ? valsR.reduce((a,b)=>a+b,0)/valsR.length : 0;
+    const ordR = [...VENDEDORES].sort((a,b)=> taxasR[b]-taxasR[a]);
+
+    let totOpV = 0; VENDEDORES.forEach(v=> totOpV += (opV[v]||0));
+
+    let linhasR = ordR.map(v=>{
+      const p=f.porVendedor[v];
+      const op = opV[v] || 0;
+      const base = Math.max(p.vendas, p.etapas['2'] - op);
+      const t = taxasR[v];
+      const tBruta = taxaC2V(v);
+      const acima = t>0 && t>=mediaR;
+      const c = t===0 ? 'var(--muted)' : (acima ? 'var(--green)' : 'var(--text-strong)');
+      // seta de variação vs bruta
+      const dif = t - tBruta;
+      const setinha = dif > 0.001 ? `<span style="color:var(--green);font-size:10px"> ▲</span>` : '';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:9px 12px;font-weight:700;color:var(--text-strong)"><span style="display:inline-flex;align-items:center">${avatar(v)}${displayName(v)}</span></td>
+        <td style="padding:9px 8px;text-align:center;color:var(--text)">${p.etapas['2']}</td>
+        <td style="padding:9px 8px;text-align:center;color:var(--muted)">${op>0?'−'+op:'·'}</td>
+        <td style="padding:9px 8px;text-align:center;color:var(--text)">${base}</td>
+        <td style="padding:9px 8px;text-align:center;font-weight:700;color:var(--green)">${p.vendas}</td>
+        <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(tBruta)}</td>
+        <td style="padding:9px 8px;text-align:center;font-weight:800;color:${c}">${pct(t)}${setinha}</td>
+      </tr>`;
+    }).join('');
+
+    b2real = `<div class="card" style="padding:0;overflow-x:auto;margin-bottom:16px">
+      <div style="padding:16px 16px 4px;font-weight:800;color:var(--text-strong);font-size:15px">🎯 Conversão Real por vendedor</div>
+      <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">Tira os motivos operacionais ([0]/[cs]) da conta de cada um · base = Em Contato − perdas operacionais · verde = acima da média real</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
+        <th style="padding:10px 12px">VENDEDOR</th>
+        <th style="padding:10px 8px;text-align:center">Em Contato</th>
+        <th style="padding:10px 8px;text-align:center">Perdas oper.</th>
+        <th style="padding:10px 8px;text-align:center">Base real</th>
+        <th style="padding:10px 8px;text-align:center">Vendas</th>
+        <th style="padding:10px 8px;text-align:center">Taxa bruta</th>
+        <th style="padding:10px 8px;text-align:center">Taxa REAL</th>
+      </tr></thead><tbody>${linhasR}</tbody></table>
+      <div style="padding:10px 16px 14px;font-size:11px;color:var(--muted)">Só perdas operacionais com vendedor identificado entram na conta individual (${totOpV} no total). Perdas operacionais sem dono ficam só no placar da equipe.</div>
+    </div>`;
+  }
+
   // ---- BLOCO 2.5: Motivos de perda (pizza) + Taxa de Conversão Real ----
   let bMotivos = '';
   const perdas = EVENTOS.perdas;
@@ -4064,7 +4122,7 @@ function renderTaxaPassagem(){
   });
   b4 += `</div></div>`;
 
-  el.innerHTML = barraFiltro('tpf') + b1 + b2 + bMotivos + b3 + b4;
+  el.innerHTML = barraFiltro('tpf') + b1 + b2 + b2real + bMotivos + b3 + b4;
 }
 function renderTimes(){
   const el = document.getElementById('timesContent');
