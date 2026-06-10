@@ -3802,7 +3802,11 @@ function barraFiltro(idPrefix){
         onchange="aplicarFiltro(document.getElementById('${idPrefix}De').value, this.value)"
         style="margin-left:4px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px">
     </label>
-    <button onclick="aplicarFiltroHoje()" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer">Hoje</button>
+    <button onclick="filtroAtalho('hoje')" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer">Hoje</button>
+    <button onclick="filtroAtalho('ontem')" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer">Ontem</button>
+    <button onclick="filtroAtalho('semana')" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer">Essa semana</button>
+    <button onclick="filtroAtalho('mesAtual')" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer">Mês atual</button>
+    <button onclick="filtroAtalho('mesPassado')" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer">Mês passado</button>
     <button onclick="aplicarFiltro('','')" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer">Tudo</button>
     <span style="margin-left:auto;font-size:12px;color:var(--muted)">${info}</span>
   </div>`;
@@ -3817,13 +3821,33 @@ function aplicarFiltro(de, ate){
   renderTaxaPassagem();
 }
 
-function aplicarFiltroHoje(){
-  const dias = (EVENTOS && EVENTOS.porDia) ? Object.keys(EVENTOS.porDia).sort() : [];
-  // "Hoje" = data de hoje se existir na base; senão, o dia mais recente com dados
+function aplicarFiltroHoje(){ filtroAtalho('hoje'); }
+
+// Atalhos de recorte de data
+function filtroAtalho(tipo){
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const hoje = new Date();
-  const hk = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}-${String(hoje.getDate()).padStart(2,'0')}`;
-  const alvo = dias.includes(hk) ? hk : (dias.length ? dias[dias.length-1] : '');
-  aplicarFiltro(alvo, alvo);
+  let de, ate;
+  if(tipo === 'hoje'){
+    de = ate = fmt(hoje);
+  } else if(tipo === 'ontem'){
+    const o = new Date(hoje); o.setDate(o.getDate()-1);
+    de = ate = fmt(o);
+  } else if(tipo === 'semana'){
+    // segunda-feira desta semana até hoje
+    const dow = (hoje.getDay()+6)%7; // 0=segunda
+    const seg = new Date(hoje); seg.setDate(seg.getDate()-dow);
+    de = fmt(seg); ate = fmt(hoje);
+  } else if(tipo === 'mesAtual'){
+    de = fmt(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+    ate = fmt(hoje);
+  } else if(tipo === 'mesPassado'){
+    de = fmt(new Date(hoje.getFullYear(), hoje.getMonth()-1, 1));
+    ate = fmt(new Date(hoje.getFullYear(), hoje.getMonth(), 0)); // último dia do mês passado
+  } else {
+    de = ate = '';
+  }
+  aplicarFiltro(de, ate);
 }
 
 function renderTaxaPassagem(){
@@ -4069,10 +4093,86 @@ function renderTaxaPassagem(){
         </div>`).join('');
     }
 
+
+    // ---- Cards individuais por vendedor (todos os 8) ----
+    // motivo principal de perda de cada vendedor (do recorte)
+    const motivoPrincipalV = {};
+    if(EVENTOS.perdas && EVENTOS.perdas.porEmail){
+      const contaV = {};
+      Object.values(EVENTOS.perdas.porEmail).forEach(p=>{
+        if(p.dataKey && !dentroIntervalo(p.dataKey)) return;
+        if(!p.vendedor) return;
+        if(!contaV[p.vendedor]) contaV[p.vendedor] = {};
+        contaV[p.vendedor][p.motivo] = (contaV[p.vendedor][p.motivo]||0) + 1;
+      });
+      Object.entries(contaV).forEach(([v,ms])=>{
+        const top = Object.entries(ms).sort((a,b)=>b[1]-a[1])[0];
+        if(top) motivoPrincipalV[v] = { motivo: top[0], qtd: top[1] };
+      });
+    }
+
+    const cardsV = VENDEDORES.map(v=>{
+      const p = f.porVendedor[v];
+      const contato = p.etapas['2'];
+      const tr = taxasR[v];
+      const cor = VENDOR_COLORS[v] || 'var(--accent)';
+      const foto = (VENDOR_PHOTOS && VENDOR_PHOTOS[v]) ? VENDOR_PHOTOS[v] : '';
+
+      // status
+      let status, statusCor, statusTxt;
+      if(contato === 0){
+        status='sem dados'; statusCor='var(--muted)'; statusTxt='⚪ Sem leads no recorte';
+      } else if(tr >= taxaMediaR && contato >= contatoMedio*0.8){
+        status='bom'; statusCor='var(--green)'; statusTxt='🟢 Indo bem';
+      } else if(tr < taxaMediaR*0.7 || (perdasTempoV[v] >= 3 && perdasTempoV[v] >= contato*0.3)){
+        status='critico'; statusCor='var(--red)'; statusTxt='🔴 Atenção urgente';
+      } else {
+        status='atencao'; statusCor='var(--orange)'; statusTxt='🟡 Ponto de atenção';
+      }
+
+      // diagnóstico + ação
+      let diag, acao;
+      const fmtp = x => (x*100).toFixed(1).replace('.0','')+'%';
+      if(contato === 0){
+        diag = 'Não recebeu leads em "Em Contato" neste recorte.';
+        acao = 'Verificar distribuição de leads ou disponibilidade.';
+      } else {
+        const vsConv = tr >= taxaMediaR ? 'acima' : 'abaixo';
+        const vsVol = contato >= contatoMedio ? 'acima' : 'abaixo';
+        diag = `${contato} leads em contato (${vsVol} da média) · ${p.vendas} vendas · conversão real ${fmtp(tr)} (${vsConv} da média do time).`;
+        if(motivoPrincipalV[v]) diag += ` Principal perda: "${motivoPrincipalV[v].motivo}" (${motivoPrincipalV[v].qtd}x).`;
+
+        if(status==='bom'){
+          acao = contato < contatoMedio ? `Performance sólida. Vale aumentar o volume de leads — converte bem o que recebe.` : `Manter o ritmo. Referência de fechamento pro time.`;
+        } else if(status==='critico'){
+          if(perdasTempoV[v] >= 3 && perdasTempoV[v] >= contato*0.3) acao = `Perda alta por tempo de resposta. Cobrar velocidade de 1ª resposta e definir SLA.`;
+          else acao = `Conversão bem abaixo da média com volume relevante. Revisar abordagem, script e objeções de perto.`;
+        } else if(status==='atencao'){
+          acao = contato >= contatoMedio ? `Recebe volume ok, mas conversão pode melhorar. Trabalhar técnica de fechamento.` : `Volume e conversão medianos. Acompanhar de perto e dar mais leads se a conversão subir.`;
+        }
+      }
+
+      return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px">
+          <div style="width:30px;height:30px;border-radius:50%;background:${cor} center/cover ${foto?`url('${foto}')`:''};border:2px solid ${cor};flex-shrink:0"></div>
+          <div style="flex:1;font-weight:800;color:var(--text-strong)">${displayName(v)}</div>
+          <span style="font-size:11px;font-weight:700;color:${statusCor}">${statusTxt}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text);margin-bottom:6px;line-height:1.5"><b style="color:var(--muted)">Diagnóstico:</b> ${diag}</div>
+        <div style="font-size:12px;color:var(--text);line-height:1.5"><b style="color:var(--muted)">Ação:</b> ${acao}</div>
+      </div>`;
+    }).join('');
+
+    const blocoIndividual = `<div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="font-weight:800;color:var(--text-strong);font-size:14px;margin-bottom:12px">Análise individual · cada vendedor</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">${cardsV}</div>
+    </div>`;
+
     bAnalise = `<div class="card" style="padding:20px;margin-bottom:16px">
       <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">💡 Análise Inteligência Comercial WeRev</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Pontos pro supervisor atuar · baseado em conversão real, volume e motivos de perda do recorte</div>
       ${corpo}
+      ${blocoIndividual}
     </div>`;
   }
 
