@@ -3977,6 +3977,105 @@ function renderTaxaPassagem(){
     </div>`;
   }
 
+
+  // ---- BLOCO 2c: 💡 Análise Inteligência Comercial WeRev ----
+  let bAnalise = '';
+  {
+    const opV = (EVENTOS.perdas && EVENTOS.perdas.perdasOpPorVendedor) ? EVENTOS.perdas.perdasOpPorVendedor : {};
+    const taxaRealV = v => {
+      const p = f.porVendedor[v];
+      const base = Math.max(p.vendas, p.etapas['2'] - (opV[v]||0));
+      return base > 0 ? Math.min(p.vendas / base, 1) : 0;
+    };
+    // métricas de referência da equipe
+    const contatos = VENDEDORES.map(v=> f.porVendedor[v].etapas['2']);
+    const contatoMedio = contatos.reduce((a,b)=>a+b,0) / (VENDEDORES.length||1);
+    const taxasR = {}; VENDEDORES.forEach(v=> taxasR[v]=taxaRealV(v));
+    const valsR = VENDEDORES.map(v=>taxasR[v]).filter(x=>x>0);
+    const taxaMediaR = valsR.length ? valsR.reduce((a,b)=>a+b,0)/valsR.length : 0;
+
+    // perdas por tempo/janela do recorte (por vendedor e total)
+    const perdasTempoV = {}; VENDEDORES.forEach(v=> perdasTempoV[v]=0);
+    let perdasTempoTotal = 0, perdasTotal = 0;
+    if(EVENTOS.perdas && EVENTOS.perdas.porEmail){
+      Object.values(EVENTOS.perdas.porEmail).forEach(p=>{
+        if(p.dataKey && !dentroIntervalo(p.dataKey)) return;
+        perdasTotal++;
+        const m = (p.motivo||'').toLowerCase();
+        const ehTempo = m.includes('janela') || m.includes('24h') || m.includes('não respondeu') || m.includes('nao respondeu') || m.includes('expir');
+        if(ehTempo){ perdasTempoTotal++; if(p.vendedor && perdasTempoV[p.vendedor]!==undefined) perdasTempoV[p.vendedor]++; }
+      });
+    }
+
+    const insights = [];
+    const fmt = x => (x*100).toFixed(1).replace('.0','')+'%';
+
+    VENDEDORES.forEach(v=>{
+      const p = f.porVendedor[v];
+      const contato = p.etapas['2'];
+      const tr = taxasR[v];
+      if(contato === 0) return;
+
+      // Regra 1: conversão baixa + volume alto → fechamento
+      if(contato >= contatoMedio && tr > 0 && tr < taxaMediaR * 0.7){
+        insights.push({
+          prioridade: 1, cor:'var(--red)', icone:'🔴', vend:v,
+          titulo:`${displayName(v)} · recebe muito, converte pouco`,
+          diag:`${contato} leads em contato (acima da média) mas taxa real de só ${fmt(tr)} (média do time: ${fmt(taxaMediaR)}).`,
+          acao:`Não é falta de lead — é fechamento. Revisar abordagem, script e objeções com ${displayName(v)}. Ouvir gravações/conversas.`
+        });
+      }
+      // Regra 2: conversão alta + volume baixo → merece mais leads
+      if(contato < contatoMedio * 0.8 && tr >= taxaMediaR && tr > 0){
+        insights.push({
+          prioridade: 2, cor:'var(--green)', icone:'🟢', vend:v,
+          titulo:`${displayName(v)} · converte bem, recebe pouco`,
+          diag:`Taxa real de ${fmt(tr)} (acima da média) mas só ${contato} leads em contato (abaixo da média).`,
+          acao:`Aumentar o volume de leads pra ${displayName(v)} — ele aproveita bem o que recebe. Potencial de mais vendas sem mexer na conversão.`
+        });
+      }
+      // Regra 3 (individual): vendedor com muita perda por tempo
+      if(perdasTempoV[v] >= 3 && perdasTempoV[v] >= contato*0.3){
+        insights.push({
+          prioridade: 1, cor:'var(--orange)', icone:'🟠', vend:v,
+          titulo:`${displayName(v)} · perdendo por tempo de resposta`,
+          diag:`${perdasTempoV[v]} perdas por janela/sem resposta — parte relevante do que ele atende.`,
+          acao:`Cobrar velocidade de primeira resposta de ${displayName(v)}. Definir SLA (responder em X min) e acompanhar.`
+        });
+      }
+    });
+
+    // Regra 3 (equipe): perda por tempo é problema sistêmico
+    if(perdasTotal > 0 && perdasTempoTotal/perdasTotal >= 0.35){
+      insights.unshift({
+        prioridade: 0, cor:'var(--orange)', icone:'⏱️', vend:null,
+        titulo:`Time perdendo por tempo de resposta`,
+        diag:`${((perdasTempoTotal/perdasTotal)*100).toFixed(0)}% das perdas (${perdasTempoTotal} de ${perdasTotal}) são por janela expirada / sem resposta.`,
+        acao:`Problema de processo, não de um vendedor só. Criar alerta de SLA de primeira resposta e revisar a distribuição de leads nos horários de pico.`
+      });
+    }
+
+    insights.sort((a,b)=> a.prioridade - b.prioridade);
+
+    let corpo;
+    if(insights.length === 0){
+      corpo = `<div style="color:var(--muted);font-size:13px;padding:8px 0">Nenhum ponto crítico detectado no recorte atual. O time está equilibrado nas regras monitoradas (volume × conversão e tempo de resposta). 👌</div>`;
+    } else {
+      corpo = insights.map(i=>`
+        <div style="background:var(--bg2);border-left:3px solid ${i.cor};border-radius:8px;padding:12px 14px;margin-bottom:10px">
+          <div style="font-weight:800;color:var(--text-strong);font-size:13px;margin-bottom:4px">${i.icone} ${i.titulo}</div>
+          <div style="font-size:12px;color:var(--text);margin-bottom:6px"><b style="color:var(--muted)">Diagnóstico:</b> ${i.diag}</div>
+          <div style="font-size:12px;color:var(--text)"><b style="color:var(--muted)">Ação:</b> ${i.acao}</div>
+        </div>`).join('');
+    }
+
+    bAnalise = `<div class="card" style="padding:20px;margin-bottom:16px">
+      <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">💡 Análise Inteligência Comercial WeRev</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Pontos pro supervisor atuar · baseado em conversão real, volume e motivos de perda do recorte</div>
+      ${corpo}
+    </div>`;
+  }
+
   // ---- BLOCO 2.5: Motivos de perda (pizza) + Taxa de Conversão Real ----
   let bMotivos = '';
   const perdas = EVENTOS.perdas;
@@ -4122,7 +4221,7 @@ function renderTaxaPassagem(){
   });
   b4 += `</div></div>`;
 
-  el.innerHTML = barraFiltro('tpf') + b1 + b2 + b2real + bMotivos + b3 + b4;
+  el.innerHTML = barraFiltro('tpf') + b1 + b2 + b2real + bAnalise + bMotivos + b3 + b4;
 }
 function renderTimes(){
   const el = document.getElementById('timesContent');
