@@ -389,8 +389,24 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .ic-coment-hint{font-size:10px;color:var(--muted);margin-top:5px;font-style:italic}
 @media(max-width:760px){.ic-recs{grid-template-columns:1fr}}
 
-/* ===== Aba Regras e Combinados ===== */
-.combinados-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px}
+/* ===== Aba Rotina ===== */
+.rot-toggle{background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s}
+.rot-toggle:hover{border-color:var(--accent)}
+.rot-toggle.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.rot-periodo{margin-bottom:18px}
+.rot-periodo-tit{font-size:13px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:22px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.rot-bloco{background:var(--card-bg,rgba(0,45,87,0.5));border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:12px}
+.rot-bloco-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.rot-hora{font-size:15px;font-weight:900;color:var(--accent);background:var(--bg2);border-radius:8px;padding:3px 10px;flex-shrink:0}
+.rot-bloco-tit{font-size:15px;font-weight:800;color:var(--text-strong)}
+.rot-grupo{margin:8px 0 8px}
+.rot-grupo-tit{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px}
+.rot-lista{list-style:none;padding:0;margin:0}
+.rot-lista li{font-size:13px;color:var(--text);padding:4px 0 4px 22px;position:relative;line-height:1.5}
+.rot-lista li:before{content:'';position:absolute;left:4px;top:11px;width:6px;height:6px;border-radius:50%;background:var(--accent);opacity:.6}
+.rot-lista .rot-sub{padding-left:40px}
+.rot-lista .rot-sub:before{left:24px;width:5px;height:5px;background:var(--muted)}
+/* ===== Aba Regras e Combinados ===== */.combinados-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px}
 .combinado{display:flex;gap:16px;background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:14px;padding:20px;transition:transform .15s,border-color .15s}
 .combinado:hover{transform:translateY(-2px);border-color:var(--accent)}
 .comb-num{font-size:30px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--accent);opacity:.55;line-height:1;flex-shrink:0;min-width:42px}
@@ -627,6 +643,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <button class="sb-item" data-tab="taxapassagem" onclick="setTab('taxapassagem')"><span class="sb-ic">📉</span><span class="sb-txt">Taxa de Passagem</span></button>
       <div class="sb-grp">Cultura &amp; Operação</div>
       <button class="sb-item" data-tab="regras" onclick="setTab('regras')"><span class="sb-ic">📋</span><span class="sb-txt">Regras e Combinados</span></button>
+      <button class="sb-item" data-tab="rotina" onclick="setTab('rotina')"><span class="sb-ic">🗓️</span><span class="sb-txt">Rotina</span></button>
       <button class="sb-item sb-parent" data-tab="processos" onclick="setTab('processos')"><span class="sb-ic">📚</span><span class="sb-txt">Processos</span><span class="sb-caret">▶</span></button>
       <div class="sb-sub" id="sbSubProcessos">
         <button class="sb-subitem active" onclick="showProcPage('home',event)"><span class="sb-subic">🏠</span><span class="sb-txt">Visão geral</span></button>
@@ -901,6 +918,19 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div class="subtitle">O que fica e o que sai em cada etapa · por vendedor e ao longo do tempo</div>
     </div>
     <div id="taxaPassagemContent" style="padding:4px 0"></div>
+  </div>
+
+  <div id="tab-rotina" class="tab-content">
+    <div class="recordes-hero">
+      <h2>🗓️ Rotina</h2>
+      <div class="subtitle">Descritivo de rotina do setor comercial · G2</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
+      <button id="rotBtnGerente" class="rot-toggle active" onclick="setRotinaView('gerente')">👔 Gerente</button>
+      <button id="rotBtnVendedor" class="rot-toggle" onclick="setRotinaView('vendedor')">🎧 Vendedor</button>
+      <a href="https://docs.google.com/document/d/e/2PACX-1vQPoFH87Kgwqp6b2OVo8no2RuQ83P7276_1_UJWH2do4ee8cblAJhNP3fVTDrcjIRHhPuh9-mE_k54n/pub" target="_blank" rel="noopener" style="margin-left:auto;align-self:center;font-size:12px;color:var(--muted);text-decoration:none">Abrir documento ↗</a>
+    </div>
+    <div id="rotinaContent"><div style="padding:24px;text-align:center;color:var(--muted)">Carregando rotina…</div></div>
   </div>
 
   <div id="tab-regras" class="tab-content">
@@ -4761,6 +4791,195 @@ function responderChat(q){
   return `Não entendi direito 🤔. Posso responder sobre:<br>• <b>Vendas de um vendedor</b> ("quanto o Pedro vendeu?")<br>• <b>Melhor/pior dia</b><br>• <b>Ranking</b> ("quem mais vendeu?")<br>• <b>Ticket médio</b><br>• <b>Meta</b> do mês<br>• <b>Total</b> da equipe`;
 }
 
+// ===== Aba Rotina: lê o Google Doc publicado (/pub) ao vivo via proxy =====
+const ROTINA_DOC_URL = 'https://docs.google.com/document/d/e/2PACX-1vQPoFH87Kgwqp6b2OVo8no2RuQ83P7276_1_UJWH2do4ee8cblAJhNP3fVTDrcjIRHhPuh9-mE_k54n/pub';
+let ROTINA_DADOS = null;
+let ROTINA_VIEW = 'gerente';
+
+async function carregarRotina(){
+  window._rotinaCarregada = true;
+  const el = document.getElementById('rotinaContent');
+  // proxies CORS (tenta em ordem; se um falhar, tenta o próximo)
+  const proxies = [
+    u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+    u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
+    u => 'https://thingproxy.freeboard.io/fetch/' + u
+  ];
+  let html = null;
+  for(const p of proxies){
+    try{
+      const r = await fetch(p(ROTINA_DOC_URL), { cache:'no-store' });
+      if(r.ok){ html = await r.text(); if(html && html.length > 500) break; }
+    }catch(e){ /* tenta próximo */ }
+  }
+  if(!html){
+    el.innerHTML = `<div class="card" style="padding:24px;text-align:center;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:8px">🗓️</div>
+      <div style="font-weight:700;color:var(--text-strong);margin-bottom:6px">Não consegui carregar a rotina ao vivo agora</div>
+      <div style="font-size:13px;line-height:1.6">O acesso ao Google Docs pode estar bloqueado temporariamente.<br>
+      <a href="${ROTINA_DOC_URL}" target="_blank" rel="noopener" style="color:var(--accent)">Abrir o documento diretamente ↗</a></div>
+    </div>`;
+    return;
+  }
+  ROTINA_DADOS = parseRotinaHTML(html);
+  renderRotina();
+}
+
+// Extrai texto + nível de indentação das listas do HTML do Google Docs
+function parseRotinaHTML(html){
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  // o conteúdo fica dentro de .doc-content (ou body como fallback)
+  const root = doc.querySelector('.doc-content') || doc.body;
+  // sequência linear de itens: {tipo:'h'|'li', texto, nivel}
+  const itens = [];
+  const walk = (node, nivel) => {
+    node.childNodes.forEach(ch => {
+      if(ch.nodeType !== 1) return;
+      const tag = ch.tagName.toLowerCase();
+      if(tag === 'ul' || tag === 'ol'){
+        ch.querySelectorAll(':scope > li').forEach(li => {
+          const txt = (li.childNodes ? Array.from(li.childNodes).filter(n=>n.nodeType===3||(n.nodeType===1&&!['ul','ol'].includes(n.tagName.toLowerCase()))).map(n=>n.textContent).join('') : li.textContent).trim();
+          if(txt) itens.push({ tipo:'li', texto:txt, nivel });
+          // listas aninhadas
+          li.querySelectorAll(':scope > ul, :scope > ol').forEach(sub => walk(li, nivel+1));
+        });
+      } else if(/^h[1-6]$/.test(tag) || tag === 'p'){
+        const txt = ch.textContent.trim();
+        if(txt) itens.push({ tipo: /^h[1-6]$/.test(tag) ? 'h' : 'p', texto:txt, nivel:0 });
+        walk(ch, nivel);
+      } else {
+        walk(ch, nivel);
+      }
+    });
+  };
+  walk(root, 0);
+  // fallback: se quase não achou itens de lista, parseia o texto por linhas
+  const temLista = itens.some(i => i.tipo === 'li');
+  if(!temLista){
+    const linhas = root.textContent.split('\n').map(l=>l).filter(l=>l.trim());
+    const itens2 = [];
+    linhas.forEach(l => {
+      const raw = l.replace(/\t/g,'    ');
+      const txt = raw.trim();
+      if(!txt) return;
+      // detecta marcador de lista
+      const mLi = txt.match(/^[-•*]\s+(.*)$/);
+      if(mLi){
+        const indent = raw.match(/^\s*/)[0].length;
+        itens2.push({ tipo:'li', texto:mLi[1].trim(), nivel: indent >= 4 ? 1 : 0 });
+      } else {
+        itens2.push({ tipo:'p', texto:txt, nivel:0 });
+      }
+    });
+    return estruturarRotina(itens2);
+  }
+  return estruturarRotina(itens);
+}
+
+// Organiza os itens lineares em Gerente/Vendedor -> períodos -> blocos
+function estruturarRotina(itens){
+  const dados = { gerente:[], vendedor:[] };
+  let alvo = null;       // 'gerente' | 'vendedor'
+  let periodoAtual = null;
+  let blocoAtual = null;
+  let grupoAtual = null;
+
+  const ehHorarioOuTurno = t => /^\d{1,2}h/i.test(t) || /ronda\s*\d/i.test(t) || /^#?\s*turno/i.test(t) || /rotina\s/i.test(t) || /finalizar dia/i.test(t) || /^in[ií]cio/i.test(t);
+  const limparTit = t => t.replace(/^#+\s*/, '').trim();
+
+  itens.forEach(it => {
+    const t = it.texto.trim();
+    const low = t.toLowerCase();
+
+    // raízes
+    if(low === 'gerente'){ alvo='gerente'; periodoAtual=null; blocoAtual=null; return; }
+    if(low === 'vendedor'){ alvo='vendedor'; periodoAtual=null; blocoAtual=null; return; }
+    if(!alvo) return;
+
+    // períodos
+    if(['diário','diario','semanal','mensal','ordinário','ordinario'].includes(low)){
+      if(low.startsWith('ordin')) return; // "Ordinário" é só um rótulo dentro de Diário
+      periodoAtual = { nome: t, blocos: [] };
+      dados[alvo].push(periodoAtual);
+      blocoAtual = null;
+      return;
+    }
+    if(!periodoAtual){ periodoAtual = { nome:'Diário', blocos:[] }; dados[alvo].push(periodoAtual); }
+
+    // ignora linha de "criar RCF" repetida e vazios
+    if(low.includes('rcf setor comercial')) return;
+
+    // novo bloco (horário/turno/rotina)
+    if((it.tipo==='h' || it.tipo==='p') && ehHorarioOuTurno(t)){
+      blocoAtual = { titulo: limparTit(t), grupos:[], itensSoltos:[] };
+      periodoAtual.blocos.push(blocoAtual);
+      grupoAtual = null;
+      return;
+    }
+    // subtítulo dentro de bloco (parágrafo curto, ex.: "Logo após almoço")
+    if((it.tipo==='h' || it.tipo==='p') && blocoAtual && t.length < 60){
+      blocoAtual.subnota = t;
+      return;
+    }
+
+    // itens de lista
+    if(it.tipo==='li'){
+      if(!blocoAtual){ blocoAtual = { titulo:'', grupos:[], itensSoltos:[] }; periodoAtual.blocos.push(blocoAtual); }
+      if(it.nivel <= 0){
+        grupoAtual = { titulo:t, subs:[] };
+        blocoAtual.grupos.push(grupoAtual);
+      } else {
+        if(grupoAtual) grupoAtual.subs.push(t);
+        else blocoAtual.itensSoltos.push(t);
+      }
+    }
+  });
+  return dados;
+}
+
+function setRotinaView(v){
+  ROTINA_VIEW = v;
+  document.getElementById('rotBtnGerente').classList.toggle('active', v==='gerente');
+  document.getElementById('rotBtnVendedor').classList.toggle('active', v==='vendedor');
+  renderRotina();
+}
+
+function renderRotina(){
+  const el = document.getElementById('rotinaContent');
+  if(!ROTINA_DADOS){ return; }
+  const periodos = ROTINA_DADOS[ROTINA_VIEW] || [];
+  if(periodos.length === 0){
+    el.innerHTML = `<div style="padding:24px;color:var(--muted)">Sem conteúdo para ${ROTINA_VIEW} no documento.</div>`;
+    return;
+  }
+  let html = '';
+  periodos.forEach(per => {
+    html += `<div class="rot-periodo"><div class="rot-periodo-tit">${per.nome}</div>`;
+    per.blocos.forEach(b => {
+      // separa hora do resto do título, se houver
+      const mHora = b.titulo.match(/^(\d{1,2}h\d{0,2})\s*(.*)$/i);
+      const hora = mHora ? mHora[1] : '';
+      const tit = mHora ? (mHora[2] || 'Início') : b.titulo;
+      html += `<div class="rot-bloco">`;
+      if(b.titulo){
+        html += `<div class="rot-bloco-head">${hora?`<span class="rot-hora">${hora}</span>`:''}<span class="rot-bloco-tit">${tit||b.titulo}</span></div>`;
+      }
+      if(b.subnota){ html += `<div style="font-size:12px;color:var(--muted);margin:-4px 0 8px">${b.subnota}</div>`; }
+      if(b.itensSoltos && b.itensSoltos.length){
+        html += `<ul class="rot-lista">` + b.itensSoltos.map(i=>`<li>${i}</li>`).join('') + `</ul>`;
+      }
+      (b.grupos||[]).forEach(g => {
+        html += `<div class="rot-grupo"><ul class="rot-lista"><li>${g.titulo}</li>`;
+        g.subs.forEach(s => html += `<li class="rot-sub">${s}</li>`);
+        html += `</ul></div>`;
+      });
+      html += `</div>`;
+    });
+    html += `</div>`;
+  });
+  el.innerHTML = html;
+}
+
 function setTab(tab){
   document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -4769,6 +4988,7 @@ function setTab(tab){
   document.getElementById('tab-' + tab).classList.add('active');
   if(tab==='processos' && !window._procRendered){ renderProcessos(); window._procRendered = true; }
   if(tab==='relatorios'){ renderRelEventos(); }
+  if(tab==='rotina' && !window._rotinaCarregada){ carregarRotina(); }
   // expande/recolhe submenu de Processos
   const subProc = document.getElementById('sbSubProcessos');
   const parentProc = document.querySelector('.sb-parent');
