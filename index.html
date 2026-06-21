@@ -641,6 +641,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <button class="sb-item" data-tab="relatorios" onclick="setTab('relatorios')"><span class="sb-ic">📑</span><span class="sb-txt">Relatórios</span></button>
       <button class="sb-item" data-tab="funil" onclick="setTab('funil')"><span class="sb-ic">🚦</span><span class="sb-txt">Funil &amp; Taxa de Passagem</span></button>
       <button class="sb-item" data-tab="taxapassagem" onclick="setTab('taxapassagem')"><span class="sb-ic">📉</span><span class="sb-txt">Taxa de Passagem</span></button>
+      <button class="sb-item" data-tab="reembolsos" onclick="setTab('reembolsos')"><span class="sb-ic">💸</span><span class="sb-txt">Reembolsos</span></button>
       <div class="sb-grp">Cultura &amp; Operação</div>
       <button class="sb-item" data-tab="regras" onclick="setTab('regras')"><span class="sb-ic">📋</span><span class="sb-txt">Regras e Combinados</span></button>
       <button class="sb-item" data-tab="rotina" onclick="setTab('rotina')"><span class="sb-ic">🗓️</span><span class="sb-txt">Rotina</span></button>
@@ -918,6 +919,14 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div class="subtitle">O que fica e o que sai em cada etapa · por vendedor e ao longo do tempo</div>
     </div>
     <div id="taxaPassagemContent" style="padding:4px 0"></div>
+  </div>
+
+  <div id="tab-reembolsos" class="tab-content">
+    <div class="recordes-hero">
+      <h2>💸 Reembolsos</h2>
+      <div class="subtitle">Análise de reembolsos · mês selecionado</div>
+    </div>
+    <div id="reembolsosContent"><div style="padding:24px;text-align:center;color:var(--muted)">Carregando reembolsos…</div></div>
   </div>
 
   <div id="tab-rotina" class="tab-content">
@@ -4791,6 +4800,208 @@ function responderChat(q){
   return `Não entendi direito 🤔. Posso responder sobre:<br>• <b>Vendas de um vendedor</b> ("quanto o Pedro vendeu?")<br>• <b>Melhor/pior dia</b><br>• <b>Ranking</b> ("quem mais vendeu?")<br>• <b>Ticket médio</b><br>• <b>Meta</b> do mês<br>• <b>Total</b> da equipe`;
 }
 
+// ===== Aba Reembolsos: lê a aba BD Reembolso da planilha de vendas =====
+const REEMBOLSOS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBV0F7S_7b1qi9WFTeGORVnJZ6J76tYEvPqAmWQjtwIsSv-dgbuOq_Qqef4YWNKIz0D1F8n_dqHK_F/pub?gid=595173569&single=true&output=csv';
+let REEMBOLSOS_DADOS = null;
+
+// valor que trata tanto 1.199,88 quanto 1199.88
+function parseValorBR(v){
+  if(v===null||v===undefined) return 0;
+  let s = String(v).replace(/R\$/gi,'').replace(/\s/g,'').trim();
+  if(!s) return 0;
+  // se tem vírgula e ponto, o último separador é o decimal
+  if(s.includes(',') && s.includes('.')){
+    if(s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g,'').replace(',','.');
+    else s = s.replace(/,/g,'');
+  } else if(s.includes(',')){
+    s = s.replace(',','.');
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+async function carregarReembolsos(){
+  const el = document.getElementById('reembolsosContent');
+  el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Carregando reembolsos…</div>';
+  try{
+    const resp = await fetch(REEMBOLSOS_CSV_URL + '&_t=' + Date.now(), { cache:'no-store' });
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const txt = await resp.text();
+    REEMBOLSOS_DADOS = processarReembolsos(txt);
+    renderReembolsos();
+  }catch(e){
+    console.warn('[Reembolsos] erro:', e);
+    el.innerHTML = `<div class="card" style="padding:24px;text-align:center;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:8px">💸</div>
+      <div style="font-weight:700;color:var(--text-strong);margin-bottom:6px">Não consegui carregar a aba de reembolsos</div>
+      <div style="font-size:13px;line-height:1.6">Confira se a aba <b>BD Reembolso</b> está publicada na web em CSV.<br>Erro: ${e.message}</div>
+    </div>`;
+  }
+}
+
+function processarReembolsos(csvText){
+  const rows = parseCSV(csvText);
+  if(rows.length < 2) return { eventos:[], porVendedor:{} };
+  const header = rows[0].map(h => String(h).trim().toLowerCase());
+
+  // localizar colunas por palavra-chave (robusto a mudança de ordem)
+  const find = (...keys) => header.findIndex(h => keys.some(k => h.includes(k)));
+  const idxDataReemb = find('data do reembolso','data reembolso','data do reemb');
+  const idxNome   = find('nome');
+  const idxEmail  = find('e-mail','email');
+  const idxTel    = find('telefone');
+  const idxStatus = find('status');
+  const idxValorTotal = find('valor total');
+  const idxValorVend  = find('valor do vendedor','valor vendedor','valor do vend');
+  const idxVendedor = find('vendedor','utm','origem','codigo','código');
+  const idxProduto = find('nome do produto','produto');
+  const idxMetodo = find('método','metodo','forma de pag','pagamento');
+
+  // fallback de posição conforme o print (A=0 data reemb, J=9 valor vendedor)
+  const cDataReemb = idxDataReemb >= 0 ? idxDataReemb : 0;
+  const cValorVend = idxValorVend >= 0 ? idxValorVend : 9;
+  // se não achar coluna de vendedor por nome, tenta a coluna após "valor do vendedor"+método (M/13)
+  const cVendedor = idxVendedor >= 0 ? idxVendedor : 12;
+
+  const eventos = [];
+  const porVendedor = {};
+  VENDEDORES.forEach(v => porVendedor[v] = { qtd:0, valor:0 });
+  let semVendedor = { qtd:0, valor:0 };
+
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    if(!row || row.length===0) continue;
+    const dataReemb = parseData(row[cDataReemb]);
+    if(!dataReemb) continue;
+
+    // filtra pelo MÊS selecionado (currentMonth) usando a data do reembolso
+    if(dataReemb.mes !== mesNum(currentMonth)) continue;
+
+    const valor = parseValorBR(row[cValorVend]);
+    const vendRaw = row[cVendedor] || '';
+    const vend = mapearVendedor(vendRaw);
+
+    const ev = {
+      data: dataReemb,
+      dataStr: `${String(dataReemb.dia).padStart(2,'0')}/${String(dataReemb.mes).padStart(2,'0')}`,
+      nome: idxNome>=0 ? (row[idxNome]||'') : '',
+      email: idxEmail>=0 ? (row[idxEmail]||'') : '',
+      status: idxStatus>=0 ? (row[idxStatus]||'') : '',
+      produto: idxProduto>=0 ? (row[idxProduto]||'') : '',
+      metodo: idxMetodo>=0 ? (row[idxMetodo]||'') : '',
+      valor, vendedor: vend, vendRaw
+    };
+    eventos.push(ev);
+    if(vend && porVendedor[vend]){ porVendedor[vend].qtd++; porVendedor[vend].valor += valor; }
+    else { semVendedor.qtd++; semVendedor.valor += valor; }
+  }
+  eventos.sort((a,b)=> (b.data.ano-a.data.ano)||(b.data.mes-a.data.mes)||(b.data.dia-a.data.dia));
+  return { eventos, porVendedor, semVendedor };
+}
+
+function renderReembolsos(){
+  const el = document.getElementById('reembolsosContent');
+  const d = REEMBOLSOS_DADOS;
+  if(!d || d.eventos.length === 0){
+    el.innerHTML = `<div class="card" style="padding:24px;text-align:center;color:var(--muted)">
+      <div style="font-size:28px;margin-bottom:6px">💸</div>
+      Nenhum reembolso em ${currentMonth.charAt(0).toUpperCase()+currentMonth.slice(1)}.
+    </div>`;
+    return;
+  }
+  const fmt = v => 'R$ ' + (Math.round(v*100)/100).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const pct = x => (x*100).toFixed(1).replace('.0','')+'%';
+  const mesLabel = currentMonth.charAt(0).toUpperCase()+currentMonth.slice(1);
+
+  // vendas do mês por vendedor (da base DADOS já carregada)
+  const mes = DADOS[currentMonth];
+  const vendasVend = {};
+  VENDEDORES.forEach(v => vendasVend[v] = (mes && mes.porVendedor[v]) ? mes.porVendedor[v].valor : 0);
+  const totalVendasMes = VENDEDORES.reduce((a,v)=>a+vendasVend[v],0);
+  const totalReembMes = d.eventos.reduce((a,e)=>a+e.valor,0);
+
+  // ---- KPIs topo ----
+  let kpis = `<div class="grid-4" style="margin-bottom:16px">
+    <div class="card red"><div class="card-icon">💸</div><div class="card-label">Reembolsos em ${mesLabel}</div><div class="card-value">${fmt(totalReembMes)}</div><div class="card-sub">${d.eventos.length} eventos</div></div>
+    <div class="card green"><div class="card-icon">💰</div><div class="card-label">Vendas do mês</div><div class="card-value">${fmt(totalVendasMes)}</div></div>
+    <div class="card blue"><div class="card-icon">✅</div><div class="card-label">Vendas − Reembolso</div><div class="card-value">${fmt(totalVendasMes - totalReembMes)}</div></div>
+    <div class="card amber"><div class="card-icon">📊</div><div class="card-label">% Reembolso da equipe</div><div class="card-value">${totalVendasMes>0?pct(totalReembMes/totalVendasMes):'—'}</div></div>
+  </div>`;
+
+  // ---- Tabela por vendedor ----
+  const ordV = [...VENDEDORES].filter(v=> d.porVendedor[v].qtd>0 || vendasVend[v]>0)
+    .sort((a,b)=> d.porVendedor[b].valor - d.porVendedor[a].valor);
+  let linhas = ordV.map(v=>{
+    const r = d.porVendedor[v];
+    const vendas = vendasVend[v];
+    const liquido = vendas - r.valor;
+    const perc = vendas>0 ? r.valor/vendas : 0;
+    const cor = VENDOR_COLORS[v] || 'var(--accent)';
+    const foto = (VENDOR_PHOTOS && VENDOR_PHOTOS[v]) ? VENDOR_PHOTOS[v] : '';
+    const avatar = `<span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${cor} center/cover ${foto?`url('${foto}')`:''};border:2px solid ${cor};margin-right:8px;vertical-align:middle"></span>`;
+    const corPerc = perc>0.15 ? 'var(--red)' : (perc>0.07 ? 'var(--orange)' : 'var(--green)');
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 12px;font-weight:700;color:var(--text-strong)"><span style="display:inline-flex;align-items:center">${avatar}${displayName(v)}</span></td>
+      <td style="padding:9px 8px;text-align:center;color:var(--text)">${r.qtd}</td>
+      <td style="padding:9px 8px;text-align:right;color:var(--red);font-weight:700">${r.valor>0?'−'+fmt(r.valor):'—'}</td>
+      <td style="padding:9px 8px;text-align:right;color:var(--text)">${fmt(vendas)}</td>
+      <td style="padding:9px 8px;text-align:right;font-weight:700;color:var(--text-strong)">${fmt(liquido)}</td>
+      <td style="padding:9px 8px;text-align:center;font-weight:800;color:${corPerc}">${vendas>0?pct(perc):'—'}</td>
+    </tr>`;
+  }).join('');
+  // total
+  const totLiquido = totalVendasMes - totalReembMes;
+  const totQtd = ordV.reduce((a,v)=>a+d.porVendedor[v].qtd,0);
+  linhas += `<tr style="background:var(--bg2);border-top:2px solid var(--border)">
+    <td style="padding:10px 12px;font-weight:800;color:var(--muted)">TOTAL EQUIPE</td>
+    <td style="padding:10px 8px;text-align:center;font-weight:700;color:var(--text)">${totQtd}</td>
+    <td style="padding:10px 8px;text-align:right;font-weight:800;color:var(--red)">−${fmt(totalReembMes)}</td>
+    <td style="padding:10px 8px;text-align:right;font-weight:700;color:var(--text)">${fmt(totalVendasMes)}</td>
+    <td style="padding:10px 8px;text-align:right;font-weight:800;color:var(--text-strong)">${fmt(totLiquido)}</td>
+    <td style="padding:10px 8px;text-align:center;font-weight:800;color:var(--muted)">${totalVendasMes>0?pct(totalReembMes/totalVendasMes):'—'}</td>
+  </tr>`;
+
+  let tabela = `<div class="card" style="padding:0;overflow-x:auto;margin-bottom:16px">
+    <div style="padding:16px 16px 4px;font-weight:800;color:var(--text-strong);font-size:15px">Reembolso por vendedor · ${mesLabel}</div>
+    <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">Valor do vendedor (coluna J) · vendas − reembolso do mês · % sobre as vendas</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
+      <th style="padding:10px 12px">VENDEDOR</th>
+      <th style="padding:10px 8px;text-align:center">Reemb.</th>
+      <th style="padding:10px 8px;text-align:right">Valor reembolso</th>
+      <th style="padding:10px 8px;text-align:right">Vendas mês</th>
+      <th style="padding:10px 8px;text-align:right">Vendas − Reemb.</th>
+      <th style="padding:10px 8px;text-align:center">% Reemb.</th>
+    </tr></thead><tbody>${linhas}</tbody></table>
+  </div>`;
+
+  // ---- Lista de eventos ----
+  let eventos = `<div class="card" style="padding:0;overflow-x:auto">
+    <div style="padding:16px 16px 4px;font-weight:800;color:var(--text-strong);font-size:15px">Lista de reembolsos · ${mesLabel}</div>
+    <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">${d.eventos.length} eventos no mês</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
+      <th style="padding:9px 12px">Data</th>
+      <th style="padding:9px 8px">Cliente</th>
+      <th style="padding:9px 8px">Produto</th>
+      <th style="padding:9px 8px">Vendedor</th>
+      <th style="padding:9px 8px;text-align:right">Valor</th>
+    </tr></thead><tbody>`;
+  d.eventos.forEach(e=>{
+    const vNome = e.vendedor ? displayName(e.vendedor) : '<span style="color:var(--muted)">—</span>';
+    eventos += `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px 12px;color:var(--muted);white-space:nowrap">${e.dataStr}</td>
+      <td style="padding:8px 8px;color:var(--text)">${e.nome||'—'}<div style="font-size:11px;color:var(--muted)">${e.email||''}</div></td>
+      <td style="padding:8px 8px;color:var(--text)">${e.produto||'—'}</td>
+      <td style="padding:8px 8px;color:var(--text)">${vNome}</td>
+      <td style="padding:8px 8px;text-align:right;color:var(--red);font-weight:700">−${fmt(e.valor)}</td>
+    </tr>`;
+  });
+  eventos += `</tbody></table></div>`;
+
+  el.innerHTML = kpis + tabela + eventos;
+}
+
 // ===== Aba Rotina: lê o Google Doc publicado (/pub) ao vivo via proxy =====
 const ROTINA_DOC_URL = 'https://docs.google.com/document/d/e/2PACX-1vQPoFH87Kgwqp6b2OVo8no2RuQ83P7276_1_UJWH2do4ee8cblAJhNP3fVTDrcjIRHhPuh9-mE_k54n/pub';
 let ROTINA_DADOS = null;
@@ -4989,6 +5200,7 @@ function setTab(tab){
   if(tab==='processos' && !window._procRendered){ renderProcessos(); window._procRendered = true; }
   if(tab==='relatorios'){ renderRelEventos(); }
   if(tab==='rotina' && !window._rotinaCarregada){ carregarRotina(); }
+  if(tab==='reembolsos'){ carregarReembolsos(); }
   // expande/recolhe submenu de Processos
   const subProc = document.getElementById('sbSubProcessos');
   const parentProc = document.querySelector('.sb-parent');
