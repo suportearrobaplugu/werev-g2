@@ -4856,12 +4856,15 @@ function processarReembolsos(csvText){
   const idxVendedor = find('vendedor','utm','origem','codigo','código');
   const idxProduto = find('nome do produto','produto');
   const idxMetodo = find('método','metodo','forma de pag','pagamento');
+  // O vendedor vem na coluna utm_source (ex: comercial_pedro-barach). Priorizar ela.
+  const idxUtmSource = header.findIndex(h => h.includes('utm_source') || h === 'utm source');
+  const idxVendedorFinal = idxUtmSource >= 0 ? idxUtmSource : idxVendedor;
 
   // fallback de posição conforme o print (A=0 data reemb, J=9 valor vendedor)
   const cDataReemb = idxDataReemb >= 0 ? idxDataReemb : 0;
   const cValorVend = idxValorVend >= 0 ? idxValorVend : 9;
   // se não achar coluna de vendedor por nome, tenta a coluna após "valor do vendedor"+método (M/13)
-  const cVendedor = idxVendedor >= 0 ? idxVendedor : 12;
+  const cVendedor = idxVendedorFinal >= 0 ? idxVendedorFinal : 17;
 
   const eventos = [];
   const porVendedor = {};
