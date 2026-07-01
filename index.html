@@ -619,7 +619,8 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
         <button id="themeToggle" onclick="toggleTheme()" class="header-btn theme-btn" title="Alternar tema claro/escuro">🌙</button>
       </div>
       <div class="month-toggle">
-        <button class="month-tab active" onclick="setMonth('junho')">Junho</button>
+        <button class="month-tab active" onclick="setMonth('julho')">Julho</button>
+        <button class="month-tab" onclick="setMonth('junho')">Junho</button>
         <button class="month-tab" onclick="setMonth('maio')">Maio</button>
         <button class="month-tab" onclick="setMonth('abril')">Abril</button>
       </div>
@@ -1174,7 +1175,7 @@ function updateChartsTheme(){
   }
 }
 
-let DADOS = { junho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} } };
+let DADOS = { julho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, junho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} } };
 
 // ===== MULTI-TENANT: cada time tem suas próprias planilhas =====
 // Para adicionar um novo time, copie um bloco abaixo e troque o id, nome e URLs.
@@ -1316,17 +1317,18 @@ const HOJE = (() => {
 })();
 
 let EVENTOS = null;
-let currentMonth = 'junho';
+let currentMonth = 'julho';
 // Número do mês (2026) para cada chave
-const MES_NUM = { junho: 6, maio: 5, abril: 4 };
-function mesNum(m){ return MES_NUM[m] || 6; }
+const MES_NUM = { julho: 7, junho: 6, maio: 5, abril: 4 };
+function mesNum(m){ return MES_NUM[m] || 7; }
 // Mês corrente real (o que contém o dia de HOJE). Usado p/ "Hoje", projeção, dias úteis.
 const MES_CORRENTE = (() => {
   const m = new Date().getMonth()+1;
+  if(m === 7) return 'julho';
   if(m === 6) return 'junho';
   if(m === 5) return 'maio';
   if(m === 4) return 'abril';
-  return 'junho';
+  return 'julho';
 })();
 let currentVendor = 'geral';
 
@@ -2697,7 +2699,7 @@ function getSemanasFechadasIso(){
   
   // Coletar todas as datas com vendas
   const datasComVendas = new Set();
-  ['junho','maio','abril'].forEach(mesKey => {
+  ['julho','junho','maio','abril'].forEach(mesKey => {
     Object.keys(DADOS[mesKey].porDia).forEach(dt => datasComVendas.add(dt));
   });
   
@@ -2758,7 +2760,7 @@ function gerarRelatorioSemana(seg, dom){
   
   for(let h = 9; h <= 21; h++) stats.porHora[h] = 0;
   
-  ['junho','maio','abril'].forEach(mesKey => {
+  ['julho','junho','maio','abril'].forEach(mesKey => {
     Object.entries(DADOS[mesKey].porDia).forEach(([dt, info]) => {
       if(dt >= segStr && dt <= domStr){
         stats.fat += info.total || 0;
@@ -3533,7 +3535,7 @@ function calcStatsSemana(offset){
   const stats = { fat: 0, qtd: 0, ticket: 0, porVendedor: {}, label: '' };
   VENDEDORES.forEach(v => { stats.porVendedor[v] = { valor: 0, qtd: 0 }; });
   
-  ['junho','maio','abril'].forEach(mesKey => {
+  ['julho','junho','maio','abril'].forEach(mesKey => {
     Object.entries(DADOS[mesKey].porDia).forEach(([dt, info]) => {
       if(dt >= segStr && dt <= domStr){
         stats.fat += info.total || 0;
@@ -3678,12 +3680,12 @@ function renderInsights(){
   let labelComp = '';
   
   if(insightsPeriod === 'mes'){
-    const ORDEM = ['abril','maio','junho'];
-    const NOME = { abril:'Abril', maio:'Maio', junho:'Junho' };
-    const ABREV = { abril:'ABR', maio:'MAI', junho:'JUN' };
+    const ORDEM = ['abril','maio','junho','julho'];
+    const NOME = { abril:'Abril', maio:'Maio', junho:'Junho', julho:'Julho' };
+    const ABREV = { abril:'ABR', maio:'MAI', junho:'JUN', julho:'JUL' };
     const idx = ORDEM.indexOf(currentMonth);
     const mAtual = currentMonth;
-    const mAnterior = idx > 0 ? ORDEM[idx-1] : 'maio';
+    const mAnterior = idx > 0 ? ORDEM[idx-1] : 'junho';
     const atual = calcStatsMes(mAtual);
     const anterior = calcStatsMes(mAnterior);
     insights = gerarInsights(atual, anterior, `em ${NOME[mAtual]}`, `em ${NOME[mAnterior]}`);
@@ -4332,7 +4334,7 @@ function renderTaxaPassagem(){
   } else {
     const vendasDia = dk => {
       let q=0;
-      ['junho','maio','abril'].some(mk=>{
+      ['julho','junho','maio','abril'].some(mk=>{
         const mes=DADOS[mk]; if(!mes) return false;
         const dia=mes.porDia[dk];
         if(dia){ Object.values(dia.porVendedor).forEach(x=> q+=x.qtd); return true; }
@@ -5344,7 +5346,7 @@ try{
 function calcularRecordes(){
   // Cria uma lista plana com (vendedor, data, valor, qtd, ticket) pra cada par vendedor-dia
   const dias = [];
-  ['junho','maio','abril'].forEach(mes => {
+  ['julho','junho','maio','abril'].forEach(mes => {
     Object.entries(DADOS[mes].porDia).forEach(([data, dia]) => {
       VENDEDORES.forEach(v => {
         const vendasV = (dia.vendas||[]).filter(x => x.vendedor === v);
@@ -5479,7 +5481,7 @@ function getISOWeek(dateStr){
 function calcularRecordesPeriodo(){
   // Junta TODAS as vendas (Abril + Maio) com vendedor e data
   const todasVendas = [];
-  ['junho','maio','abril'].forEach(mesKey => {
+  ['julho','junho','maio','abril'].forEach(mesKey => {
     Object.entries(DADOS[mesKey].porDia).forEach(([data, info]) => {
       (info.vendas||[]).forEach(v => {
         todasVendas.push({ data, vendedor: v.vendedor, valor: v.valor });
@@ -5748,6 +5750,7 @@ function processarCSV(csvText){
   
   // Inicializar estrutura
   const acc = {
+    julho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} },
     junho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} },
     maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} },
     abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }
@@ -5767,7 +5770,8 @@ function processarCSV(csvText){
     if(!data || data.ano !== 2026) continue;
     
     let mesKey;
-    if(data.mes === 6) mesKey = 'junho';
+    if(data.mes === 7) mesKey = 'julho';
+    else if(data.mes === 6) mesKey = 'junho';
     else if(data.mes === 5) mesKey = 'maio';
     else if(data.mes === 4) mesKey = 'abril';
     else continue;
@@ -5981,7 +5985,7 @@ function vendasNoFiltro(vend, dias){
   const diasComEventos = new Set(dias);
   let total = 0;
   diasComEventos.forEach(dk => {
-    ['junho','maio','abril'].some(mk => {
+    ['julho','junho','maio','abril'].some(mk => {
       const mes = DADOS[mk];
       if(!mes || !mes.porDia[dk]) return false;
       if(mes.porDia[dk].porVendedor[vend]) total += mes.porDia[dk].porVendedor[vend].qtd;
