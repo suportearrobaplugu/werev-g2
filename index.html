@@ -5743,6 +5743,11 @@ function processarCSV(csvText){
   const idxValor = header.findIndex(h => h.toLowerCase() === 'valor');
   const idxHora = header.findIndex(h => h.toLowerCase() === 'hora');
   const idxUtm = header.findIndex(h => h.toLowerCase().includes('utm') && h.toLowerCase().includes('source'));
+  // Coluna que indica qual parcela é esta cobrança (1 = venda original, >1 = recorrência de mês anterior)
+  const idxParcelaAtual = header.findIndex(h => {
+    const l = h.toLowerCase();
+    return l.includes('parcela') && l.includes('atual');
+  });
   
   if(idxData < 0 || idxValor < 0 || idxUtm < 0){
     throw new Error('Colunas obrigatórias não encontradas (Data, Valor, utm_source). Cabeçalhos vistos: ' + header.join(', '));
@@ -5785,6 +5790,13 @@ function processarCSV(csvText){
     
     if(!vendedor || vendedor === 'Daniel') continue; // Ignora Daniel
     if(valor === 0) continue;
+
+    // Só venda do mês: descarta recorrências de parcelamento.
+    // "Parcela Atual" vazia ou 1 = venda original (conta). >1 = parcela de mês anterior (ignora).
+    if(idxParcelaAtual >= 0){
+      const pa = parseInt(String(row[idxParcelaAtual]).replace(/\D/g,''), 10);
+      if(!isNaN(pa) && pa > 1) continue;
+    }
     
     const dataKey = `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}`;
     
