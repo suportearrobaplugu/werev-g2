@@ -5755,10 +5755,20 @@ function processarCSV(csvText){
   
   // Inicializar estrutura
   const acc = {
+
     julho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} },
     junho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} },
     maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} },
     abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }
+  };
+
+  // Auditoria de parcelas: conta quantas linhas foram descartadas por serem recorrência (Parcela Atual > 1)
+  const auditoria = {
+    colunaParcelaEncontrada: idxParcelaAtual >= 0,
+    julho: { contadas: 0, descartadasParcela: 0, valorDescartado: 0, exemplos: [] },
+    junho: { contadas: 0, descartadasParcela: 0, valorDescartado: 0, exemplos: [] },
+    maio:  { contadas: 0, descartadasParcela: 0, valorDescartado: 0, exemplos: [] },
+    abril: { contadas: 0, descartadasParcela: 0, valorDescartado: 0, exemplos: [] }
   };
   
   // Localizar coluna Produto
@@ -5795,7 +5805,15 @@ function processarCSV(csvText){
     // "Parcela Atual" vazia ou 1 = venda original (conta). >1 = parcela de mês anterior (ignora).
     if(idxParcelaAtual >= 0){
       const pa = parseInt(String(row[idxParcelaAtual]).replace(/\D/g,''), 10);
-      if(!isNaN(pa) && pa > 1) continue;
+      if(!isNaN(pa) && pa > 1){
+        const a = auditoria[mesKey];
+        a.descartadasParcela++;
+        a.valorDescartado += valor;
+        if(a.exemplos.length < 10){
+          a.exemplos.push({ data: row[idxData], valor, parcelaAtual: pa, vendedor });
+        }
+        continue;
+      }
     }
     
     const dataKey = `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}`;
@@ -5833,8 +5851,16 @@ function processarCSV(csvText){
     }
     acc[mesKey].porVendedor[vendedor].porProduto[produto].valor += valor;
     acc[mesKey].porVendedor[vendedor].porProduto[produto].qtd += 1;
+    auditoria[mesKey].contadas++;
   }
-  
+
+  // Expõe a auditoria no console: digite  __auditoriaParcelas  no console do navegador
+  window.__auditoriaParcelas = auditoria;
+  console.log('[Auditoria de parcelas] Coluna "Parcela Atual" encontrada:', auditoria.colunaParcelaEncontrada);
+  ['julho','junho','maio','abril'].forEach(m => {
+    console.log(`[${m}] vendas contadas: ${auditoria[m].contadas} | parcelas descartadas: ${auditoria[m].descartadasParcela} | R$ descartado: ${auditoria[m].valorDescartado.toFixed(2)}`);
+  });
+
   return acc;
 }
 
