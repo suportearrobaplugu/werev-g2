@@ -650,6 +650,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div class="sb-sub" id="sbSubProcessos">
         <button class="sb-subitem active" onclick="showProcPage('home',event)"><span class="sb-subic">🏠</span><span class="sb-txt">Visão geral</span></button>
         <button class="sb-subitem" onclick="showProcPage('pipeline',event)"><span class="sb-subic">🔄</span><span class="sb-txt">Pipeline 2</span></button>
+        <button class="sb-subitem" onclick="showProcPage('motivos',event)"><span class="sb-subic">❌</span><span class="sb-txt">Motivos de Perda</span></button>
         <button class="sb-subitem" onclick="showProcPage('copies',event)"><span class="sb-subic">💬</span><span class="sb-txt">Copies</span></button>
         <button class="sb-subitem" onclick="showProcPage('links',event)"><span class="sb-subic">💳</span><span class="sb-txt">Links de Pagamento</span></button>
         <button class="sb-subitem" onclick="showProcPage('finalizar',event)"><span class="sb-subic">🎬</span><span class="sb-txt">Finalizar atendimento</span></button>
@@ -995,6 +996,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div class="section-title">📂 Documentos de processo</div>
       <div class="docs-grid">
         <div class="doc-card" onclick="showProcPage('pipeline')"><div class="dc-ic">🔄</div><h3>Pipeline 2 · Disparo CMP</h3><p>Fluxo operacional completo do funil, etapa por etapa, com motivos de perda.</p><div class="dc-go">Abrir documento →</div></div>
+        <div class="doc-card" onclick="showProcPage('motivos')"><div class="dc-ic">❌</div><h3>Motivos de Perda</h3><p>Glossário completo dos motivos de loss, com o prefixo e a explicação de cada um.</p><div class="dc-go">Abrir documento →</div></div>
         <div class="doc-card" onclick="showProcPage('copies')"><div class="dc-ic">💬</div><h3>Diretório de Copies</h3><p>56 mensagens prontas por etapa, com gatilho, variação e botão copiar.</p><div class="dc-go">Abrir documento →</div></div>
         <div class="doc-card" onclick="showProcPage('links')"><div class="dc-ic">💳</div><h3>Links de Pagamento</h3><p>Links Hubla por vendedor, com valor, cupons e botão copiar.</p><div class="dc-go">Abrir documento →</div></div>
         <div class="doc-card" onclick="showProcPage('finalizar')"><div class="dc-ic">🎬</div><h3>Finalizar atendimento (offline)</h3><p>Tutorial em vídeo e passo a passo pra encerrar o atendimento e ficar offline na ferramenta.</p><div class="dc-go">Abrir documento →</div></div>
@@ -1021,6 +1023,33 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
         <div class="desfecho-box ganhou">✅ GANHOU<div class="db-sub">Pagou CMP ou LE · webhook Hubla</div></div>
         <div class="desfecho-box perdeu">❌ PERDEU<div class="db-sub">Não é etapa — é arquivo com motivo</div></div>
       </div>
+    </div>
+
+    <!-- PÁGINA: MOTIVOS DE PERDA -->
+    <div class="proc-page" id="proc-page-motivos">
+      <div class="proc-crumb"><a onclick="showProcPage('home')">📚 Processos</a> › Motivos de Perda</div>
+      <div class="section-title">❌ Motivos de Perda</div>
+      <div class="sec-intro-txt">Glossário dos motivos de loss usados no funil. Cada motivo tem seu prefixo de etapa e a explicação de quando aplicá-lo.</div>
+      <table class="relatorio-table">
+        <thead>
+          <tr><th style="width:70px">Prefixo</th><th style="width:230px">Motivo</th><th>Descrição</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="perda-tag">[0]</span></td><td style="font-weight:600;white-space:nowrap">Mensagem Automática</td><td style="color:var(--muted)">Quando o lead responde com uma mensagem automática. Aquela mensagem de saudação do whatsapp padrão.</td></tr>
+          <tr><td><span class="perda-tag">[0]</span></td><td style="font-weight:600;white-space:nowrap">Não respondeu abordagem</td><td style="color:var(--muted)">Quando o lead nunca respondeu a abordagem.</td></tr>
+          <tr><td><span class="perda-tag">[2]</span></td><td style="font-weight:600;white-space:nowrap">Janela 24h expirada</td><td style="color:var(--muted)">Quando o vendedor erra e não responde o lead e a janela encerra.</td></tr>
+          <tr><td><span class="perda-tag">[2]</span></td><td style="font-weight:600;white-space:nowrap">Não gostou do produto</td><td style="color:var(--muted)">Quando o lead não tem interesse em fazer o curso, ou não gostou.</td></tr>
+          <tr><td><span class="perda-tag">[2]</span></td><td style="font-weight:600;white-space:nowrap">Não possui verba</td><td style="color:var(--muted)">Quando o lead não tem dinheiro para comprar.</td></tr>
+          <tr><td><span class="perda-tag">[2]</span></td><td style="font-weight:600;white-space:nowrap">Não é prioridade</td><td style="color:var(--muted)">Quando o lead fez o curso, não executa, não quer fazer.</td></tr>
+          <tr><td><span class="perda-tag">[2]</span></td><td style="font-weight:600;white-space:nowrap">Tentativas de contato esgotadas</td><td style="color:var(--muted)">Quando já foi concluído toda cadência de fup e o lead não responde.</td></tr>
+          <tr><td><span class="perda-tag">[3]</span></td><td style="font-weight:600;white-space:nowrap">Não respondeu após negociação</td><td style="color:var(--muted)">Lead não respondeu após negociar o produto.</td></tr>
+          <tr><td><span class="perda-tag">[4]</span></td><td style="font-weight:600;white-space:nowrap">Não respondeu após link enviado</td><td style="color:var(--muted)">Lead não respondeu após negociar e enviar link.</td></tr>
+          <tr><td><span class="perda-tag">[aut]</span></td><td style="font-weight:600;white-space:nowrap">Limpeza de Base</td><td style="color:var(--muted)">Motivo de loss do infra, nao usar</td></tr>
+          <tr><td><span class="perda-tag">[cs]</span></td><td style="font-weight:600;white-space:nowrap">Reembolso/Cancelamento</td><td style="color:var(--muted)">Quando cliente chama o comercial e solicita cancelamento/Reembolso. Ou seja, pede o dinheiro de volta.</td></tr>
+          <tr><td><span class="perda-tag">[cs]</span></td><td style="font-weight:600;white-space:nowrap">Detrator / Blocklist</td><td style="color:var(--muted)">Quando o leads reclama do serviço e está insatisfeito.</td></tr>
+          <tr><td><span class="perda-tag">[cs]</span></td><td style="font-weight:600;white-space:nowrap">Dúvidas/Suporte</td><td style="color:var(--muted)">Quando uma pessoa que chama já comprou o produto. Quando o lead que tirar dúvida ou falar com suporte.</td></tr>
+        </tbody>
+      </table>
     </div>
 
     <!-- PÁGINA: COPIES -->
@@ -5337,7 +5366,7 @@ function showProcPage(page, ev){
   if(target) target.classList.add('active');
   if(page==='links' && !window._linksRendered){ renderLinks(); window._linksRendered=true; }
   // marca sub-item ativo
-  const map = {home:0, pipeline:1, copies:2, links:3, finalizar:4};
+  const map = {home:0, pipeline:1, motivos:2, copies:3, links:4, finalizar:5};
   const subs = document.querySelectorAll('#sbSubProcessos .sb-subitem');
   subs.forEach(s=>s.classList.remove('active'));
   if(subs[map[page]]) subs[map[page]].classList.add('active');
