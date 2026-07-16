@@ -851,6 +851,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 
   <div id="tab-evolucao" class="tab-content">
     <div class="section-title" id="evoTitulo">Evolução Mensal</div>
+    <div id="evoAvisoBase" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:8px;background:rgba(245,158,11,.12);border-left:3px solid #f59e0b;font-size:12.5px;line-height:1.5;color:var(--text)"></div>
     <div class="grid-3">
       <div class="card green">
         <div class="card-icon">📆</div>
@@ -2830,6 +2831,15 @@ function evoAcumular(serie, ateDia){
   });
 }
 
+// Qual base de valor predomina no mês: 'liquido', 'bruto' ou 'misto'
+function evoBaseDoMes(mesKey){
+  const b = (DADOS[mesKey] && DADOS[mesKey].base) || { liquido:0, bruto:0 };
+  if(b.liquido === 0 && b.bruto === 0) return null;
+  if(b.bruto === 0) return 'liquido';
+  if(b.liquido === 0) return 'bruto';
+  return 'misto';
+}
+
 function renderEvolucao(){
   const mesA = currentMonth;
   const mesB = evoMesAnterior(mesA);
@@ -2859,6 +2869,20 @@ function renderEvolucao(){
   const totalBCompleto = serieB.reduce((s,v)=>s+v, 0);
 
   if(tituloEl) tituloEl.textContent = `Evolução Mensal — ${EVO_NOME[mesA]} vs ${EVO_NOME[mesB]}`;
+
+  // Aviso quando os meses comparados usam bases de valor diferentes (líquido vs bruto)
+  const baseA = evoBaseDoMes(mesA), baseB = evoBaseDoMes(mesB);
+  const avisoEl = document.getElementById('evoAvisoBase');
+  if(avisoEl){
+    const rotulo = { liquido:'valor líquido', bruto:'valor bruto', misto:'valores mistos (líquido e bruto)' };
+    if(baseA && baseB && baseA !== baseB){
+      avisoEl.style.display = 'block';
+      avisoEl.innerHTML = `⚠️ <strong>Bases diferentes:</strong> ${EVO_NOME[mesA]} está em <strong>${rotulo[baseA]}</strong> e ${EVO_NOME[mesB]} em <strong>${rotulo[baseB]}</strong> (a coluna "Valor Líquido" não está preenchida em ${EVO_NOME[baseA==='liquido'?mesB:mesA]}). Como o líquido é sempre menor que o bruto, esta é uma comparação <strong>conservadora</strong>: se ${EVO_NOME[mesA]} estiver à frente, a evolução é real. Se estiver atrás por pouco, o resultado é inconclusivo.`;
+    } else {
+      avisoEl.style.display = 'none';
+    }
+  }
+
   document.getElementById('evoLabelAtual').textContent = `${EVO_NOME[mesA]} até o dia ${diaCorte||'—'}`;
   document.getElementById('evoLabelAnterior').textContent = `${EVO_NOME[mesB]} no dia ${diaCorte||'—'}`;
   document.getElementById('evoFatAtual').textContent = fmtMoney(totalA);
@@ -5985,10 +6009,12 @@ function processarCSV(csvText){
   
   const header = rows[0].map(h => String(h).trim());
   const idxData = header.findIndex(h => h.toLowerCase() === 'data');
-  // Faturamento = Valor Líquido (o que efetivamente cai na Hubla após taxas). Fallback: coluna "Valor" (bruto).
+  // Faturamento = Valor Líquido quando preenchido; se a célula estiver vazia (ex: junho),
+  // cai para o "Valor" bruto daquela linha. Comparação conservadora: líquido < bruto.
   const norm = h => h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  let idxValor = header.findIndex(h => { const l = norm(h); return l.includes('valor') && l.includes('liquido'); });
-  if(idxValor < 0) idxValor = header.findIndex(h => h.toLowerCase() === 'valor');
+  const idxValorLiq = header.findIndex(h => { const l = norm(h); return l.includes('valor') && l.includes('liquido'); });
+  const idxValorBruto = header.findIndex(h => h.toLowerCase() === 'valor');
+  const idxValor = idxValorLiq >= 0 ? idxValorLiq : idxValorBruto;
   const idxHora = header.findIndex(h => h.toLowerCase() === 'hora');
   const idxUtm = header.findIndex(h => h.toLowerCase().includes('utm') && h.toLowerCase().includes('source'));
   // Coluna que indica qual parcela é esta cobrança (1 = venda original, >1 = recorrência de mês anterior)
@@ -6004,10 +6030,10 @@ function processarCSV(csvText){
   // Inicializar estrutura
   const acc = {
 
-    julho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 } },
-    junho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 } },
-    maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 } },
-    abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 } }
+    julho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 }, base: { liquido:0, bruto:0 } },
+    junho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 }, base: { liquido:0, bruto:0 } },
+    maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 }, base: { liquido:0, bruto:0 } },
+    abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 }, base: { liquido:0, bruto:0 } }
   };
 
   // Auditoria de parcelas: conta quantas linhas foram descartadas por serem recorrência (Parcela Atual > 1)
@@ -6039,7 +6065,14 @@ function processarCSV(csvText){
     else if(data.mes === 4) mesKey = 'abril';
     else continue;
     
-    const valor = parseValor(row[idxValor]);
+    // Valor da venda: usa o Líquido da linha; se vier vazio, usa o Bruto.
+    let valor = 0, baseValor = '';
+    if(idxValorLiq >= 0) valor = parseValor(row[idxValorLiq]);
+    if(valor > 0){ baseValor = 'liquido'; }
+    else if(idxValorBruto >= 0){
+      valor = parseValor(row[idxValorBruto]);
+      if(valor > 0) baseValor = 'bruto';
+    }
     const hora = idxHora >= 0 ? parseHora(row[idxHora]) : 0;
     const vendedor = mapearVendedor(row[idxUtm]);
     const produto = idxProduto >= 0 ? mapearProduto(row[idxProduto]) : 'Outros';
@@ -6090,6 +6123,7 @@ function processarCSV(csvText){
     acc[mesKey].totalFaturamento += valor;
     acc[mesKey].totalVendas += 1;
     acc[mesKey].porPlataforma.hubla += valor;
+    if(baseValor) acc[mesKey].base[baseValor]++;
     if(!acc[mesKey].porVendedor[vendedor]){
       acc[mesKey].porVendedor[vendedor] = { valor: 0, qtd: 0, porProduto: {} };
     }
@@ -6107,7 +6141,8 @@ function processarCSV(csvText){
   window.__auditoriaParcelas = auditoria;
   console.log('[Auditoria de parcelas] Coluna "Parcela Atual" encontrada:', auditoria.colunaParcelaEncontrada);
   ['julho','junho','maio','abril'].forEach(m => {
-    console.log(`[${m}] vendas contadas: ${auditoria[m].contadas} | parcelas descartadas: ${auditoria[m].descartadasParcela} | R$ descartado: ${auditoria[m].valorDescartado.toFixed(2)}`);
+    const b = acc[m].base;
+    console.log(`[${m}] vendas contadas: ${auditoria[m].contadas} | parcelas descartadas: ${auditoria[m].descartadasParcela} | base: ${b.liquido} líquido / ${b.bruto} bruto`);
   });
 
   return acc;
