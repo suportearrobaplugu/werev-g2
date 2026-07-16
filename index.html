@@ -639,6 +639,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <button class="sb-item" data-tab="recordes" onclick="setTab('recordes')"><span class="sb-ic">🏆</span><span class="sb-txt">Quadro dos Recordes</span></button>
       <button class="sb-item" data-tab="times" onclick="setTab('times')"><span class="sb-ic">⚔️</span><span class="sb-txt">Competição de Times</span></button>
       <button class="sb-item" data-tab="faturamento" onclick="setTab('faturamento')"><span class="sb-ic">📈</span><span class="sb-txt">Faturamento Diário</span></button>
+      <button class="sb-item" data-tab="evolucao" onclick="setTab('evolucao')"><span class="sb-ic">📊</span><span class="sb-txt">Evolução Mensal</span></button>
       <button class="sb-item" data-tab="relatorios" onclick="setTab('relatorios')"><span class="sb-ic">📑</span><span class="sb-txt">Relatórios</span></button>
       <button class="sb-item" data-tab="funil" onclick="setTab('funil')"><span class="sb-ic">🚦</span><span class="sb-txt">Funil &amp; Taxa de Passagem</span></button>
       <button class="sb-item" data-tab="taxapassagem" onclick="setTab('taxapassagem')"><span class="sb-ic">📉</span><span class="sb-txt">Taxa de Passagem</span></button>
@@ -846,6 +847,41 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div id="heatmapDias"></div>
     </div>
     <div id="analiseDias"></div>
+  </div>
+
+  <div id="tab-evolucao" class="tab-content">
+    <div class="section-title" id="evoTitulo">Evolução Mensal</div>
+    <div class="grid-3">
+      <div class="card green">
+        <div class="card-icon">📆</div>
+        <div class="card-label" id="evoLabelAtual">Mês atual até hoje</div>
+        <div class="card-value small" id="evoFatAtual">R$ 0</div>
+        <div class="card-meta" id="evoMetaAtual">—</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">⏮️</div>
+        <div class="card-label" id="evoLabelAnterior">Mês anterior no mesmo dia</div>
+        <div class="card-value small" id="evoFatAnterior">R$ 0</div>
+        <div class="card-meta" id="evoMetaAnterior">—</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🚀</div>
+        <div class="card-label">Evolução</div>
+        <div class="card-value small" id="evoDelta">—</div>
+        <div class="badge" id="evoDeltaBadge">—</div>
+        <div class="card-meta" id="evoDeltaMeta">comparação no mesmo dia do mês</div>
+      </div>
+    </div>
+
+    <div class="chart-card" style="margin-top:20px">
+      <div class="chart-title">📈 Faturamento acumulado</div>
+      <div class="ronda-chart-wrap" style="height:300px"><canvas id="chartEvoAcum"></canvas></div>
+    </div>
+
+    <div class="chart-card" style="margin-top:16px">
+      <div class="chart-title">📊 Faturamento diário</div>
+      <div class="ronda-chart-wrap" style="height:280px"><canvas id="chartEvoDiario"></canvas></div>
+    </div>
   </div>
 
   <div id="tab-relatorios" class="tab-content">
@@ -2748,6 +2784,142 @@ function renderAll(){
   renderTimes();
   renderFunil();
   renderTaxaPassagem();
+  renderEvolucao();
+}
+
+// ========== EVOLUÇÃO MENSAL (mês atual vs mês anterior) ==========
+let chartEvoAcum, chartEvoDiario;
+
+// Ordem cronológica dos meses disponíveis
+const EVO_ORDEM = ['abril','maio','junho','julho'];
+const EVO_NOME = { abril:'Abril', maio:'Maio', junho:'Junho', julho:'Julho' };
+
+// Retorna o mês anterior ao informado (ou null se não houver).
+// MVP: sempre o anterior. Depois dá pra trocar por um seletor (ex: melhor mês).
+function evoMesAnterior(mes){
+  const i = EVO_ORDEM.indexOf(mes);
+  return i > 0 ? EVO_ORDEM[i-1] : null;
+}
+
+// Série diária [dia1..diaN] de faturamento de um mês
+function evoSerieDiaria(mesKey){
+  const d = DADOS[mesKey];
+  const n = mesNum(mesKey);
+  const ultimoDia = new Date(2026, n, 0).getDate();
+  const out = [];
+  for(let dia = 1; dia <= ultimoDia; dia++){
+    const k = `2026-${String(n).padStart(2,'0')}-${String(dia).padStart(2,'0')}`;
+    out.push(d.porDia[k] ? d.porDia[k].total : 0);
+  }
+  return out;
+}
+
+// Último dia com venda registrada (para saber até onde o mês atual "andou")
+function evoUltimoDiaComDado(serie){
+  let last = 0;
+  serie.forEach((v,i) => { if(v > 0) last = i+1; });
+  return last;
+}
+
+function evoAcumular(serie, ateDia){
+  let s = 0;
+  return serie.map((v,i) => {
+    if(ateDia && (i+1) > ateDia) return null;
+    s += v;
+    return s;
+  });
+}
+
+function renderEvolucao(){
+  const mesA = currentMonth;
+  const mesB = evoMesAnterior(mesA);
+  const tituloEl = document.getElementById('evoTitulo');
+
+  if(!mesB){
+    if(tituloEl) tituloEl.textContent = `Evolução Mensal — ${EVO_NOME[mesA]||mesA}`;
+    ['evoFatAtual','evoFatAnterior','evoDelta'].forEach(id => {
+      const el = document.getElementById(id); if(el) el.textContent = '—';
+    });
+    const dm = document.getElementById('evoDeltaMeta');
+    if(dm) dm.textContent = 'Não há mês anterior disponível para comparar.';
+    return;
+  }
+
+  const serieA = evoSerieDiaria(mesA);
+  const serieB = evoSerieDiaria(mesB);
+  const diaCorte = evoUltimoDiaComDado(serieA);
+
+  // Acumulado: mês atual para no último dia com dado; mês anterior vai completo.
+  const acumA = evoAcumular(serieA, diaCorte);
+  const acumB = evoAcumular(serieB, 0);
+
+  // Totais no mesmo ponto do mês (comparação justa)
+  const totalA = serieA.slice(0, diaCorte).reduce((s,v)=>s+v, 0);
+  const totalBMesmoDia = serieB.slice(0, diaCorte).reduce((s,v)=>s+v, 0);
+  const totalBCompleto = serieB.reduce((s,v)=>s+v, 0);
+
+  if(tituloEl) tituloEl.textContent = `Evolução Mensal — ${EVO_NOME[mesA]} vs ${EVO_NOME[mesB]}`;
+  document.getElementById('evoLabelAtual').textContent = `${EVO_NOME[mesA]} até o dia ${diaCorte||'—'}`;
+  document.getElementById('evoLabelAnterior').textContent = `${EVO_NOME[mesB]} no dia ${diaCorte||'—'}`;
+  document.getElementById('evoFatAtual').textContent = fmtMoney(totalA);
+  document.getElementById('evoFatAnterior').textContent = fmtMoney(totalBMesmoDia);
+  document.getElementById('evoMetaAtual').textContent = `${serieA.slice(0,diaCorte).filter(v=>v>0).length} dias com venda`;
+  document.getElementById('evoMetaAnterior').textContent = `${EVO_NOME[mesB]} fechou em ${fmtMoney(totalBCompleto)}`;
+
+  // Delta no mesmo dia
+  const deltaEl = document.getElementById('evoDelta');
+  const badgeEl = document.getElementById('evoDeltaBadge');
+  if(totalBMesmoDia > 0){
+    const pct = ((totalA - totalBMesmoDia) / totalBMesmoDia) * 100;
+    const dif = totalA - totalBMesmoDia;
+    deltaEl.textContent = (pct>=0?'+':'') + pct.toFixed(1) + '%';
+    deltaEl.style.color = pct>=0 ? 'var(--green)' : 'var(--red)';
+    badgeEl.textContent = (dif>=0?'+':'-') + fmtMoney(Math.abs(dif)).replace('R$','R$ ');
+    badgeEl.className = 'badge ' + (dif>=0?'green':'red');
+  } else {
+    deltaEl.textContent = '—';
+    badgeEl.textContent = '—';
+    badgeEl.className = 'badge';
+  }
+
+  const tc = themeColors();
+  const labels = serieB.map((_,i)=> i+1);
+  const optsBase = {
+    responsive:true, maintainAspectRatio:false,
+    interaction:{ mode:'index', intersect:false },
+    plugins:{
+      legend:{ display:true, labels:{ color: tc.muted, usePointStyle:true, boxWidth:8, font:{size:11} } },
+      tooltip:{ callbacks:{ label: c => `${c.dataset.label}: ${c.parsed.y==null?'—':fmtMoney(c.parsed.y)}` } }
+    },
+    scales:{
+      y:{ ticks:{ color: tc.muted, callback: v => fmtMoneyK(v) }, grid:{ color: tc.grid } },
+      x:{ ticks:{ color: tc.muted, autoSkip:false, maxRotation:0,
+                  callback:(v,i)=> (i===0 || (i+1)%3===0) ? (i+1) : '' },
+          grid:{ display:false } }
+    }
+  };
+
+  if(chartEvoAcum) chartEvoAcum.destroy();
+  chartEvoAcum = new Chart(document.getElementById('chartEvoAcum'),{
+    type:'line',
+    data:{ labels, datasets:[
+      { label: EVO_NOME[mesB], data: acumB, borderColor:'#8FA3C7', borderWidth:2,
+        borderDash:[5,4], pointRadius:0, tension:.25, spanGaps:false },
+      { label: EVO_NOME[mesA], data: acumA, borderColor:'#335FEB', borderWidth:2.5,
+        pointRadius:0, tension:.25, fill:true, backgroundColor:'rgba(51,95,235,.10)', spanGaps:false }
+    ]},
+    options: optsBase
+  });
+
+  if(chartEvoDiario) chartEvoDiario.destroy();
+  chartEvoDiario = new Chart(document.getElementById('chartEvoDiario'),{
+    type:'bar',
+    data:{ labels, datasets:[
+      { label: EVO_NOME[mesB], data: serieB, backgroundColor:'rgba(143,163,199,.55)', borderRadius:3 },
+      { label: EVO_NOME[mesA], data: serieA.map((v,i)=> (i+1) <= diaCorte ? v : null), backgroundColor:'#335FEB', borderRadius:3 }
+    ]},
+    options: optsBase
+  });
 }
 
 // ========== RELATÓRIOS SEMANAIS ==========
