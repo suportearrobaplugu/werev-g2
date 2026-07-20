@@ -1302,19 +1302,10 @@ let FUNIL_FILTRO = { de: null, ate: null }; // strings 'YYYY-MM-DD'
 // Mapeia o nome do "Proprietario" na planilha de Eventos para o vendedor interno do dash
 function mapearProprietario(nome){
   if(!nome) return null;
-  const s = String(nome).toLowerCase().trim();
-  if(s.includes('joão guilherme') || s.includes('joao guilherme')) return 'JoaoG';
-  if(s.includes('joão paulo') || s.includes('joao paulo')) return 'JoaoP';
-  if(s.includes('trinchao') || s.includes('trinchão') || s.includes('guilherme')) return 'Guilherme';
-  if(s.includes('wallison') || s.includes('walisson') || s.includes('henrique')) return 'Walisson';
-  if(s.includes('lorena') || s.includes('ruas')) return 'Lorena';
-  if(s.includes('felipe') || s.includes('padovani')) return 'Felipe';
-  if(s.includes('pedro') || s.includes('barach')) return 'Pedro';
-  if(s.includes('thalita')) return 'Thalita';
-  if(s.includes('jocinete') || s.includes('pereira')) return 'Jocinete';
-  if(s.includes('vanessa') || s.includes('vieira')) return 'Vanessa';
-  if(s.includes('gustavo') || s.includes('henrique')) return 'GustavoH';
-  if(s.includes('poloni') || (s.includes('gabriel') && !s.includes('ferreira'))) return 'GabrielP';
+  const s = normalizarUtm(nome); // normaliza acento/caixa; separadores viram espaço
+  for(const v of VENDEDOR_MATCH){
+    if(v.partes.every(p => s.includes(p))) return v.key;
+  }
   return null;
 }
 
@@ -5971,28 +5962,45 @@ function mapearProduto(produto){
   return 'Outros';
 }
 
+// Tabela de vendedores: cada um exige nome + sobrenome no UTM (evita colisões
+// como Walisson Henrique vs Gustavo Henrique, ou João Guilherme vs Guilherme Trinchão).
+// Ordem: os mais específicos primeiro. Mitsuo casa só pelo nome (canal automático).
+const VENDEDOR_MATCH = [
+  { key: 'JoaoG',    partes: ['joao', 'guilherme'] },
+  { key: 'JoaoP',    partes: ['joao', 'paulo'] },
+  { key: 'GabrielP', partes: ['gabriel', 'poloni'] },
+  { key: 'Guilherme',partes: ['guilherme', 'trinchao'] },
+  { key: 'Felipe',   partes: ['felipe', 'padovani'] },
+  { key: 'Pedro',    partes: ['pedro', 'barach'] },
+  { key: 'Lorena',   partes: ['lorena', 'ruas'] },
+  { key: 'Walisson', partes: ['walisson', 'henrique'] },
+  { key: 'GustavoH', partes: ['gustavo', 'henrique'] },
+  { key: 'Thalita',  partes: ['thalita', 'azevedo'] },
+  { key: 'Jocinete', partes: ['jocinete', 'pereira'] },
+  { key: 'Vanessa',  partes: ['vanessa', 'vieira'] },
+  // Não entram na listagem de vendedores (só somam no total):
+  { key: '__OUTROS__', partes: ['aline', 'silva'] },  // líder
+  { key: '__OUTROS__', partes: ['mitsuo'] },          // canal automático (só nome)
+  { key: 'Daniel',   partes: ['daniel'] }
+];
+
+function normalizarUtm(s){
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // remove acentos
+    .replace(/[_\-.]+/g,' ');                         // separadores viram espaço
+}
+
 function mapearVendedor(utm){
   if(!utm) return null;
-  const s = String(utm).toLowerCase();
-  if(s.includes('joao-guilherme') || s.includes('joao_guilherme')) return 'JoaoG';
-  if(s.includes('joao-paulo') || s.includes('joao_paulo')) return 'JoaoP';
-  if(s.includes('gabriel-poloni') || s.includes('gabriel_poloni') || s.includes('poloni')) return 'GabrielP';
-  if(s.includes('guilherme') || s.includes('trinchao') || s.includes('trinchão')) return 'Guilherme';
-  if(s.includes('felipe') || s.includes('padovani')) return 'Felipe';
-  if(s.includes('pedro') || s.includes('barach')) return 'Pedro';
-  if(s.includes('lorena') || s.includes('ruas')) return 'Lorena';
-  if(s.includes('walisson') || s.includes('henrique')) return 'Walisson';
-  if(s.includes('thalita') || s.includes('azevedo')) return 'Thalita';
-  if(s.includes('jocinete') || s.includes('pereira')) return 'Jocinete';
-  if(s.includes('vanessa') || s.includes('vieira')) return 'Vanessa';
-  if(s.includes('gustavo') || s.includes('henrique')) return 'GustavoH';
-  // Vendas que entram só na somatória total, sem aparecer na listagem de vendedores:
-  // Mitsuo = vendas automáticas; Aline = líder (não entra em rankings/competições).
-  if(s.includes('mitsuo')) return '__OUTROS__';
-  if(s.includes('aline')) return '__OUTROS__';
-  if(s.includes('daniel') || s.includes('godoy')) return 'Daniel';
+  const s = normalizarUtm(utm);
+  // Casa o primeiro vendedor cujas TODAS as partes estejam presentes no UTM.
+  for(const v of VENDEDOR_MATCH){
+    if(v.partes.every(p => s.includes(p))) return v.key;
+  }
   return null;
 }
+
 
 function displayName(v){
   if(v === 'JoaoG') return 'João Guilherme';
