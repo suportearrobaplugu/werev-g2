@@ -644,6 +644,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <button class="sb-item" data-tab="funil" onclick="setTab('funil')"><span class="sb-ic">🚦</span><span class="sb-txt">Funil &amp; Taxa de Passagem</span></button>
       <button class="sb-item" data-tab="taxapassagem" onclick="setTab('taxapassagem')"><span class="sb-ic">📉</span><span class="sb-txt">Taxa de Passagem</span></button>
       <button class="sb-item" data-tab="reembolsos" onclick="setTab('reembolsos')"><span class="sb-ic">💸</span><span class="sb-txt">Reembolsos</span></button>
+      <button class="sb-item" data-tab="nirla" onclick="setTab('nirla')"><span class="sb-ic">🧪</span><span class="sb-txt">MVP Nirla</span></button>
       <div class="sb-grp">Cultura &amp; Operação</div>
       <button class="sb-item" data-tab="regras" onclick="setTab('regras')"><span class="sb-ic">📋</span><span class="sb-txt">Regras e Combinados</span></button>
       <button class="sb-item" data-tab="rotina" onclick="setTab('rotina')"><span class="sb-ic">🗓️</span><span class="sb-txt">Rotina</span></button>
@@ -980,6 +981,18 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <a href="https://docs.google.com/document/d/e/2PACX-1vQPoFH87Kgwqp6b2OVo8no2RuQ83P7276_1_UJWH2do4ee8cblAJhNP3fVTDrcjIRHhPuh9-mE_k54n/pub" target="_blank" rel="noopener" style="margin-left:auto;align-self:center;font-size:12px;color:var(--muted);text-decoration:none">Abrir documento ↗</a>
     </div>
     <div id="rotinaContent"><div style="padding:24px;text-align:center;color:var(--muted)">Carregando rotina…</div></div>
+  </div>
+
+  <div id="tab-nirla" class="tab-content">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+      <div class="section-title" style="margin:0">🧪 MVP Nirla</div>
+      <a href="nirla.html" target="_blank" rel="noopener" style="margin-left:auto;font-size:12px;color:var(--muted);text-decoration:none">Abrir em nova aba ↗</a>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--bg)">
+      <iframe id="nirlaFrame" title="MVP Nirla"
+              style="width:100%;height:calc(100vh - 190px);min-height:600px;border:0;display:block"
+              loading="lazy"></iframe>
+    </div>
   </div>
 
   <div id="tab-regras" class="tab-content">
@@ -5458,6 +5471,11 @@ function setTab(tab){
   if(tab==='relatorios'){ renderRelEventos(); }
   if(tab==='rotina' && !window._rotinaCarregada){ carregarRotina(); }
   if(tab==='reembolsos'){ carregarReembolsos(); }
+  // MVP Nirla: dashboard independente, carregado em iframe só na primeira abertura
+  if(tab==='nirla'){
+    const fr = document.getElementById('nirlaFrame');
+    if(fr && !fr.src) fr.src = 'nirla.html';
+  }
   // expande/recolhe submenu de Processos
   const subProc = document.getElementById('sbSubProcessos');
   const parentProc = document.querySelector('.sb-parent');
@@ -6564,11 +6582,11 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 
-// Iniciar aba a partir da URL
+// Iniciar aba a partir da URL (qualquer aba existente, ex: ?aba=nirla)
 const urlParams = new URLSearchParams(window.location.search);
 const tabInicial = urlParams.get('aba');
-if(tabInicial === 'recordes'){
-  setTab('recordes');
+if(tabInicial && document.getElementById('tab-' + tabInicial)){
+  setTab(tabInicial);
 }
 
 carregarDados();
