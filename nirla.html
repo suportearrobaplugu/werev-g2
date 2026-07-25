@@ -693,8 +693,8 @@ const COLS = {
   proprietario:['proprietario','responsavel','vendedor','dono'],
   conexao:['conexao','conexao (numero do whatsapp)','numero do whatsapp'],
   pipeline:['pipeline','funil'],
-  etapa:['etapa do crm','etapa','estagio'],
-  motivo:['motivo de perda','motivo']
+  etapa:['etapa do crm','etapa_crm','etapa','estagio'],
+  motivo:['motivo de perda','motivo_perda','motivo']
 };
 
 function mapHeaders(header){
@@ -775,7 +775,7 @@ function shortPipeline(raw){
 function ingest(rows){
   if(!rows.length) throw new Error('A planilha voltou vazia.');
   const idx = mapHeaders(rows[0]);
-  const faltando = ['data','acao','pipeline','etapa'].filter(k=>idx[k]<0);
+  const faltando = ['data','acao','etapa'].filter(k=>idx[k]<0);
   if(faltando.length) throw new Error('Colunas não encontradas no CSV: '+faltando.join(', ')+'. Verifique o cabeçalho da planilha.');
 
   const get=(r,k)=> idx[k]>=0 ? (r[idx[k]]||'').trim() : '';
@@ -787,7 +787,8 @@ function ingest(rows){
     const row=rows[r]; if(!row || row.every(c=>(c||'').trim()==='')) continue;
     const cls=classAcao(get(row,'acao')); if(!cls) continue;
     const dt=parseData(get(row,'data'), get(row,'hora')); if(!dt) continue;
-    const pipeline=get(row,'pipeline'); if(!pipeline) continue;
+    // pipeline pode vir vazio (ex.: Supabase sem essa coluna preenchida) — usa um funil padrão.
+    const pipeline=get(row,'pipeline') || 'Geral';
     const etapa=get(row,'etapa');
     const owner=get(row,'proprietario')||'—';
     const phone=get(row,'telefone')||get(row,'nome')||('row'+r);   // chave de unicidade
