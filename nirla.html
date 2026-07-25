@@ -495,8 +495,15 @@
    ============================================================ */
 // Fonte de dados (CSV publicado OU URL do Web App do Apps Script terminada em /exec).
 // Pode ser trocada pela engrenagem ⚙️ no topo, sem editar o código.
+// Fonte de EVENTOS migrada para o Supabase (funil). A anon key é pública;
+// a segurança vem do RLS com policy somente de SELECT na tabela 'eventos'.
+const SUPABASE_EVENTOS = {
+  url: 'https://rsbyofxpckejvpogylcq.supabase.co/rest/v1/eventos',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzYnlvZnhwY2tlanZwb2d5bGNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5MTYyNTQsImV4cCI6MjEwMDQ5MjI1NH0.hkkyCE8l5tgEZ449Rx05wHluzVY97zku_Fa6sFpjkrw'
+};
 let CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQu8xkQgS7fFMldOUa1ThCNiqQXHK0XROrxN7sim2gObsdJ3UIDV3396X0jWbx8fYBO2KAhYDormkvn/pub?output=csv';
-try{ const saved = localStorage.getItem('werev_src'); if(saved) CSV_URL = saved; }catch(e){}
+// Ignora fonte salva antiga (Sheets) no localStorage — os eventos agora vêm do Supabase.
+try{ const saved = localStorage.getItem('werev_src'); if(saved && saved.includes('supabase')) CSV_URL = saved; }catch(e){}
 // Se a fonte for um Apps Script (/exec), não precisa de proxy — já vem com CORS liberado.
 const isAppsScript = u => /script\.google(usercontent)?\.com/.test(u);
 
@@ -998,12 +1005,32 @@ function showBanner(msg, kind){
     <div class="mut text-xs mt-2">${hint}</div>`;
 }
 
+// Busca eventos do Supabase (JSON) e converte para texto CSV, para reaproveitar o parseCSV/ingest do Nirla.
+async function fetchEventosSupabaseCsv(){
+  const resp = await fetch(SUPABASE_EVENTOS.url + '?select=*', {
+    headers: {
+      'apikey': SUPABASE_EVENTOS.anonKey,
+      'Authorization': 'Bearer ' + SUPABASE_EVENTOS.anonKey
+    },
+    cache: 'no-store'
+  });
+  if(!resp.ok) throw new Error('Supabase HTTP ' + resp.status);
+  const dados = await resp.json();
+  if(!Array.isArray(dados) || !dados.length) throw new Error('Supabase retornou vazio (verifique a policy de SELECT).');
+  const cols = Object.keys(dados[0]);
+  const esc = v => { v = (v==null?'':String(v)); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
+  const linhas = [ cols.join(',') ];
+  for(const obj of dados) linhas.push(cols.map(c => esc(obj[c])).join(','));
+  console.log('[Eventos] Supabase:', dados.length, 'registros');
+  return linhas.join('\n');
+}
+
 async function loadData(){
   document.getElementById('banner').classList.add('hidden');
-  document.getElementById('status').textContent='Carregando planilha…';
-  let text, via;
-  try{ ({ text, via } = await fetchCsvText()); }
-  catch(err){ return showBanner(err.message, 'net'); }
+  document.getElementById('status').textContent='Carregando eventos…';
+  let text, via='supabase';
+  try{ text = await fetchEventosSupabaseCsv(); }
+  catch(err){ return showBanner('Falha ao carregar eventos do Supabase: ' + err.message, 'net'); }
   try{
     const info = applyCsvText(text);
     const now=new Date();
