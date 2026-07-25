@@ -1008,21 +1008,31 @@ function showBanner(msg, kind){
 
 // Busca eventos do Supabase (JSON) e converte para texto CSV, para reaproveitar o parseCSV/ingest do Nirla.
 async function fetchEventosSupabaseCsv(){
-  const resp = await fetch(SUPABASE_EVENTOS.url + '?select=*', {
-    headers: {
-      'apikey': SUPABASE_EVENTOS.anonKey,
-      'Authorization': 'Bearer ' + SUPABASE_EVENTOS.anonKey
-    },
-    cache: 'no-store'
-  });
-  if(!resp.ok) throw new Error('Supabase HTTP ' + resp.status);
-  const dados = await resp.json();
-  if(!Array.isArray(dados) || !dados.length) throw new Error('Supabase retornou vazio (verifique a policy de SELECT).');
+  const PAGE = 1000, MAX_PAGINAS = 200;
+  let dados = [];
+  for(let p = 0; p < MAX_PAGINAS; p++){
+    const de = p * PAGE, ate = de + PAGE - 1;
+    const resp = await fetch(SUPABASE_EVENTOS.url + '?select=*&order=data.asc,hora.asc', {
+      headers: {
+        'apikey': SUPABASE_EVENTOS.anonKey,
+        'Authorization': 'Bearer ' + SUPABASE_EVENTOS.anonKey,
+        'Range-Unit': 'items',
+        'Range': de + '-' + ate
+      },
+      cache: 'no-store'
+    });
+    if(!resp.ok && resp.status !== 206) throw new Error('Supabase HTTP ' + resp.status);
+    const bloco = await resp.json();
+    if(!Array.isArray(bloco)) throw new Error('Resposta inesperada do Supabase');
+    dados = dados.concat(bloco);
+    if(bloco.length < PAGE) break;
+  }
+  if(!dados.length) throw new Error('Supabase retornou vazio (verifique a policy de SELECT).');
   const cols = Object.keys(dados[0]);
   const esc = v => { v = (v==null?'':String(v)); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
   const linhas = [ cols.join(',') ];
   for(const obj of dados) linhas.push(cols.map(c => esc(obj[c])).join(','));
-  console.log('[Eventos] Supabase:', dados.length, 'registros');
+  console.log('[Eventos] Supabase: total de', dados.length, 'registros (paginado)');
   return linhas.join('\n');
 }
 

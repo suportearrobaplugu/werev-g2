@@ -6301,18 +6301,28 @@ function processarTMB(csvText, acc){
 // Busca os eventos no Supabase (JSON) e converte para o formato "rows" (cabeçalho + linhas)
 // que processarEventos já entende — assim a lógica do funil não muda.
 async function fetchEventosSupabase(){
-  const url = SUPABASE_EVENTOS.url + '?select=*';
-  const resp = await fetch(url, {
-    headers: {
-      'apikey': SUPABASE_EVENTOS.anonKey,
-      'Authorization': 'Bearer ' + SUPABASE_EVENTOS.anonKey
-    }
-  });
-  if(!resp.ok) throw new Error('Supabase HTTP ' + resp.status);
-  const dados = await resp.json();
-  if(!Array.isArray(dados)) throw new Error('Resposta do Supabase não é uma lista');
-  console.log('[Eventos] Supabase retornou', dados.length, 'registros');
-  return jsonParaRows(dados);
+  const PAGE = 1000;              // limite do PostgREST por requisição
+  const MAX_PAGINAS = 200;       // teto de segurança (200 mil linhas)
+  let todos = [];
+  for(let p = 0; p < MAX_PAGINAS; p++){
+    const de = p * PAGE, ate = de + PAGE - 1;
+    const url = SUPABASE_EVENTOS.url + '?select=*&order=data.asc,hora.asc';
+    const resp = await fetch(url, {
+      headers: {
+        'apikey': SUPABASE_EVENTOS.anonKey,
+        'Authorization': 'Bearer ' + SUPABASE_EVENTOS.anonKey,
+        'Range-Unit': 'items',
+        'Range': de + '-' + ate
+      }
+    });
+    if(!resp.ok && resp.status !== 206) throw new Error('Supabase HTTP ' + resp.status);
+    const bloco = await resp.json();
+    if(!Array.isArray(bloco)) throw new Error('Resposta do Supabase não é uma lista');
+    todos = todos.concat(bloco);
+    if(bloco.length < PAGE) break; // última página
+  }
+  console.log('[Eventos] Supabase: total de', todos.length, 'registros (paginado)');
+  return jsonParaRows(todos);
 }
 
 // Converte [{col:val,...}, ...] em [[header...], [val...], ...]
