@@ -1295,6 +1295,33 @@ const TMB_CSV_URL = TENANT.tmb || null;
 // Percentual do "Valor Principal" que efetivamente cai como líquido nas vendas TMB (boleto parcelado)
 const TMB_LIQUIDO_PCT = 0.5;
 
+// Índice de vendas por telefone, usado pra cruzar faturamento (Hubla/TMB) com os
+// leads do CRM (eventos). O CRM não preenche valor, mas preenche telefone.
+// telKey -> [ { id, valor, dataKey, plat } ]
+let VENDAS_POR_TEL = {};
+let TEL_STATS = { vendas:0, comTel:0, semTel:0 };
+
+// Canoniza telefone BR pra comparação: tira +55, tira o 9º dígito de celular.
+// "(31) 99123-4567" / "+5531991234567" / "3191234567" -> "3191234567"
+function telKey(t){
+  let d = String(t || '').replace(/\D/g, '');
+  if(!d) return '';
+  if(d.length > 11 && d.startsWith('55')) d = d.slice(2);
+  if(d.length > 11) d = d.slice(-11);
+  if(d.length === 11) d = d.slice(0,2) + d.slice(3); // remove o 9 do celular
+  return d.length === 10 ? d : '';
+}
+
+function registrarVendaTel(tel, valor, data, plat){
+  TEL_STATS.vendas++;
+  const k = telKey(tel);
+  if(!k || !(valor > 0)){ TEL_STATS.semTel++; return; }
+  TEL_STATS.comTel++;
+  const dataKey = `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}`;
+  if(!VENDAS_POR_TEL[k]) VENDAS_POR_TEL[k] = [];
+  VENDAS_POR_TEL[k].push({ id: plat + ':' + VENDAS_POR_TEL[k].length + ':' + dataKey + ':' + valor, valor, dataKey, plat });
+}
+
 // ===== Planilha de Eventos (funil / taxa de passagem) =====
 // Publicada via Arquivo > Compartilhar > Publicar na web > aba Eventos_Unnichat > CSV
 // IMPORTANTE: confirmar o gid da aba Eventos_Unnichat. Se a aba não for a primeira,
@@ -4229,11 +4256,11 @@ function renderTaxaPassagem(){
     const ticket = nComValor > 0 ? fat / nComValor : 0;
     let fatSub;
     if(fat > 0){
-      const semValor = nVenda - nComValor;
+      const semMatch = nVenda - nComValor;
       fatSub = `ticket médio ${fmtMoney(ticket)}`
-        + (semValor > 0 ? ` · ${semValor} venda(s) sem valor no evento` : '');
+        + (semMatch > 0 ? ` · ${semMatch} de ${nVenda} sem match por telefone` : '');
     } else {
-      fatSub = nVenda > 0 ? 'sem valor registrado nos eventos de Ganho' : 'sem vendas no período';
+      fatSub = nVenda > 0 ? `nenhuma das ${nVenda} vendas casou por telefone` : 'sem vendas no período';
     }
     let h = `<div class="card" style="padding:16px;display:flex;flex-direction:column${destaque?';border:1px solid var(--accent)':''}">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:2px">
@@ -6190,6 +6217,9 @@ function displayName(v){
 function processarCSV(csvText){
   const rows = parseCSV(csvText);
   if(rows.length < 2) throw new Error('CSV vazio ou inválido');
+  // Hubla é o primeiro a rodar: zera o índice de telefones (TMB depois só acrescenta)
+  VENDAS_POR_TEL = {};
+  TEL_STATS = { vendas:0, comTel:0, semTel:0 };
   
   const header = rows[0].map(h => String(h).trim());
   const idxData = header.findIndex(h => h.toLowerCase() === 'data');
@@ -6282,6 +6312,7 @@ function processarCSV(csvText){
     }
     
     const dataKey = `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}`;
+    registrarVendaTel(telefone, valor, data, 'hubla');
     
     // Inicializa dia se não existe
     if(!acc[mesKey].porDia[dataKey]){
@@ -6398,6 +6429,7 @@ function processarTMB(csvText, acc){
     const telefone = idxTel >= 0 ? (row[idxTel]||'').trim() : '';
 
     const dataKey = `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}`;
+    registrarVendaTel(telefone, valor, data, 'tmb');
 
     if(!acc[mesKey].porDia[dataKey]){
       acc[mesKey].porDia[dataKey] = {
@@ -6502,8 +6534,10 @@ function processarEventos(entrada){
   const idxOrigem = header.findIndex(h => h === 'origem');
   const idxAcao = header.findIndex(h => h === 'acao');
   // Valor da venda no evento de Ganho (nome da coluna pode variar: valor, valor_venda, vlr...)
-  const idxValorEv = header.findIndex(h => h.includes('valor') || h === 'vlr');
-  if(idxValorEv < 0) console.warn('[Eventos] Coluna de valor não encontrada — faturamento por segmento ficará indisponível. Cabeçalhos:', header.join(', '));
+  // O CRM não preenche valor (valor_total / valor_liquido vêm vazios), então o
+  // faturamento por segmento vem do cruzamento por TELEFONE com Hubla/TMB.
+  const idxTelEv = header.findIndex(h => h.includes('telefone') || h.includes('fone') || h.includes('whats'));
+  if(idxTelEv < 0) console.warn('[Eventos] Coluna de telefone não encontrada — faturamento por segmento ficará indisponível. Cabeçalhos:', header.join(', '));
 
   if(idxEmail < 0 || idxProp < 0 || idxEtapa < 0){
     console.warn('[Eventos] Colunas não encontradas. Cabeçalhos:', header.join(', '));
@@ -6551,14 +6585,13 @@ function processarEventos(entrada){
       const etNum = parseInt(etapaNum(row[idxEtapa]) || '0', 10);
       if(!porSegmentoDia[dataKey]) porSegmentoDia[dataKey] = {};
       if(!porSegmentoDia[dataKey][seg]) porSegmentoDia[dataKey][seg] = {};
-      const reg = porSegmentoDia[dataKey][seg][email] || { max: 0, ganho: false, valor: 0 };
+      const reg = porSegmentoDia[dataKey][seg][email] || { max: 0, ganho: false, tel: '' };
       if(etNum > reg.max) reg.max = etNum;
       if(ganho) reg.ganho = true;
-      // Só lê o valor no evento de Ganho. Se o mesmo lead tiver mais de um Ganho,
-      // fica o MAIOR valor (não soma), pra casar com o funil que conta o lead 1x.
-      if(ganho && idxValorEv >= 0){
-        const vEv = parseValorBR(row[idxValorEv]);
-        if(vEv > reg.valor) reg.valor = vEv;
+      // Guarda o telefone canonizado do lead (chave do cruzamento com as vendas)
+      if(!reg.tel && idxTelEv >= 0){
+        const tk = telKey(row[idxTelEv]);
+        if(tk) reg.tel = tk;
       }
       porSegmentoDia[dataKey][seg][email] = reg;
     }
@@ -6708,30 +6741,45 @@ function calcularFunilSegmentos(){
       const leads = diaSeg[seg];
       Object.keys(leads).forEach(email => {
         const reg = leads[email];
-        const cur = alvo.get(email) || { max: 0, ganho: false, valor: 0 };
+        const cur = alvo.get(email) || { max: 0, ganho: false, tel: '' };
         if(reg.max > cur.max) cur.max = reg.max;
         if(reg.ganho) cur.ganho = true;
-        if((reg.valor||0) > cur.valor) cur.valor = reg.valor||0;
+        if(!cur.tel && reg.tel) cur.tel = reg.tel;
         alvo.set(email, cur);
         // total consolidado
-        const curT = totalMap.get(email) || { max: 0, ganho: false, valor: 0 };
+        const curT = totalMap.get(email) || { max: 0, ganho: false, tel: '' };
         if(reg.max > curT.max) curT.max = reg.max;
         if(reg.ganho) curT.ganho = true;
-        if((reg.valor||0) > curT.valor) curT.valor = reg.valor||0;
+        if(!curT.tel && reg.tel) curT.tel = reg.tel;
         totalMap.set(email, curT);
       });
     });
   });
 
   // De um Map(email -> {max,ganho}) para contagem cumulativa por etapa + venda
+  const diasSet = new Set(dias);
   const contarCumulativo = (mapa) => {
     // etapa N = nº de leads com max >= N. venda = nº de leads com ganho=true.
     const cont = { '1':0, '2':0, '3':0, '4':0, venda:0, _fat:0, _fatLeads:0 };
+    // Uma venda só pode ser contada uma vez, mesmo que dois leads (e-mails
+    // diferentes) compartilhem o mesmo telefone.
+    const vendasUsadas = new Set();
     mapa.forEach(reg => {
       for(let n = 1; n <= 4; n++){ if(reg.max >= n || reg.ganho) cont[String(n)]++; }
       if(reg.ganho){
         cont.venda++;
-        if(reg.valor > 0){ cont._fat += reg.valor; cont._fatLeads++; }
+        // Cruza pelo telefone: soma as vendas Hubla/TMB desse lead que caem
+        // dentro do MESMO recorte de datas do funil.
+        const vendas = reg.tel ? (VENDAS_POR_TEL[reg.tel] || []) : [];
+        let casou = 0;
+        vendas.forEach(vd => {
+          if(!vendasUsadas.has(vd.id) && diasSet.has(vd.dataKey)){
+            cont._fat += vd.valor;
+            vendasUsadas.add(vd.id);
+            casou++;
+          }
+        });
+        if(casou > 0) cont._fatLeads++;
       }
     });
     return cont;
@@ -6846,6 +6894,9 @@ async function carregarDados(forceRefresh = false){
       EVENTOS = processarEventos(rowsEv);
       if(EVENTOS) console.log('[Eventos] Processado. Horas ativas:', EVENTOS.periodo.horasAtivas);
       else console.warn('[Eventos] processarEventos retornou null (verifique nomes das colunas)');
+      console.log('[Cruzamento tel] vendas indexadas:', TEL_STATS.comTel, 'de', TEL_STATS.vendas,
+                  '| telefones únicos:', Object.keys(VENDAS_POR_TEL).length,
+                  '| sem telefone válido:', TEL_STATS.semTel);
     } catch(evErr){
       console.warn('[Eventos] Erro ao carregar do Supabase (funil indisponível):', evErr.message);
       EVENTOS = null;
