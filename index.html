@@ -153,6 +153,9 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 .rel-hour-pill.cold{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:#fca5a5}
 .relatorios-empty{padding:40px;text-align:center;color:var(--muted);font-style:italic;background:var(--card);border:1px dashed var(--border);border-radius:12px}
 .grid-4{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.funil-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+@media (max-width:1100px){.funil-grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:820px){.funil-grid{grid-template-columns:1fr}}
 .grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
 .grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
 .card{background:linear-gradient(135deg,var(--card) 0%,var(--card2) 100%);border:1px solid var(--border);border-radius:16px;padding:24px;position:relative;overflow:hidden}
@@ -1477,9 +1480,12 @@ function renderKPIs(){
   const plat = d.porPlataforma || { hubla: 0, tmb: 0 };
   const elPlat = document.getElementById('kpiFatPlataformas');
   if(elPlat){
-    elPlat.textContent = plat.tmb > 0
+    const re = d.reembolsos ? d.reembolsos.total : 0;
+    let txt = plat.tmb > 0
       ? `Hubla: ${fmtMoney(plat.hubla)} · TMB: ${fmtMoney(plat.tmb)}`
       : `Hubla: ${fmtMoney(plat.hubla)}`;
+    if(re > 0) txt += ` · Reemb: −${fmtMoney(re)}`;
+    elPlat.textContent = txt;
   }
   
   document.getElementById('kpiMeta').textContent = pct.toFixed(0) + '%';
@@ -4201,39 +4207,52 @@ function renderTaxaPassagem(){
   // Um funil por segmento (origem) + um Total. Cada etapa conta quantos leads
   // ALCANÇARAM pelo menos aquela etapa, então a passagem nunca ultrapassa 100%.
   const ETAPAS_VIZ = [
-    { key:'1',    nome:'1ª Mensagem', cor:'#2a78d6' },
-    { key:'2',    nome:'Em Contato',  cor:'#1baf7a' },
-    { key:'3',    nome:'Negociação',  cor:'#eda100' },
-    { key:'4',    nome:'Link Pgto',   cor:'#eb6834' },
-    { key:'venda',nome:'Venda',       cor:'#4a3aa7' }
+    { key:'1',    nome:'1. 1ª Mensagem respondida', cor:'#2a78d6' },
+    { key:'2',    nome:'2. Em Contato',             cor:'#1baf7a' },
+    { key:'3',    nome:'3. Negociação',             cor:'#eda100' },
+    { key:'4',    nome:'4. Link Pgto enviado',      cor:'#eb6834' },
+    { key:'venda',nome:'5. Venda',                  cor:'#4a3aa7' }
   ];
 
   const desenhaFunil = (titulo, cont, nLeads, destaque) => {
     const passos = ETAPAS_VIZ.map(e => ({ nome:e.nome, valor:cont[e.key]||0, cor:e.cor }));
     const maxF = Math.max(passos[0].valor, 1);
-    let h = `<div class="card" style="padding:20px;margin-bottom:16px${destaque?';border:1px solid var(--accent)':''}">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
-        <div style="font-weight:800;color:var(--text-strong);font-size:15px">${titulo}</div>
-        <div style="font-size:12px;color:var(--muted)">${nLeads.toLocaleString('pt-BR')} leads</div>
+    // Taxa que pula as etapas do meio: de quem chegou em Em Contato, quantos fecharam.
+    const nContato = cont['2'] || 0;
+    const nVenda   = cont['venda'] || 0;
+    const c2v = nContato > 0 ? (nVenda / nContato) * 100 : null;
+    const c2vTxt = c2v === null ? '—' : c2v.toFixed(1).replace('.', ',') + '%';
+    let h = `<div class="card" style="padding:16px;display:flex;flex-direction:column${destaque?';border:1px solid var(--accent)':''}">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:2px">
+        <div style="font-weight:800;color:var(--text-strong);font-size:14px;line-height:1.25">${titulo}</div>
+        <div style="font-size:11px;color:var(--muted);white-space:nowrap">${nLeads.toLocaleString('pt-BR')} leads</div>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Leads que alcançaram pelo menos cada etapa. A queda entre etapas é a passagem real.</div>
-      <div style="display:flex;flex-direction:column;gap:6px">`;
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Leads que alcançaram pelo menos cada etapa.</div>
+      <div style="display:flex;flex-direction:column;gap:8px;flex:1">`;
     passos.forEach((p,i) => {
       const wBar = Math.max((p.valor/maxF)*100, 2);
       const anterior = i>0 ? passos[i-1].valor : null;
       const conv = (anterior && anterior>0) ? Math.round((p.valor/anterior)*100) : null;
       const corConv = (conv!==null && conv<40) ? '#d95926' : 'var(--muted)';
-      h += `<div style="display:flex;align-items:center;gap:12px">
-        <div style="width:96px;font-size:12px;color:var(--muted);text-align:right">${p.nome}</div>
-        <div style="flex:1;height:38px;background:var(--bg);border-radius:6px;overflow:hidden">
-          <div style="width:${wBar}%;height:100%;background:${p.cor};border-radius:6px;display:flex;align-items:center;padding-left:12px;min-width:46px;box-sizing:border-box">
-            <span style="font-size:15px;font-weight:700;color:#fff">${p.valor.toLocaleString('pt-BR')}</span>
+      h += `<div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-bottom:3px">
+          <span style="font-size:11.5px;color:var(--muted);font-weight:600">${p.nome}</span>
+          <span style="font-size:11px;color:${corConv};white-space:nowrap">${conv!==null?('↓ '+conv+'%'):''}</span>
+        </div>
+        <div style="height:30px;background:var(--bg);border-radius:5px;overflow:hidden">
+          <div style="width:${wBar}%;height:100%;background:${p.cor};border-radius:5px;display:flex;align-items:center;padding-left:9px;min-width:44px;box-sizing:border-box">
+            <span style="font-size:13.5px;font-weight:700;color:#fff">${p.valor.toLocaleString('pt-BR')}</span>
           </div>
         </div>
-        <div style="width:92px;font-size:12px;color:${corConv}">${conv!==null?('↓ '+conv+'% passou'):''}</div>
       </div>`;
     });
-    h += `</div></div>`;
+    h += `</div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+        <span style="font-size:11.5px;color:var(--muted);font-weight:600">2. Em Contato → 5. Venda</span>
+        <span style="font-size:16px;font-weight:800;color:var(--text-strong)">${c2vTxt}</span>
+      </div>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:2px">${nContato.toLocaleString('pt-BR')} em contato · ${nVenda.toLocaleString('pt-BR')} vendas</div>
+    </div>`;
     return h;
   };
 
@@ -4241,12 +4260,14 @@ function renderTaxaPassagem(){
   let bFunil = '';
   if(fSeg){
     bFunil += `<div style="font-weight:800;color:var(--text-strong);font-size:16px;margin:4px 0 12px">🧭 Funil de passagem</div>`;
+    bFunil += `<div class="funil-grid">`;
     // Total primeiro (destacado)
     bFunil += desenhaFunil('Total · todos os segmentos', fSeg.total, fSeg.totalLeads, true);
     // Um funil por segmento
     fSeg.segmentos.forEach(s => {
       bFunil += desenhaFunil(s.seg, s.cont, s.leads, false);
     });
+    bFunil += `</div>`;
   }
 
   const pct = x => (x*100).toFixed(1).replace('.0','') + '%';
@@ -5130,6 +5151,8 @@ function responderChat(q){
 // ===== Aba Reembolsos: lê a aba BD Reembolso da planilha de vendas =====
 const REEMBOLSOS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBV0F7S_7b1qi9WFTeGORVnJZ6J76tYEvPqAmWQjtwIsSv-dgbuOq_Qqef4YWNKIz0D1F8n_dqHK_F/pub?gid=595173569&single=true&output=csv';
 let REEMBOLSOS_DADOS = null;
+const MESES_KEYS = ['abril','maio','junho','julho'];
+const MES_NUM_KEY = { 4:'abril', 5:'maio', 6:'junho', 7:'julho' };
 
 // valor que trata tanto 1.199,88 quanto 1199.88
 function parseValorBR(v){
@@ -5147,14 +5170,22 @@ function parseValorBR(v){
   return isNaN(n) ? 0 : n;
 }
 
+// Busca e processa a base de reembolsos (todos os meses). Usada tanto no carregamento
+// principal (pra abater do faturamento) quanto pela aba.
+async function fetchReembolsos(){
+  const resp = await fetch(REEMBOLSOS_CSV_URL + '&_t=' + Date.now(), { cache:'no-store' });
+  if(!resp.ok) throw new Error('HTTP '+resp.status);
+  const txt = await resp.text();
+  REEMBOLSOS_DADOS = processarReembolsos(txt);
+  return REEMBOLSOS_DADOS;
+}
+
 async function carregarReembolsos(){
   const el = document.getElementById('reembolsosContent');
+  if(REEMBOLSOS_DADOS){ renderReembolsos(); return; }
   el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Carregando reembolsos…</div>';
   try{
-    const resp = await fetch(REEMBOLSOS_CSV_URL + '&_t=' + Date.now(), { cache:'no-store' });
-    if(!resp.ok) throw new Error('HTTP '+resp.status);
-    const txt = await resp.text();
-    REEMBOLSOS_DADOS = processarReembolsos(txt);
+    await fetchReembolsos();
     renderReembolsos();
   }catch(e){
     console.warn('[Reembolsos] erro:', e);
@@ -5193,10 +5224,15 @@ function processarReembolsos(csvText){
   // se não achar coluna de vendedor por nome, tenta a coluna após "valor do vendedor"+método (M/13)
   const cVendedor = idxVendedorFinal >= 0 ? idxVendedorFinal : 17;
 
-  const eventos = [];
-  const porVendedor = {};
-  VENDEDORES.forEach(v => porVendedor[v] = { qtd:0, valor:0 });
-  let semVendedor = { qtd:0, valor:0 };
+  // Um bucket por mês. O reembolso é atribuído ao MÊS EM QUE O REEMBOLSO OCORREU
+  // (data do reembolso), não ao mês da venda original.
+  const novoBucket = () => {
+    const pv = {};
+    VENDEDORES.forEach(v => pv[v] = { qtd:0, valor:0 });
+    return { eventos:[], porVendedor:pv, semVendedor:{ qtd:0, valor:0 }, total:0 };
+  };
+  const porMes = {};
+  MESES_KEYS.forEach(m => porMes[m] = novoBucket());
 
   for(let i=1;i<rows.length;i++){
     const row = rows[i];
@@ -5204,8 +5240,12 @@ function processarReembolsos(csvText){
     const dataReemb = parseData(row[cDataReemb]);
     if(!dataReemb) continue;
 
-    // filtra pelo MÊS selecionado (currentMonth) usando a data do reembolso
-    if(dataReemb.mes !== mesNum(currentMonth)) continue;
+    const mesKey = MES_NUM_KEY[dataReemb.mes];
+    if(!mesKey) continue;
+    if(dataReemb.ano && dataReemb.ano !== 2026) continue;
+    const eventos = porMes[mesKey].eventos;
+    const porVendedor = porMes[mesKey].porVendedor;
+    const semVendedor = porMes[mesKey].semVendedor;
 
     const valor = parseValorBR(row[cValorVend]);
     const vendRaw = row[cVendedor] || '';
@@ -5222,16 +5262,52 @@ function processarReembolsos(csvText){
       valor, vendedor: vend, vendRaw
     };
     eventos.push(ev);
+    porMes[mesKey].total += valor;
     if(vend && porVendedor[vend]){ porVendedor[vend].qtd++; porVendedor[vend].valor += valor; }
     else { semVendedor.qtd++; semVendedor.valor += valor; }
   }
-  eventos.sort((a,b)=> (b.data.ano-a.data.ano)||(b.data.mes-a.data.mes)||(b.data.dia-a.data.dia));
-  return { eventos, porVendedor, semVendedor };
+  MESES_KEYS.forEach(m => {
+    porMes[m].eventos.sort((a,b)=> (b.data.ano-a.data.ano)||(b.data.mes-a.data.mes)||(b.data.dia-a.data.dia));
+  });
+  return { porMes };
+}
+
+// Abate os reembolsos do mês (data do reembolso) no faturamento total e por vendedor.
+// Guarda os valores brutos em faturamentoBruto / valorBruto para não perder a referência.
+function aplicarReembolsos(acc){
+  MESES_KEYS.forEach(m => {
+    const mes = acc[m];
+    if(!mes) return;
+    mes.faturamentoBruto = mes.totalFaturamento;
+    Object.keys(mes.porVendedor).forEach(v => {
+      mes.porVendedor[v].valorBruto = mes.porVendedor[v].valor;
+    });
+    const r = (REEMBOLSOS_DADOS && REEMBOLSOS_DADOS.porMes) ? REEMBOLSOS_DADOS.porMes[m] : null;
+    if(!r){ mes.reembolsos = { total:0, abatido:0, naoAbatido:0, porVendedor:{} }; return; }
+
+    let abatido = 0;
+    VENDEDORES.forEach(v => {
+      const rv = r.porVendedor[v] ? r.porVendedor[v].valor : 0;
+      if(rv > 0 && mes.porVendedor[v]){
+        mes.porVendedor[v].valor -= rv;
+        abatido += rv;
+      }
+    });
+    // reembolso sem vendedor mapeado (ou de vendedor sem venda no mês) abate só no total
+    mes.totalFaturamento = mes.faturamentoBruto - r.total;
+    mes.reembolsos = {
+      total: r.total,
+      abatido,
+      naoAbatido: r.total - abatido,
+      porVendedor: r.porVendedor,
+      qtd: r.eventos.length
+    };
+  });
 }
 
 function renderReembolsos(){
   const el = document.getElementById('reembolsosContent');
-  const d = REEMBOLSOS_DADOS;
+  const d = (REEMBOLSOS_DADOS && REEMBOLSOS_DADOS.porMes) ? REEMBOLSOS_DADOS.porMes[currentMonth] : null;
   if(!d || d.eventos.length === 0){
     el.innerHTML = `<div class="card" style="padding:24px;text-align:center;color:var(--muted)">
       <div style="font-size:28px;margin-bottom:6px">💸</div>
@@ -5246,7 +5322,11 @@ function renderReembolsos(){
   // vendas do mês por vendedor (da base DADOS já carregada)
   const mes = DADOS[currentMonth];
   const vendasVend = {};
-  VENDEDORES.forEach(v => vendasVend[v] = (mes && mes.porVendedor[v]) ? mes.porVendedor[v].valor : 0);
+  // valorBruto = antes do abatimento de reembolso (evita descontar duas vezes nesta aba)
+  VENDEDORES.forEach(v => {
+    const pv = (mes && mes.porVendedor[v]) ? mes.porVendedor[v] : null;
+    vendasVend[v] = pv ? (pv.valorBruto !== undefined ? pv.valorBruto : pv.valor) : 0;
+  });
   const totalVendasMes = VENDEDORES.reduce((a,v)=>a+vendasVend[v],0);
   const totalReembMes = d.eventos.reduce((a,e)=>a+e.valor,0);
 
@@ -6713,6 +6793,17 @@ async function carregarDados(forceRefresh = false){
       } catch(tmbErr){
         console.warn('[TMB] Erro ao carregar:', tmbErr.message);
       }
+    }
+
+    // Carrega os reembolsos e abate do faturamento (total + por vendedor).
+    // Se falhar, o dash segue com o faturamento bruto.
+    try {
+      await fetchReembolsos();
+      aplicarReembolsos(novosDados);
+      console.log('[Reembolsos] Aplicado. Julho:', novosDados.julho.reembolsos);
+    } catch(reErr){
+      console.warn('[Reembolsos] Erro ao carregar — faturamento fica BRUTO:', reErr.message);
+      aplicarReembolsos(novosDados); // ainda cria faturamentoBruto/valorBruto com reembolso zero
     }
 
     DADOS = novosDados;
