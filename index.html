@@ -4197,46 +4197,57 @@ function renderTaxaPassagem(){
   const f = calcularFunil();
   if(!f){ el.innerHTML = '<div class="card" style="padding:20px;color:var(--muted)">Sem dados.</div>'; return; }
 
-  // ---- BLOCO FUNIL: passagem por etapa, agregado da equipe (primeiro bloco) ----
-  const etapasFunil = [
-    { key:'1', nome:'1ª Mensagem',   cor:'#2a78d6' },
-    { key:'2', nome:'Em Contato',    cor:'#1baf7a' },
-    { key:'3', nome:'Negociação',    cor:'#eda100' },
-    { key:'4', nome:'Link Pgto',     cor:'#eb6834' }
+  // ---- BLOCO FUNIL: passagem por etapa, estilo Pipedrive (cumulativo, teto 100%) ----
+  // Um funil por segmento (origem) + um Total. Cada etapa conta quantos leads
+  // ALCANÇARAM pelo menos aquela etapa, então a passagem nunca ultrapassa 100%.
+  const ETAPAS_VIZ = [
+    { key:'1',    nome:'1ª Mensagem', cor:'#2a78d6' },
+    { key:'2',    nome:'Em Contato',  cor:'#1baf7a' },
+    { key:'3',    nome:'Negociação',  cor:'#eda100' },
+    { key:'4',    nome:'Link Pgto',   cor:'#eb6834' },
+    { key:'venda',nome:'Venda',       cor:'#4a3aa7' }
   ];
-  const totEtapa = {};
-  etapasFunil.forEach(e => {
-    totEtapa[e.key] = vendedoresDoMes(currentMonth).reduce((s,v)=> s + ((f.porVendedor[v]&&f.porVendedor[v].etapas[e.key])||0), 0);
-  });
-  const totVendaFunil = vendedoresDoMes(currentMonth).reduce((s,v)=> s + ((f.porVendedor[v]&&f.porVendedor[v].vendas)||0), 0);
-  const passos = [
-    { nome:'1ª Mensagem', valor:totEtapa['1'], cor:'#2a78d6' },
-    { nome:'Em Contato',  valor:totEtapa['2'], cor:'#1baf7a' },
-    { nome:'Negociação',  valor:totEtapa['3'], cor:'#eda100' },
-    { nome:'Link Pgto',   valor:totEtapa['4'], cor:'#eb6834' },
-    { nome:'Venda',       valor:totVendaFunil, cor:'#4a3aa7' }
-  ];
-  const maxFunil = Math.max(passos[0].valor, 1);
-  let bFunil = `<div class="card" style="padding:20px;margin-bottom:16px">
-    <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">Funil de passagem · equipe</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Volume em cada etapa e a taxa que passa de uma para a próxima. A maior queda mostra onde está o gargalo.</div>
-    <div style="display:flex;flex-direction:column;gap:6px">`;
-  passos.forEach((p,i) => {
-    const wBar = Math.max((p.valor/maxFunil)*100, 2);
-    const anterior = i>0 ? passos[i-1].valor : null;
-    const conv = (anterior && anterior>0) ? Math.round((p.valor/anterior)*100) : null;
-    const corConv = (conv!==null && conv<40) ? '#d95926' : 'var(--muted)';
-    bFunil += `<div style="display:flex;align-items:center;gap:12px">
-      <div style="width:96px;font-size:12px;color:var(--muted);text-align:right">${p.nome}</div>
-      <div style="flex:1;height:40px;background:var(--bg);border-radius:6px;overflow:hidden">
-        <div style="width:${wBar}%;height:100%;background:${p.cor};border-radius:6px;display:flex;align-items:center;padding-left:12px;min-width:46px;box-sizing:border-box">
-          <span style="font-size:16px;font-weight:700;color:#fff">${p.valor.toLocaleString('pt-BR')}</span>
-        </div>
+
+  const desenhaFunil = (titulo, cont, nLeads, destaque) => {
+    const passos = ETAPAS_VIZ.map(e => ({ nome:e.nome, valor:cont[e.key]||0, cor:e.cor }));
+    const maxF = Math.max(passos[0].valor, 1);
+    let h = `<div class="card" style="padding:20px;margin-bottom:16px${destaque?';border:1px solid var(--accent)':''}">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+        <div style="font-weight:800;color:var(--text-strong);font-size:15px">${titulo}</div>
+        <div style="font-size:12px;color:var(--muted)">${nLeads.toLocaleString('pt-BR')} leads</div>
       </div>
-      <div style="width:92px;font-size:12px;color:${corConv}">${conv!==null?('↓ '+conv+'% passou'):''}</div>
-    </div>`;
-  });
-  bFunil += `</div></div>`;
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Leads que alcançaram pelo menos cada etapa. A queda entre etapas é a passagem real.</div>
+      <div style="display:flex;flex-direction:column;gap:6px">`;
+    passos.forEach((p,i) => {
+      const wBar = Math.max((p.valor/maxF)*100, 2);
+      const anterior = i>0 ? passos[i-1].valor : null;
+      const conv = (anterior && anterior>0) ? Math.round((p.valor/anterior)*100) : null;
+      const corConv = (conv!==null && conv<40) ? '#d95926' : 'var(--muted)';
+      h += `<div style="display:flex;align-items:center;gap:12px">
+        <div style="width:96px;font-size:12px;color:var(--muted);text-align:right">${p.nome}</div>
+        <div style="flex:1;height:38px;background:var(--bg);border-radius:6px;overflow:hidden">
+          <div style="width:${wBar}%;height:100%;background:${p.cor};border-radius:6px;display:flex;align-items:center;padding-left:12px;min-width:46px;box-sizing:border-box">
+            <span style="font-size:15px;font-weight:700;color:#fff">${p.valor.toLocaleString('pt-BR')}</span>
+          </div>
+        </div>
+        <div style="width:92px;font-size:12px;color:${corConv}">${conv!==null?('↓ '+conv+'% passou'):''}</div>
+      </div>`;
+    });
+    h += `</div></div>`;
+    return h;
+  };
+
+  const fSeg = calcularFunilSegmentos();
+  let bFunil = '';
+  if(fSeg){
+    bFunil += `<div style="font-weight:800;color:var(--text-strong);font-size:16px;margin:4px 0 12px">🧭 Funil de passagem</div>`;
+    // Total primeiro (destacado)
+    bFunil += desenhaFunil('Total · todos os segmentos', fSeg.total, fSeg.totalLeads, true);
+    // Um funil por segmento
+    fSeg.segmentos.forEach(s => {
+      bFunil += desenhaFunil(s.seg, s.cont, s.leads, false);
+    });
+  }
 
   const pct = x => (x*100).toFixed(1).replace('.0','') + '%';
   const num = x => Number.isFinite(x) ? (Math.round(x*10)/10).toString().replace('.0','') : '—';
@@ -6390,11 +6401,21 @@ function processarEventos(entrada){
   const idxEtapa = header.findIndex(h => h.includes('etapa'));
   const idxStatus = header.findIndex(h => h === 'status');
   const idxMotivo = header.findIndex(h => h.includes('motivo'));
+  const idxOrigem = header.findIndex(h => h === 'origem');
+  const idxAcao = header.findIndex(h => h === 'acao');
 
   if(idxEmail < 0 || idxProp < 0 || idxEtapa < 0){
     console.warn('[Eventos] Colunas não encontradas. Cabeçalhos:', header.join(', '));
     return null;
   }
+
+  // Funil por segmento (coluna origem): segmento -> etapa -> Set(emails que registraram evento nessa etapa)
+  const SEGMENTO_SEM = 'Sem origem';
+  const porSegmento = {};
+  // Por dia, por segmento, por lead: a MAIOR etapa que o lead alcançou + se foi Ganho.
+  // Permite montar funil estilo Pipedrive (cumulativo, teto de 100%) respeitando o filtro de datas.
+  // porSegmentoDia[dataKey][segmento][email] = { max: <nº etapa>, ganho: bool }
+  const porSegmentoDia = {};
 
   const porVendedor = {};
   VENDEDORES.forEach(v => {
@@ -6418,6 +6439,22 @@ function processarEventos(entrada){
     const email = String(row[idxEmail]||'').trim().toLowerCase();
     const data = idxData >= 0 ? parseData(row[idxData]) : null;
     const dataKey = data ? `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}` : null;
+
+    // ---- Funil por SEGMENTO (independe do vendedor mapeado) ----
+    // Registra, por dia e por segmento, a maior etapa que cada lead (email) alcançou,
+    // e se houve "Ganho" (chegou ao fundo do funil = venda).
+    if(email && dataKey){
+      const seg = (idxOrigem >= 0 && String(row[idxOrigem]||'').trim()) ? String(row[idxOrigem]).trim() : SEGMENTO_SEM;
+      const acaoRaw = idxAcao >= 0 ? String(row[idxAcao]||'').toLowerCase() : '';
+      const ganho = acaoRaw.includes('ganho') || acaoRaw.includes('ganh') || acaoRaw.includes('venda');
+      const etNum = parseInt(etapaNum(row[idxEtapa]) || '0', 10);
+      if(!porSegmentoDia[dataKey]) porSegmentoDia[dataKey] = {};
+      if(!porSegmentoDia[dataKey][seg]) porSegmentoDia[dataKey][seg] = {};
+      const reg = porSegmentoDia[dataKey][seg][email] || { max: 0, ganho: false };
+      if(etNum > reg.max) reg.max = etNum;
+      if(ganho) reg.ganho = true;
+      porSegmentoDia[dataKey][seg][email] = reg;
+    }
 
     // ---- Captura de PERDA (Status = lost) — antes do filtro de etapa ----
     const status = idxStatus >= 0 ? String(row[idxStatus]||'').trim().toLowerCase() : '';
@@ -6475,6 +6512,7 @@ function processarEventos(entrada){
   return {
     porVendedor,
     porDia,
+    porSegmentoDia,
     perdas: { porEmail: perdasPorEmail, motivos, perdasOperacional, perdasVendedor, perdasOpPorVendedor },
     periodo: {
       primeiraData: minTs ? new Date(minTs) : null,
@@ -6540,6 +6578,58 @@ function vendasNoFiltro(vend, dias){
     });
   });
   return total;
+}
+
+// Monta os funis por segmento (estilo Pipedrive: cumulativo, teto de 100%).
+// Para cada segmento, conta quantos leads ALCANÇARAM pelo menos cada etapa
+// (um lead na etapa 3 necessariamente passou por 1 e 2). "Ganho" = chegou à Venda.
+// Respeita o filtro de datas atual (FUNIL_FILTRO) via diasFiltrados().
+function calcularFunilSegmentos(){
+  if(!EVENTOS || !EVENTOS.porSegmentoDia) return null;
+  const dias = diasFiltrados();
+
+  // Consolida por segmento: email -> { max, ganho } (o máximo entre os dias do filtro)
+  const consolidado = {}; // seg -> Map(email -> {max, ganho})
+  const totalMap = new Map(); // email -> {max, ganho}  (todos os segmentos juntos)
+
+  dias.forEach(dk => {
+    const diaSeg = EVENTOS.porSegmentoDia[dk];
+    if(!diaSeg) return;
+    Object.keys(diaSeg).forEach(seg => {
+      if(!consolidado[seg]) consolidado[seg] = new Map();
+      const alvo = consolidado[seg];
+      const leads = diaSeg[seg];
+      Object.keys(leads).forEach(email => {
+        const reg = leads[email];
+        const cur = alvo.get(email) || { max: 0, ganho: false };
+        if(reg.max > cur.max) cur.max = reg.max;
+        if(reg.ganho) cur.ganho = true;
+        alvo.set(email, cur);
+        // total consolidado
+        const curT = totalMap.get(email) || { max: 0, ganho: false };
+        if(reg.max > curT.max) curT.max = reg.max;
+        if(reg.ganho) curT.ganho = true;
+        totalMap.set(email, curT);
+      });
+    });
+  });
+
+  // De um Map(email -> {max,ganho}) para contagem cumulativa por etapa + venda
+  const contarCumulativo = (mapa) => {
+    // etapa N = nº de leads com max >= N. venda = nº de leads com ganho=true.
+    const cont = { '1':0, '2':0, '3':0, '4':0, venda:0 };
+    mapa.forEach(reg => {
+      for(let n = 1; n <= 4; n++){ if(reg.max >= n || reg.ganho) cont[String(n)]++; }
+      if(reg.ganho) cont.venda++;
+    });
+    return cont;
+  };
+
+  const segmentos = Object.keys(consolidado)
+    .map(seg => ({ seg, leads: consolidado[seg].size, cont: contarCumulativo(consolidado[seg]) }))
+    .sort((a,b) => b.leads - a.leads);
+
+  return { segmentos, total: contarCumulativo(totalMap), totalLeads: totalMap.size, dias };
 }
 
 function calcularFunil(){
