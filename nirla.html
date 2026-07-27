@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR" class="">
+<html lang="pt-BR" class="dark">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -140,7 +140,24 @@
     background-repeat:no-repeat;background-position:right 8px center;}
   ::-webkit-scrollbar{height:8px;width:8px;}
   ::-webkit-scrollbar-thumb{background:var(--baseline);border-radius:8px;}
-  .stick{position:sticky;top:0;z-index:30;backdrop-filter:blur(8px);}
+  .stick{position:sticky;top:0;z-index:40;backdrop-filter:blur(8px);}
+  .home-filter-strip{position:sticky;top:0;z-index:20;backdrop-filter:blur(8px);background:color-mix(in srgb, var(--plane) 88%, transparent);border-bottom:1px solid var(--border);margin:-4px -4px 0;padding-left:4px;padding-right:4px;}
+  /* ===== Funil visual (Home) ===== */
+  .funnel-wrap{display:flex;flex-wrap:wrap;gap:24px;align-items:center}
+  .funnel{flex:1;min-width:280px;display:flex;flex-direction:column;gap:0}
+  .fstage{position:relative;margin:0 auto;padding:14px 16px;border-radius:10px;text-align:center;transition:width .3s ease;color:#fff}
+  .fstage .fs-k{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.9}
+  .fstage .fs-v{font-size:1.5rem;font-weight:800;line-height:1.1;margin-top:2px}
+  .fstage .fs-meta{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:5px;flex-wrap:wrap}
+  .fstage .fs-rate{font-size:.7rem;font-weight:700;background:rgba(255,255,255,.22);padding:2px 8px;border-radius:999px;color:#fff}
+  .fconn{text-align:center;font-size:.78rem;color:var(--text-primary);padding:7px 0;font-weight:500}
+  .fconn b{color:var(--accent);font-weight:800}
+  .fmoney{min-width:210px;background:color-mix(in srgb, var(--good) 12%, transparent);border:1px solid color-mix(in srgb, var(--good) 40%, transparent);border-radius:12px;padding:18px 20px;text-align:center}
+  .fmoney .fm-k{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .fmoney .fm-v{font-size:1.9rem;font-weight:800;color:var(--good);line-height:1.1;margin-top:4px}
+  .fmoney .fm-conv{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+  .fmoney .fm-conv > div{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:.74rem;color:var(--muted);border-top:1px solid var(--border);padding-top:8px}
+  .fmoney .fm-conv b{color:var(--text-primary);font-weight:800;font-size:.95rem}
 </style>
 </head>
 <body class="min-h-screen">
@@ -154,7 +171,10 @@
     <p class="mut text-sm mt-1">Eventos de CRM · mudança de etapas, vendas e perdas
       · <span class="font-medium" style="color:var(--good)">dados ao vivo da planilha</span></p>
   </div>
-  <button id="themeBtn" class="pill px-3 py-2 text-sm shrink-0">🌙 Escuro</button>
+  <div class="flex items-center gap-2 shrink-0">
+    <button id="refreshBtn" class="pill px-3 py-2 text-sm">↻ Atualizar</button>
+    <button id="cfgBtn" class="pill px-3 py-2 text-sm" title="Definir a fonte de dados">⚙️</button>
+  </div>
 </header>
 
 <!-- ===== FILTER BAR (sticky) ===== -->
@@ -177,9 +197,6 @@
         </span>
         <div class="flex items-center gap-2 ml-auto">
           <span id="status" class="mut text-xs"></span>
-          <label id="fileBtn" class="pill px-3 py-1.5 text-sm" style="cursor:pointer" title="Carregar um CSV baixado da planilha">📁 Carregar CSV<input id="fileInput" type="file" accept=".csv,text/csv" class="hidden"></label>
-          <button id="refreshBtn" class="pill px-3 py-1.5 text-sm">↻ Atualizar</button>
-          <button id="cfgBtn" class="pill px-3 py-1.5 text-sm" title="Definir a fonte de dados (URL do CSV ou do Apps Script)">⚙️</button>
         </div>
       </div>
 
@@ -196,7 +213,6 @@
           <input id="salesUrl" type="text" placeholder="URL do Apps Script de Vendas (…/exec)"
                  style="flex:1;min-width:260px;background:var(--surface);color:var(--text-primary);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:.8rem" />
           <button id="salesSave" class="pill active px-3 py-1.5 text-sm">Salvar e carregar</button>
-          <label id="salesFileBtn" class="pill px-3 py-1.5 text-sm" style="cursor:pointer" title="Carregar um CSV de vendas do computador">📁<input id="salesFileInput" type="file" accept=".csv,text/csv" class="hidden"></label>
         </div>
       </div>
       <!-- Period presets -->
@@ -231,8 +247,8 @@
 
   <!-- ===== HOME (resumo executivo) ===== -->
   <section data-view="home" class="space-y-4">
-    <!-- controles próprios da Home -->
-    <div class="card p-4">
+    <!-- controles próprios da Home — mesmo visual de faixa da aba Funil -->
+    <div class="home-filter-strip py-3">
       <div class="flex flex-wrap items-center gap-2">
         <span class="mut text-xs uppercase tracking-wide font-semibold mr-1">Período</span>
         <div id="homePeriods" class="flex flex-wrap gap-2"></div>
@@ -251,11 +267,16 @@
       <div id="homeCompareNote" class="mut text-xs mt-2"></div>
     </div>
 
-    <!-- TOTAL (hero) -->
+    <!-- TOTAL (hero) — funil visual -->
     <div class="card p-5">
-      <h2 class="font-semibold text-base flex items-center gap-2"><span class="accent-bar"></span>📊 Resumo geral <span class="mut font-normal text-sm">— todos os segmentos</span></h2>
-      <div id="homeTotalTiles" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"></div>
-      <div id="homeTotalConv" class="flex flex-wrap gap-x-8 gap-y-2 mt-4"></div>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="font-semibold text-base flex items-center gap-2"><span class="accent-bar"></span>📊 Resumo geral</h2>
+        <div class="flex items-center gap-2">
+          <span class="mut text-xs uppercase tracking-wide font-semibold">Segmento</span>
+          <select id="homeFunnelSeg" style="background:var(--surface);color:var(--text-primary);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:.8rem"></select>
+        </div>
+      </div>
+      <div id="homeFunnelViz" class="mt-4"></div>
     </div>
 
     <!-- cards por segmento -->
@@ -1000,7 +1021,7 @@ function showBanner(msg, kind){
   banner.className='card p-4'; banner.style.borderColor='var(--critical)';
   const hint = kind==='data'
     ? 'A conexão com a fonte <b>funcionou</b> — o problema é o conteúdo. Confirme que a fonte aponta para a <b>aba que contém a coluna “Pipeline”</b> e que os cabeçalhos estão na primeira linha.'
-    : 'Costuma ser bloqueio de acesso externo (CORS/segurança) do ambiente. Solução garantida: baixe a planilha em <b>Arquivo → Fazer download → CSV</b> e clique em <b>📁 Carregar CSV</b>. Ou clique em “↻ Atualizar” para tentar a rede de novo.';
+    : 'Costuma ser bloqueio de acesso externo (CORS/segurança) do ambiente. Verifique a fonte de dados em <b>⚙️</b> e clique em <b>↻ Atualizar</b> para tentar de novo.';
   banner.innerHTML = `<div class="font-semibold" style="color:var(--critical)">Não consegui carregar a planilha automaticamente</div>
     <div class="sec text-sm mt-1">${msg}</div>
     <div class="mut text-xs mt-2">${hint}</div>`;
@@ -1874,7 +1895,7 @@ function homeSegments(){
     { titulo:null, header:true, dot:'var(--accent)', pitch:false, match:()=>true, matchSale:()=>true,
       entrada:(et,org)=> (norm(org).indexOf('webinar')>=0 ? isAcessouLive(et) : isBaseStage(et)) },
     { titulo:'MVS > LE',   dot:origemColor('Upsell LE',pal()),      match:eq('Upsell LE'),      matchSale:eq('Upsell LE'),      entrada:et=>entBase(et) },
-    { titulo:'WEBINAR', pitch:true, dot:origemColor('Webinar CMP',pal()), match:eq('Webinar CMP'), matchSale:eq('Webinar CMP'), entrada:et=>entWeb(et) },
+    { titulo:'WEBINAR', pitch:true, stageByEtapaOnly:true, dot:origemColor('Webinar CMP',pal()), match:eq('Webinar CMP'), matchSale:eq('Webinar CMP'), entrada:et=>entWeb(et) },
   ];
   homeLives().forEach(o=> segs.push({ titulo:o.toUpperCase(), dot:origemColor(o,pal()), match:eq(o), matchSale:eq(o), entrada:et=>entBase(et) }));
   segs.push({ titulo:'RECUPERAÇÃO', dot:origemColor('Recuperação MVS',pal()), match:eq('Recuperação MVS'), matchSale:eq('Recuperação MVS'), entrada:et=>entBase(et) });
@@ -1887,13 +1908,18 @@ function homeLives(){ const set={}; DATA.forEach(e=>{ const l=crmOrigemLabel(e);
 function homeMetrics(rg, seg){
   const a=rg[0], b=rg[1];
   const inR = dk => dk>=a && dk<=b;
-  const uniq = pred => { const s={}; for(var i=0;i<DATA.length;i++){ const e=DATA[i];
-    if(e.acao==='entrada' && inR(e.dayKey) && seg.match(crmOrigemLabel(e)) && pred(e)) s[ normPhone(e.tel)||norm(e.email)||('x'+i) ]=1; }
+  const byOrigem = lbl => seg.match(lbl);
+  // uniqBy: conta telefones únicos aplicando um filtro de origem próprio + predicado de etapa
+  const uniqBy = (origemOk, pred) => { const s={}; for(var i=0;i<DATA.length;i++){ const e=DATA[i];
+    if(e.acao==='entrada' && inR(e.dayKey) && origemOk(crmOrigemLabel(e)) && pred(e)) s[ normPhone(e.tel)||norm(e.email)||('x'+i) ]=1; }
     return Object.keys(s).length; };
-  const entrada = uniq(e=> seg.entrada(e.etapa, e.origem));
-  const contato = uniq(e=> isContato(e.etapa));
-  const pitch   = uniq(e=> isPitch(e.etapa));
-  const vend = SALES_DATA.filter(s=> inR(s.dayKey) && seg.matchSale(s.origem));
+  // Etapas EXCLUSIVAS do webinar (Acessou a Live, Estava no Pitch) podem ser contadas só por etapa, ignorando origem.
+  // "Em Contato" é etapa COMPARTILHADA por todos os pipelines, então continua sempre por origem.
+  const stageOrigem = seg.stageByEtapaOnly ? (()=>true) : byOrigem;
+  const entrada = uniqBy(stageOrigem, e=> seg.entrada(e.etapa, e.origem));
+  const pitch   = uniqBy(stageOrigem, e=> isPitch(e.etapa));
+  const contato = uniqBy(byOrigem,    e=> isContato(e.etapa));  // sempre por origem (etapa compartilhada)
+  const vend = SALES_DATA.filter(s=> inR(s.dayKey) && seg.matchSale(s.origem));  // vendas sempre por origem (não há etapa de venda)
   return { entrada:entrada, contato:contato, pitch:pitch, vendas:vend.length, fat:vend.reduce((x,s)=>x+s.liq,0) };
 }
 // helpers de formatação e variação
@@ -1919,6 +1945,49 @@ function homeHeaderLabel(period, rg){
   if(period==='mes_anterior'){ const p=rg[0].split('-'); return 'RESUMO MÊS '+p[1]+'/'+p[0].slice(2); }
   return 'RESUMO PERÍODO '+dm(rg[0])+'–'+dm(rg[1]);
 }
+// ---- Funil visual clássico (afunilando) ----
+function drawFunnel(host, cur, prev, seg, label){
+  if(!host) return;
+  // etapas do funil: entrada -> (pitch, se webinar) -> em contato -> vendas
+  const stages=[];
+  stages.push({k:'Entrada de leads', v:cur.entrada, pv:prev&&prev.entrada, c:'var(--accent)'});
+  if(seg&&seg.pitch) stages.push({k:'Viu o pitch', v:cur.pitch, pv:prev&&prev.pitch, c:'#8b7ffe'});
+  stages.push({k:'Em contato', v:cur.contato, pv:prev&&prev.contato, c:'#4f9dde'});
+  stages.push({k:'Vendas', v:cur.vendas, pv:prev&&prev.vendas, c:'var(--good)'});
+  const max=Math.max(1, ...stages.map(s=>s.v));
+  const topo=stages[0].v; // base pra % do topo do funil
+  const minW=44; // % largura mínima da barra mais estreita
+  let html='<div class="funnel-wrap"><div class="funnel">';
+  stages.forEach((s,i)=>{
+    const w = minW + (100-minW)*(s.v/max);
+    // taxa dentro do bloco: % em relação ao topo do funil (exceto no próprio topo)
+    const pctTopo = (i>0 && topo) ? (s.v/topo*100) : null;
+    const rateInside = pctTopo!=null
+      ? `<div class="fs-rate">${pctTopo.toFixed(1).replace('.',',')}% da entrada</div>` : '';
+    html += `<div class="fstage" style="width:${w}%;background:${s.c}">`+
+            `<div class="fs-k">${s.k}</div>`+
+            `<div class="fs-v">${hInt(s.v)}</div>`+
+            `<div class="fs-meta">${hDelta(s.v, s.pv)}${rateInside}</div>`+
+            `</div>`;
+    if(i<stages.length-1){
+      const nxt=stages[i+1];
+      const pct = s.v ? (nxt.v/s.v*100) : 0;
+      html += `<div class="fconn"><b>▼ ${pct.toFixed(1).replace('.',',')}%</b> seguem para ${nxt.k.toLowerCase()}</div>`;
+    }
+  });
+  html += '</div>';
+  // faturamento em destaque no canto + conversões-chave
+  const convLead = hPct(cur.vendas, cur.entrada);
+  const convCont = hPct(cur.vendas, cur.contato);
+  html += `<div class="fmoney"><div class="fm-k">Faturamento</div><div class="fm-v">${fmtBRL(cur.fat)}</div>`+
+          `<div class="fs-meta" style="justify-content:center;margin-top:6px">${hDelta(cur.fat, prev&&prev.fat)}</div>`+
+          `<div class="fm-conv">`+
+          `<div>Leads › venda<b>${convLead}</b></div>`+
+          `<div>Contato › venda<b>${convCont}</b></div>`+
+          `</div></div>`;
+  html += '</div>';
+  host.innerHTML=html;
+}
 let HOME_LAST = { rg:null, cmp:null }; // guarda p/ export
 function renderHome(){
   if(!DATA.length){ return; }
@@ -1936,28 +2005,30 @@ function renderHome(){
   const withM = seg => ({ cur:homeMetrics(rg,seg), prev: cmp?homeMetrics(cmp.rg,seg):null, seg:seg });
   const total = withM(segs[0]);
 
-  // TOTAL — tiles
-  const tile=(t,v,cur,prev,money)=>{
-    let falta='';
-    if(cmp && cmp.full && prev!=null && prev>cur){ falta=`<div class="mut" style="font-size:10.5px;margin-top:3px">faltam ${money?fmtBRL(prev-cur):hInt(prev-cur)}</div>`; }
-    return `<div class="htile"><div class="ht">${t}</div><div class="hv"${money?' style="color:var(--good)"':''}>${v}</div>${hDelta(cur,prev)}${falta}</div>`;
-  };
-  const c=total.cur, p=total.prev;
-  document.getElementById('homeTotalTiles').innerHTML =
-    tile('Entrada de leads', hInt(c.entrada), c.entrada, p&&p.entrada) +
-    tile('Em contato', hInt(c.contato), c.contato, p&&p.contato) +
-    tile('Vendas', hInt(c.vendas), c.vendas, p&&p.vendas) +
-    tile('Faturamento', fmtBRL(c.fat), c.fat, p&&p.fat, true);
-  const cl=c.entrada?c.vendas/c.entrada*100:0, cc=c.contato?c.vendas/c.contato*100:0;
-  const pl=p&&p.entrada?p.vendas/p.entrada*100:null, pc=p&&p.contato?p.vendas/p.contato*100:null;
-  document.getElementById('homeTotalConv').innerHTML =
-    `<div class="hconv">Conversão leads &gt; venda: <b>${hPct(c.vendas,c.entrada)}</b> ${p?hPP(cl,pl):''}</div>`+
-    `<div class="hconv">Conversão em contato &gt; venda: <b>${hPct(c.vendas,c.contato)}</b> ${p?hPP(cc,pc):''}</div>`;
+  // TOTAL — funil visual (item 7). Popula o seletor de segmento uma vez, depois desenha.
+  const funSel=document.getElementById('homeFunnelSeg');
+  if(funSel && !funSel.dataset.built){
+    let opts='<option value="__total__">Todos os segmentos</option>';
+    segs.slice(1).forEach((s,i)=> opts+=`<option value="${i}">${s.titulo}</option>`);
+    funSel.innerHTML=opts; funSel.dataset.built='1';
+    funSel.addEventListener('change', renderHome);
+  }
+  // escolhe o segmento a exibir no funil
+  let funSeg=segs[0], funLabel='Todos os segmentos';
+  if(funSel && funSel.value!=='__total__' && funSel.value!==''){
+    const idx=parseInt(funSel.value,10); const s=segs.slice(1)[idx];
+    if(s){ funSeg=s; funLabel=s.titulo; }
+  }
+  const fm = withM(funSeg);
+  drawFunnel(document.getElementById('homeFunnelViz'), fm.cur, fm.prev, funSeg, funLabel);
 
-  // cards por segmento
+  // cards por segmento — calcula métricas, esconde zerados e ordena por entrada (maior→menor)
   const wrap=document.getElementById('homeSegments'); wrap.innerHTML='';
-  segs.slice(1).forEach(seg=>{
-    const m=withM(seg), cu=m.cur, pr=m.prev;
+  const segData = segs.slice(1).map(seg=>({seg:seg, m:withM(seg)}))
+    .filter(x=> (x.m.cur.entrada + x.m.cur.contato + x.m.cur.vendas + x.m.cur.fat) > 0)  // item 3: não mostra funil zerado no período
+    .sort((a,b)=> b.m.cur.entrada - a.m.cur.entrada);                                     // item 4: ordena por entrada desc
+  segData.forEach(({seg, m})=>{
+    const cu=m.cur, pr=m.prev;
     const line=(k,cur,prev,money)=>`<div class="hrow"><span class="hk">${k}</span><span class="hval"${money?' style="color:var(--good)"':''}>${money?fmtBRL(cur):hInt(cur)} ${hDelta(cur,prev)}</span></div>`;
     let rows = line('Entrada de leads', cu.entrada, pr&&pr.entrada);
     if(seg.pitch) rows += line('Viu o pitch', cu.pitch, pr&&pr.pitch);
@@ -1980,10 +2051,10 @@ function homeBlocoTexto(seg, m, opt){ opt=opt||{};
   if(seg.pitch) out += '* Viu o pitch: '+hInt(m.cur.pitch)+(opt.prev?D(m.cur.pitch,m.prev.pitch):'')+'\n';
   out += '* Em contato: '+hInt(m.cur.contato)+(opt.prev?D(m.cur.contato,m.prev.contato):'')+'\n';
   out += '* Vendas: '+hInt(m.cur.vendas)+(opt.prev?D(m.cur.vendas,m.prev.vendas):'')+'\n';
-  out += '* Faturamento: '+fmtBRL(m.cur.fat)+(opt.prev?D(m.cur.fat,m.prev.fat):'')+'\n';
   out += '* Taxa de conversão leads > venda: '+hPct(m.cur.vendas,m.cur.entrada)+'\n';
   if(seg.pitch) out += '* Taxa de conversão pitch > venda: '+hPct(m.cur.vendas,m.cur.pitch)+'\n';
   out += '* Taxa de conversão em contato > venda: '+hPct(m.cur.vendas,m.cur.contato)+'\n';
+  out += '* Faturamento: '+fmtBRL(m.cur.fat)+(opt.prev?D(m.cur.fat,m.prev.fat):'')+'\n';
   return out;
 }
 function hDeltaTxt(cur,prev){ if(prev==null) return ''; if(prev===0) return cur>0?'(novo)':''; const p=(cur-prev)/prev*100; if(Math.abs(p)<0.05) return '(=)'; return '('+(p>0?'▲':'▼')+Math.abs(p).toFixed(1).replace('.',',')+'%)'; }
@@ -2084,15 +2155,7 @@ document.getElementById('dwellReset').addEventListener('click', ()=>{
   applyDwellHourFilter();
 });
 
-document.getElementById('themeBtn').addEventListener('click',()=>{
-  const d=document.documentElement.classList.toggle('dark');
-  document.getElementById('themeBtn').textContent = d?'☀️ Claro':'🌙 Escuro';
-  render();
-  if(SALES_DATA.length) renderSales();
-});
-
 document.getElementById('refreshBtn').addEventListener('click',loadData);
-document.getElementById('fileInput').addEventListener('change',handleFile);
 
 // engrenagem: definir as fontes de dados (CRM e Vendas)
 document.getElementById('cfgBtn').addEventListener('click',()=>{
@@ -2114,7 +2177,6 @@ document.getElementById('salesSave').addEventListener('click',()=>{
   document.getElementById('cfgRow').classList.add('hidden');
   loadSales();
 });
-document.getElementById('salesFileInput').addEventListener('change',handleSalesFile);
 
 // ---- Home: listeners ----
 document.getElementById('homeCompare').addEventListener('change',e=>{ homeState.compare=e.target.value; renderHome(); });
