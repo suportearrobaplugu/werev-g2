@@ -4222,6 +4222,19 @@ function renderTaxaPassagem(){
     const nVenda   = cont['venda'] || 0;
     const c2v = nContato > 0 ? (nVenda / nContato) * 100 : null;
     const c2vTxt = c2v === null ? '—' : c2v.toFixed(1).replace('.', ',') + '%';
+    // Faturamento do segmento: soma do valor registrado nos eventos de Ganho.
+    const fat = cont._fat || 0;
+    const nComValor = cont._fatLeads || 0;
+    const fatTxt = fat > 0 ? fmtMoney(fat) : '—';
+    const ticket = nComValor > 0 ? fat / nComValor : 0;
+    let fatSub;
+    if(fat > 0){
+      const semValor = nVenda - nComValor;
+      fatSub = `ticket médio ${fmtMoney(ticket)}`
+        + (semValor > 0 ? ` · ${semValor} venda(s) sem valor no evento` : '');
+    } else {
+      fatSub = nVenda > 0 ? 'sem valor registrado nos eventos de Ganho' : 'sem vendas no período';
+    }
     let h = `<div class="card" style="padding:16px;display:flex;flex-direction:column${destaque?';border:1px solid var(--accent)':''}">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:2px">
         <div style="font-weight:800;color:var(--text-strong);font-size:14px;line-height:1.25">${titulo}</div>
@@ -4252,6 +4265,11 @@ function renderTaxaPassagem(){
         <span style="font-size:16px;font-weight:800;color:var(--text-strong)">${c2vTxt}</span>
       </div>
       <div style="font-size:10.5px;color:var(--muted);margin-top:2px">${nContato.toLocaleString('pt-BR')} em contato · ${nVenda.toLocaleString('pt-BR')} vendas</div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+        <span style="font-size:11.5px;color:var(--muted);font-weight:600">Faturamento</span>
+        <span style="font-size:15px;font-weight:800;color:var(--green,#1baf7a)">${fatTxt}</span>
+      </div>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:2px">${fatSub}</div>
     </div>`;
     return h;
   };
@@ -6483,6 +6501,9 @@ function processarEventos(entrada){
   const idxMotivo = header.findIndex(h => h.includes('motivo'));
   const idxOrigem = header.findIndex(h => h === 'origem');
   const idxAcao = header.findIndex(h => h === 'acao');
+  // Valor da venda no evento de Ganho (nome da coluna pode variar: valor, valor_venda, vlr...)
+  const idxValorEv = header.findIndex(h => h.includes('valor') || h === 'vlr');
+  if(idxValorEv < 0) console.warn('[Eventos] Coluna de valor não encontrada — faturamento por segmento ficará indisponível. Cabeçalhos:', header.join(', '));
 
   if(idxEmail < 0 || idxProp < 0 || idxEtapa < 0){
     console.warn('[Eventos] Colunas não encontradas. Cabeçalhos:', header.join(', '));
@@ -6530,9 +6551,15 @@ function processarEventos(entrada){
       const etNum = parseInt(etapaNum(row[idxEtapa]) || '0', 10);
       if(!porSegmentoDia[dataKey]) porSegmentoDia[dataKey] = {};
       if(!porSegmentoDia[dataKey][seg]) porSegmentoDia[dataKey][seg] = {};
-      const reg = porSegmentoDia[dataKey][seg][email] || { max: 0, ganho: false };
+      const reg = porSegmentoDia[dataKey][seg][email] || { max: 0, ganho: false, valor: 0 };
       if(etNum > reg.max) reg.max = etNum;
       if(ganho) reg.ganho = true;
+      // Só lê o valor no evento de Ganho. Se o mesmo lead tiver mais de um Ganho,
+      // fica o MAIOR valor (não soma), pra casar com o funil que conta o lead 1x.
+      if(ganho && idxValorEv >= 0){
+        const vEv = parseValorBR(row[idxValorEv]);
+        if(vEv > reg.valor) reg.valor = vEv;
+      }
       porSegmentoDia[dataKey][seg][email] = reg;
     }
 
@@ -6681,14 +6708,16 @@ function calcularFunilSegmentos(){
       const leads = diaSeg[seg];
       Object.keys(leads).forEach(email => {
         const reg = leads[email];
-        const cur = alvo.get(email) || { max: 0, ganho: false };
+        const cur = alvo.get(email) || { max: 0, ganho: false, valor: 0 };
         if(reg.max > cur.max) cur.max = reg.max;
         if(reg.ganho) cur.ganho = true;
+        if((reg.valor||0) > cur.valor) cur.valor = reg.valor||0;
         alvo.set(email, cur);
         // total consolidado
-        const curT = totalMap.get(email) || { max: 0, ganho: false };
+        const curT = totalMap.get(email) || { max: 0, ganho: false, valor: 0 };
         if(reg.max > curT.max) curT.max = reg.max;
         if(reg.ganho) curT.ganho = true;
+        if((reg.valor||0) > curT.valor) curT.valor = reg.valor||0;
         totalMap.set(email, curT);
       });
     });
@@ -6697,10 +6726,13 @@ function calcularFunilSegmentos(){
   // De um Map(email -> {max,ganho}) para contagem cumulativa por etapa + venda
   const contarCumulativo = (mapa) => {
     // etapa N = nº de leads com max >= N. venda = nº de leads com ganho=true.
-    const cont = { '1':0, '2':0, '3':0, '4':0, venda:0 };
+    const cont = { '1':0, '2':0, '3':0, '4':0, venda:0, _fat:0, _fatLeads:0 };
     mapa.forEach(reg => {
       for(let n = 1; n <= 4; n++){ if(reg.max >= n || reg.ganho) cont[String(n)]++; }
-      if(reg.ganho) cont.venda++;
+      if(reg.ganho){
+        cont.venda++;
+        if(reg.valor > 0){ cont._fat += reg.valor; cont._fatLeads++; }
+      }
     });
     return cont;
   };
