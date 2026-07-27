@@ -431,28 +431,6 @@
         </table>
       </div>
       <div id="salesCrmSummary" class="mut text-xs mt-2"></div>
-
-      <!-- Diagnóstico: por que estas vendas ficaram sem origem -->
-      <div id="semOrigemDiag" class="hidden mt-6" style="border-top:1px dashed var(--border);padding-top:16px">
-        <h3 class="font-semibold text-sm mb-1">🔎 Diagnóstico — vendas sem origem <span class="mut font-normal" id="semOrigemScope"></span></h3>
-        <p class="mut text-xs mb-2">Por que cada venda “Sem origem” não cruzou com o CRM, no período e filtros atuais. Dica: selecione <b>Ontem</b> no período pra focar no dia.</p>
-        <div id="semOrigemSummary" class="flex flex-wrap gap-2 mb-3"></div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="mut text-xs uppercase tracking-wide text-left">
-                <th class="py-2 pr-2 font-semibold">Data</th>
-                <th class="py-2 px-2 font-semibold">Checkout</th>
-                <th class="py-2 px-2 font-semibold text-right">Valor</th>
-                <th class="py-2 px-2 font-semibold">Telefone</th>
-                <th class="py-2 px-2 font-semibold">E-mail</th>
-                <th class="py-2 pl-2 font-semibold">Motivo</th>
-              </tr>
-            </thead>
-            <tbody id="semOrigemRows" class="divide-brd"></tbody>
-          </table>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -558,17 +536,21 @@ function renameCheckout(name){
 
 // De-para manual utm_source -> Proprietário (preencha aqui quando tiver o mapa exato).
 // Ex.: { 'utm_da_ana':'Ana Souza', 'utm_do_bruno':'Bruno Lima' }
-const UTM_OWNER_OVERRIDE = {};
-// Correlaciona um utm_source a um proprietário do CRM (override -> casamento por nome -> "Outras origens")
+// Vendedor extraído do utm_source ("comercial_nome-sobrenome" -> "Nome Sobrenome").
+// alias p/ juntar variantes/erros de digitação num nome canônico
+const UTM_ALIAS = {
+  'joao guilherme':'João Guilherme', 'joao paulo':'João Paulo',
+  'guilherme trinchao':'Guilherme Trinchão', 'walisson henrique':'Wallison',
+  'thales mata':'Tales Mata', 'tales mata':'Tales Mata',
+  'jocinete pere':'Jocinete Pereira', 'aline silva':'Aline'
+};
 function utmToOwner(utm){
-  const u = norm(utm);
-  if(!u) return 'Outras origens';
-  for(const k in UTM_OWNER_OVERRIDE){ if(norm(k)===u) return UTM_OWNER_OVERRIDE[k]; }
-  for(const o of (OWNERS||[])){
-    const partes = norm(o).split(' ').filter(p=>p.length>=3);
-    if(partes.some(p=> u.includes(p))) return o;
-  }
-  return 'Outras origens';
+  let u = norm(utm);
+  if(!u || u.indexOf('sem utm')>=0) return 'Sem vendedor';
+  u = u.replace(/^comercial[\s_\-]*/,'').replace(/[\[\]]/g,'').replace(/[_\-]+/g,' ').replace(/\s+/g,' ').trim();
+  if(!u || u==='infra') return 'Sem vendedor';
+  if(UTM_ALIAS[u]) return UTM_ALIAS[u];
+  return u.split(' ').map(w=> w?w.charAt(0).toUpperCase()+w.slice(1):w).join(' ');
 }
 
 // ---- ORIGEM (iniciativa do CRM) e correlação venda -> origem ----
@@ -1675,11 +1657,11 @@ function renderSales(){
   requestAnimationFrame(()=>{ if(salesChart) salesChart.resize(); });
 
   // gráfico 2: faturamento líquido por dia por VENDEDOR (empilhado, via utm_source)
-  const ownersAll=[...OWNERS,'Outras origens'];
-  const ownerColor=o=> o==='Outras origens' ? (css('--muted')||'#898781') : c[ownersAll.indexOf(o)%c.length];
-  const ownersShown=ownersAll.filter(o=> evs.some(s=>(s.owner||'Outras origens')===o));
-  const dsOwner=ownersShown.map(o=>({ label:(o==='Outras origens'?'Outras':o.split(' ')[0]), stack:'own',
-    data: days.map(dk=> evs.filter(s=>(s.owner||'Outras origens')===o && s.dayKey===dk).reduce((x,s)=>x+s.liq,0)),
+  const totOwner=o=> evs.filter(s=>(s.owner||'Sem vendedor')===o).reduce((x,s)=>x+s.liq,0);
+  const ownersShown=Array.from(new Set(evs.map(s=>s.owner||'Sem vendedor'))).sort((a,b)=> totOwner(b)-totOwner(a));
+  const ownerColor=o=> o==='Sem vendedor' ? (css('--muted')||'#898781') : c[ownersShown.filter(x=>x!=='Sem vendedor').indexOf(o)%c.length];
+  const dsOwner=ownersShown.map(o=>({ label:(o==='Sem vendedor'?'Sem vend.':o.split(' ')[0]), stack:'own',
+    data: days.map(dk=> evs.filter(s=>(s.owner||'Sem vendedor')===o && s.dayKey===dk).reduce((x,s)=>x+s.liq,0)),
     backgroundColor: ownerColor(o), borderRadius:3, maxBarThickness:26 }));
   if(salesChartOwner) salesChartOwner.destroy();
   salesChartOwner=new Chart(document.getElementById('salesChartOwner'),{
@@ -1804,8 +1786,6 @@ function renderSales(){
       <td class="py-2 pl-2 text-right tnum sec">${pctf(ckTotV[ck],fatLiq)}</td>`;
     sum.appendChild(tr);
   });
-
-  renderSemOrigemDiag(semo);   // diagnóstico das vendas sem origem no filtro atual
 }
 
 /* ---- Diagnóstico: por que estas vendas ficaram sem origem ---- */
