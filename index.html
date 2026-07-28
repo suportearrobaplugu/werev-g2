@@ -1338,7 +1338,7 @@ const SUPABASE_EVENTOS = {
 
 // Etapas do funil, em ordem
 const FUNIL_ETAPAS = [
-  { key: '1', label: '1. Respondeu 1ª Mensagem' },
+  { key: '1', label: '1. Entrada de leads' },
   { key: '2', label: '2. Em Contato' },
   { key: '3', label: '3. Negociação' },
   { key: '4', label: '4. Link Pgto Enviado' }
@@ -4234,7 +4234,7 @@ function renderTaxaPassagem(){
   // Um funil por segmento (origem) + um Total. Cada etapa conta quantos leads
   // ALCANÇARAM pelo menos aquela etapa, então a passagem nunca ultrapassa 100%.
   const ETAPAS_VIZ = [
-    { key:'1',    nome:'1. 1ª Mensagem respondida', cor:'#2a78d6' },
+    { key:'1',    nome:'1. Entrada de leads', cor:'#2a78d6' },
     { key:'2',    nome:'2. Em Contato',             cor:'#1baf7a' },
     { key:'3',    nome:'3. Negociação',             cor:'#eda100' },
     { key:'4',    nome:'4. Link Pgto enviado',      cor:'#eb6834' },
@@ -4251,16 +4251,15 @@ function renderTaxaPassagem(){
     const c2vTxt = c2v === null ? '—' : c2v.toFixed(1).replace('.', ',') + '%';
     // Faturamento do segmento: soma do valor registrado nos eventos de Ganho.
     const fat = cont._fat || 0;
-    const nComValor = cont._fatLeads || 0;
     const fatTxt = fat > 0 ? fmtMoney(fat) : '—';
-    const ticket = nComValor > 0 ? fat / nComValor : 0;
+    const ticket = nVenda > 0 ? fat / nVenda : 0;
+    const gCrm = cont._ganhosCrm || 0;
     let fatSub;
-    if(fat > 0){
-      const semMatch = nVenda - nComValor;
-      fatSub = `ticket médio ${fmtMoney(ticket)}`
-        + (semMatch > 0 ? ` · ${semMatch} de ${nVenda} sem match por telefone` : '');
+    if(nVenda > 0){
+      fatSub = `ticket médio ${fmtMoney(ticket)}`;
+      if(gCrm !== nVenda) fatSub += ` · CRM marcou ${gCrm} ganho(s)`;
     } else {
-      fatSub = nVenda > 0 ? `nenhuma das ${nVenda} vendas casou por telefone` : 'sem vendas no período';
+      fatSub = gCrm > 0 ? `CRM marcou ${gCrm} ganho(s), sem venda casada` : 'sem vendas no período';
     }
     let h = `<div class="card" style="padding:16px;display:flex;flex-direction:column${destaque?';border:1px solid var(--accent)':''}">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:2px">
@@ -6551,6 +6550,7 @@ function processarEventos(entrada){
   // Permite montar funil estilo Pipedrive (cumulativo, teto de 100%) respeitando o filtro de datas.
   // porSegmentoDia[dataKey][segmento][email] = { max: <nº etapa>, ganho: bool }
   const porSegmentoDia = {};
+  const ganhosCrmDia = {}; // dataKey -> seg -> Set(chave) — só diagnóstico
 
   const porVendedor = {};
   VENDEDORES.forEach(v => {
@@ -6581,19 +6581,29 @@ function processarEventos(entrada){
     if(email && dataKey){
       const seg = (idxOrigem >= 0 && String(row[idxOrigem]||'').trim()) ? String(row[idxOrigem]).trim() : SEGMENTO_SEM;
       const acaoRaw = idxAcao >= 0 ? String(row[idxAcao]||'').toLowerCase() : '';
-      const ganho = acaoRaw.includes('ganho') || acaoRaw.includes('ganh') || acaoRaw.includes('venda');
-      const etNum = parseInt(etapaNum(row[idxEtapa]) || '0', 10);
-      if(!porSegmentoDia[dataKey]) porSegmentoDia[dataKey] = {};
-      if(!porSegmentoDia[dataKey][seg]) porSegmentoDia[dataKey][seg] = {};
-      const reg = porSegmentoDia[dataKey][seg][email] || { max: 0, ganho: false, tel: '' };
-      if(etNum > reg.max) reg.max = etNum;
-      if(ganho) reg.ganho = true;
-      // Guarda o telefone canonizado do lead (chave do cruzamento com as vendas)
-      if(!reg.tel && idxTelEv >= 0){
-        const tk = telKey(row[idxTelEv]);
-        if(tk) reg.tel = tk;
+      // Mesma classificação do Nirla: só evento de ENTRADA em etapa conta como
+      // passagem no funil. "ganho" fica só como diagnóstico (marcação do vendedor).
+      const ehEntrada = acaoRaw.includes('entrou');
+      const ehGanhoCrm = acaoRaw.startsWith('ganh') || acaoRaw.includes('venda');
+      const tk = idxTelEv >= 0 ? telKey(row[idxTelEv]) : '';
+      // Chave do lead: TELEFONE primeiro, e-mail como fallback (igual ao Nirla).
+      // Evita contar 2x o lead que voltou pelo WhatsApp com outro e-mail.
+      const chave = tk || email;
+
+      if(ehEntrada){
+        const etNum = parseInt(etapaNum(row[idxEtapa]) || '0', 10);
+        if(!porSegmentoDia[dataKey]) porSegmentoDia[dataKey] = {};
+        if(!porSegmentoDia[dataKey][seg]) porSegmentoDia[dataKey][seg] = {};
+        const reg = porSegmentoDia[dataKey][seg][chave] || { max: 0, tel: '' };
+        if(etNum > reg.max) reg.max = etNum;
+        if(!reg.tel && tk) reg.tel = tk;
+        porSegmentoDia[dataKey][seg][chave] = reg;
       }
-      porSegmentoDia[dataKey][seg][email] = reg;
+      if(ehGanhoCrm){
+        if(!ganhosCrmDia[dataKey]) ganhosCrmDia[dataKey] = {};
+        if(!ganhosCrmDia[dataKey][seg]) ganhosCrmDia[dataKey][seg] = new Set();
+        ganhosCrmDia[dataKey][seg].add(chave);
+      }
     }
 
     // ---- Captura de PERDA (Status = lost) — antes do filtro de etapa ----
@@ -6653,6 +6663,7 @@ function processarEventos(entrada){
     porVendedor,
     porDia,
     porSegmentoDia,
+    ganhosCrmDia,
     perdas: { porEmail: perdasPorEmail, motivos, perdasOperacional, perdasVendedor, perdasOpPorVendedor },
     periodo: {
       primeiraData: minTs ? new Date(minTs) : null,
@@ -6728,68 +6739,68 @@ function calcularFunilSegmentos(){
   if(!EVENTOS || !EVENTOS.porSegmentoDia) return null;
   const dias = diasFiltrados();
 
-  // Consolida por segmento: email -> { max, ganho } (o máximo entre os dias do filtro)
-  const consolidado = {}; // seg -> Map(email -> {max, ganho})
-  const totalMap = new Map(); // email -> {max, ganho}  (todos os segmentos juntos)
+  // Consolida por segmento: chave (telefone ou e-mail) -> { max, tel }
+  const consolidado = {};      // seg -> Map(chave -> {max, tel})
+  const totalMap = new Map();  // chave -> {max, tel}  (todos os segmentos juntos)
+  const ganhosSeg = {};        // seg -> Set(chave)   — diagnóstico
+  const ganhosTotal = new Set();
 
   dias.forEach(dk => {
     const diaSeg = EVENTOS.porSegmentoDia[dk];
-    if(!diaSeg) return;
-    Object.keys(diaSeg).forEach(seg => {
+    if(diaSeg) Object.keys(diaSeg).forEach(seg => {
       if(!consolidado[seg]) consolidado[seg] = new Map();
       const alvo = consolidado[seg];
       const leads = diaSeg[seg];
-      Object.keys(leads).forEach(email => {
-        const reg = leads[email];
-        const cur = alvo.get(email) || { max: 0, ganho: false, tel: '' };
+      Object.keys(leads).forEach(chave => {
+        const reg = leads[chave];
+        const cur = alvo.get(chave) || { max: 0, tel: '' };
         if(reg.max > cur.max) cur.max = reg.max;
-        if(reg.ganho) cur.ganho = true;
         if(!cur.tel && reg.tel) cur.tel = reg.tel;
-        alvo.set(email, cur);
-        // total consolidado
-        const curT = totalMap.get(email) || { max: 0, ganho: false, tel: '' };
+        alvo.set(chave, cur);
+        const curT = totalMap.get(chave) || { max: 0, tel: '' };
         if(reg.max > curT.max) curT.max = reg.max;
-        if(reg.ganho) curT.ganho = true;
         if(!curT.tel && reg.tel) curT.tel = reg.tel;
-        totalMap.set(email, curT);
+        totalMap.set(chave, curT);
       });
+    });
+    const gDia = EVENTOS.ganhosCrmDia ? EVENTOS.ganhosCrmDia[dk] : null;
+    if(gDia) Object.keys(gDia).forEach(seg => {
+      if(!ganhosSeg[seg]) ganhosSeg[seg] = new Set();
+      gDia[seg].forEach(ch => { ganhosSeg[seg].add(ch); ganhosTotal.add(ch); });
     });
   });
 
-  // De um Map(email -> {max,ganho}) para contagem cumulativa por etapa + venda
+  // Etapas 1-4 = nº de leads que ENTRARAM naquela etapa (max >= N).
+  // Etapa 5 (venda) = venda REAL da Hubla/TMB casada por telefone no mesmo recorte.
   const diasSet = new Set(dias);
-  const contarCumulativo = (mapa) => {
-    // etapa N = nº de leads com max >= N. venda = nº de leads com ganho=true.
-    const cont = { '1':0, '2':0, '3':0, '4':0, venda:0, _fat:0, _fatLeads:0 };
-    // Uma venda só pode ser contada uma vez, mesmo que dois leads (e-mails
-    // diferentes) compartilhem o mesmo telefone.
+  const contarCumulativo = (mapa, ganhosCrm) => {
+    const cont = { '1':0, '2':0, '3':0, '4':0, venda:0, _fat:0, _ganhosCrm: ganhosCrm ? ganhosCrm.size : 0 };
+    // Uma venda só pode ser contada uma vez, mesmo que dois leads compartilhem telefone.
     const vendasUsadas = new Set();
     mapa.forEach(reg => {
-      for(let n = 1; n <= 4; n++){ if(reg.max >= n || reg.ganho) cont[String(n)]++; }
-      if(reg.ganho){
-        cont.venda++;
-        // Cruza pelo telefone: soma as vendas Hubla/TMB desse lead que caem
-        // dentro do MESMO recorte de datas do funil.
-        const vendas = reg.tel ? (VENDAS_POR_TEL[reg.tel] || []) : [];
-        let casou = 0;
-        vendas.forEach(vd => {
-          if(!vendasUsadas.has(vd.id) && diasSet.has(vd.dataKey)){
-            cont._fat += vd.valor;
-            vendasUsadas.add(vd.id);
-            casou++;
-          }
-        });
-        if(casou > 0) cont._fatLeads++;
-      }
+      // Cruza a venda real (Hubla/TMB) ANTES de contar as etapas, porque quem
+      // comprou é promovido para todas as etapas anteriores (backfill).
+      const vendas = reg.tel ? (VENDAS_POR_TEL[reg.tel] || []) : [];
+      let casou = 0;
+      vendas.forEach(vd => {
+        if(!vendasUsadas.has(vd.id) && diasSet.has(vd.dataKey)){
+          cont._fat += vd.valor;
+          vendasUsadas.add(vd.id);
+          casou++;
+        }
+      });
+      const comprou = casou > 0;
+      for(let n = 1; n <= 4; n++){ if(reg.max >= n || comprou) cont[String(n)]++; }
+      if(comprou) cont.venda++;
     });
     return cont;
   };
 
   const segmentos = Object.keys(consolidado)
-    .map(seg => ({ seg, leads: consolidado[seg].size, cont: contarCumulativo(consolidado[seg]) }))
+    .map(seg => ({ seg, leads: consolidado[seg].size, cont: contarCumulativo(consolidado[seg], ganhosSeg[seg]) }))
     .sort((a,b) => b.leads - a.leads);
 
-  return { segmentos, total: contarCumulativo(totalMap), totalLeads: totalMap.size, dias };
+  return { segmentos, total: contarCumulativo(totalMap, ganhosTotal), totalLeads: totalMap.size, dias };
 }
 
 function calcularFunil(){
