@@ -1295,11 +1295,38 @@ const TMB_CSV_URL = TENANT.tmb || null;
 // Percentual do "Valor Principal" que efetivamente cai como líquido nas vendas TMB (boleto parcelado)
 const TMB_LIQUIDO_PCT = 0.5;
 
-// Índice de vendas por telefone, usado pra cruzar faturamento (Hubla/TMB) com os
-// leads do CRM (eventos). O CRM não preenche valor, mas preenche telefone.
-// telKey -> [ { id, valor, dataKey, plat } ]
-let VENDAS_POR_TEL = {};
+// Lista achatada de TODAS as vendas (Hubla + TMB) do período carregado.
+// A atribuição de origem é feita do lado da VENDA (igual ao Nirla): pega a venda
+// pela data dela e busca a origem do lead em TODO o histórico do CRM.
+let VENDAS_LISTA = [];   // { id, valor, dataKey, tel, email, nk, plat }
 let TEL_STATS = { vendas:0, comTel:0, semTel:0 };
+
+// Índice de origem do CRM, construído sobre TODOS os eventos (sem recorte de data).
+// O evento mais recente sobrescreve — a origem vigente do lead é a última conhecida.
+let CRM_ORIGEM_TEL = new Map();
+let CRM_ORIGEM_EMAIL = new Map();
+let CRM_ORIGEM_NOME = new Map();
+let ULTIMA_ATRIBUICAO = null;
+
+// Canoniza nome pra cruzamento: sem acento, minúsculo, espaços colapsados.
+// Só aceita nome com 2+ palavras e 8+ caracteres — nome curto ou só primeiro
+// nome colide demais e geraria atribuição errada.
+function nomeKey(n){
+  const t = String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z\s]/g,' ').replace(/\s+/g,' ').trim();
+  if(t.length < 8) return '';
+  if(t.split(' ').length < 2) return '';
+  return t;
+}
+
+// Resolve a origem de uma venda: telefone -> e-mail -> nome.
+// Retorna { origem, via } ou null se não achou o lead no CRM.
+function origemDaVenda(v){
+  if(v.tel && CRM_ORIGEM_TEL.has(v.tel))     return { origem: CRM_ORIGEM_TEL.get(v.tel),   via:'telefone' };
+  if(v.email && CRM_ORIGEM_EMAIL.has(v.email)) return { origem: CRM_ORIGEM_EMAIL.get(v.email), via:'email' };
+  if(v.nk && CRM_ORIGEM_NOME.has(v.nk))      return { origem: CRM_ORIGEM_NOME.get(v.nk),   via:'nome' };
+  return null;
+}
 
 // Canoniza telefone BR pra comparação: tira +55, tira o 9º dígito de celular.
 // "(31) 99123-4567" / "+5531991234567" / "3191234567" -> "3191234567"
@@ -1312,14 +1339,19 @@ function telKey(t){
   return d.length === 10 ? d : '';
 }
 
-function registrarVendaTel(tel, valor, data, plat){
+function registrarVenda(tel, email, nome, valor, data, plat){
+  if(!(valor > 0)) return;
   TEL_STATS.vendas++;
   const k = telKey(tel);
-  if(!k || !(valor > 0)){ TEL_STATS.semTel++; return; }
-  TEL_STATS.comTel++;
+  if(k) TEL_STATS.comTel++; else TEL_STATS.semTel++;
   const dataKey = `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}`;
-  if(!VENDAS_POR_TEL[k]) VENDAS_POR_TEL[k] = [];
-  VENDAS_POR_TEL[k].push({ id: plat + ':' + VENDAS_POR_TEL[k].length + ':' + dataKey + ':' + valor, valor, dataKey, plat });
+  VENDAS_LISTA.push({
+    id: plat + ':' + VENDAS_LISTA.length,
+    valor, dataKey, plat,
+    tel: k,
+    email: String(email || '').trim().toLowerCase(),
+    nk: nomeKey(nome)
+  });
 }
 
 // ===== Planilha de Eventos (funil / taxa de passagem) =====
@@ -1365,6 +1397,25 @@ function etapaNum(txt){
   if(!txt) return null;
   const m = String(txt).trim().match(/^(\d+)/);
   return m ? m[1] : null;
+}
+
+// Ordinal da etapa no funil (1..4), independente do pipeline.
+// Casa primeiro pelo NOME da etapa e só depois pelo número — assim pipelines com
+// etapas nomeadas (Webinar: "Acessou a Live", "Estava no Pitch") também entram.
+// 1 = Entrada de leads (etapa 0 Base; no Webinar, "Acessou a Live"/"Estava no Pitch")
+// 2 = Em Contato · 3 = Negociação · 4 = Link Pgto enviado · 0 = não reconhecida
+function etapaOrdinal(etapaRaw, origemRaw){
+  const e = String(etapaRaw || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  if(!e) return 0;
+  if(e.includes('em contato')) return 2;
+  if(e.includes('negocia')) return 3;
+  if(e.includes('link')) return 4;
+  const o = String(origemRaw || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  if(o.includes('webinar') && (e.includes('acessou') || e.includes('pitch'))) return 1;
+  const n = parseInt((e.match(/^(\d+)/) || [])[1], 10);
+  if(n === 0 || n === 1) return 1;   // Base/Entrada e "Respondeu 1ª msg" = mesma porta
+  if(n >= 2 && n <= 4) return n;
+  return 0;
 }
 
 // Classifica um motivo de perda: 'operacional' (não conta contra o vendedor) ou 'vendedor'.
@@ -4233,17 +4284,25 @@ function renderTaxaPassagem(){
   // ---- BLOCO FUNIL: passagem por etapa, estilo Pipedrive (cumulativo, teto 100%) ----
   // Um funil por segmento (origem) + um Total. Cada etapa conta quantos leads
   // ALCANÇARAM pelo menos aquela etapa, então a passagem nunca ultrapassa 100%.
+  // Sem número fixo: a numeração é montada na hora, porque o Webinar tem uma
+  // etapa a mais (Pitch) e ficaria fora de ordem com rótulo hardcoded.
   const ETAPAS_VIZ = [
-    { key:'1',    nome:'1. Entrada de leads', cor:'#2a78d6' },
-    { key:'2',    nome:'2. Em Contato',             cor:'#1baf7a' },
-    { key:'3',    nome:'3. Negociação',             cor:'#eda100' },
-    { key:'4',    nome:'4. Link Pgto enviado',      cor:'#eb6834' },
-    { key:'venda',nome:'5. Venda',                  cor:'#4a3aa7' }
+    { key:'1',     nome:'Entrada de leads',  cor:'#2a78d6' },
+    { key:'pitch', nome:'Viu o Pitch',       cor:'#8b7ffe', soPitch:true },
+    { key:'2',     nome:'Em Contato',        cor:'#1baf7a' },
+    { key:'3',     nome:'Negociação',        cor:'#eda100' },
+    { key:'4',     nome:'Link Pgto enviado', cor:'#eb6834' },
+    { key:'venda', nome:'Venda',             cor:'#4a3aa7' }
   ];
 
   const desenhaFunil = (titulo, cont, nLeads, destaque) => {
-    const passos = ETAPAS_VIZ.map(e => ({ nome:e.nome, valor:cont[e.key]||0, cor:e.cor }));
+    // A barra de Pitch só existe no Webinar (é etapa exclusiva desse pipeline).
+    const passos = ETAPAS_VIZ
+      .filter(e => !e.soPitch || cont._temPitch)
+      .map(e => ({ nome:e.nome, valor:cont[e.key]||0, cor:e.cor, key:e.key }));
     const maxF = Math.max(passos[0].valor, 1);
+    const idxContato = passos.findIndex(x => x.key === '2');
+    const idxVenda   = passos.length - 1;
     // Taxa que pula as etapas do meio: de quem chegou em Em Contato, quantos fecharam.
     const nContato = cont['2'] || 0;
     const nVenda   = cont['venda'] || 0;
@@ -4275,7 +4334,7 @@ function renderTaxaPassagem(){
       const corConv = (conv!==null && conv<40) ? '#d95926' : 'var(--muted)';
       h += `<div>
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-bottom:3px">
-          <span style="font-size:11.5px;color:var(--muted);font-weight:600">${p.nome}</span>
+          <span style="font-size:11.5px;color:var(--muted);font-weight:600">${i+1}. ${p.nome}</span>
           <span style="font-size:11px;color:${corConv};white-space:nowrap">${conv!==null?('↓ '+conv+'%'):''}</span>
         </div>
         <div style="height:30px;background:var(--bg);border-radius:5px;overflow:hidden">
@@ -4287,7 +4346,7 @@ function renderTaxaPassagem(){
     });
     h += `</div>
       <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:baseline;justify-content:space-between;gap:8px">
-        <span style="font-size:11.5px;color:var(--muted);font-weight:600">2. Em Contato → 5. Venda</span>
+        <span style="font-size:11.5px;color:var(--muted);font-weight:600">${idxContato+1}. Em Contato → ${idxVenda+1}. Venda</span>
         <span style="font-size:16px;font-weight:800;color:var(--text-strong)">${c2vTxt}</span>
       </div>
       <div style="font-size:10.5px;color:var(--muted);margin-top:2px">${nContato.toLocaleString('pt-BR')} em contato · ${nVenda.toLocaleString('pt-BR')} vendas</div>
@@ -4303,7 +4362,16 @@ function renderTaxaPassagem(){
   const fSeg = calcularFunilSegmentos();
   let bFunil = '';
   if(fSeg){
-    bFunil += `<div style="font-weight:800;color:var(--text-strong);font-size:16px;margin:4px 0 12px">🧭 Funil de passagem</div>`;
+    bFunil += `<div style="font-weight:800;color:var(--text-strong);font-size:16px;margin:4px 0 4px">🧭 Funil de passagem</div>`;
+    const at = fSeg.atribuicao;
+    if(at && at.total > 0){
+      const casou = at.telefone + at.email + at.nome;
+      bFunil += `<div style="font-size:11.5px;color:var(--muted);margin:0 0 12px">`
+        + `${at.total} venda(s) no recorte · origem identificada em ${casou} `
+        + `(tel ${at.telefone} · e-mail ${at.email} · nome ${at.nome})`
+        + (at.semOrigem > 0 ? ` · <span style="color:#d95926">${at.semOrigem} sem origem</span>` : '')
+        + `</div>`;
+    }
     bFunil += `<div class="funil-grid">`;
     // Total primeiro (destacado)
     bFunil += desenhaFunil('Total · todos os segmentos', fSeg.total, fSeg.totalLeads, true);
@@ -6216,8 +6284,8 @@ function displayName(v){
 function processarCSV(csvText){
   const rows = parseCSV(csvText);
   if(rows.length < 2) throw new Error('CSV vazio ou inválido');
-  // Hubla é o primeiro a rodar: zera o índice de telefones (TMB depois só acrescenta)
-  VENDAS_POR_TEL = {};
+  // Hubla é o primeiro a rodar: zera a lista de vendas (TMB depois só acrescenta)
+  VENDAS_LISTA = [];
   TEL_STATS = { vendas:0, comTel:0, semTel:0 };
   
   const header = rows[0].map(h => String(h).trim());
@@ -6263,6 +6331,9 @@ function processarCSV(csvText){
   // Localizar colunas do cliente (Nome e Telefone)
   const idxNome = header.findIndex(h => h.toLowerCase() === 'nome');
   const idxTelefone = header.findIndex(h => h.toLowerCase().includes('telefone') || h.toLowerCase().includes('fone') || h.toLowerCase().includes('whats'));
+  // E-mail do comprador: hoje a planilha não traz, mas se alguém adicionar a coluna
+  // o cruzamento passa a usar automaticamente.
+  const idxEmailV = header.findIndex(h => { const l = h.toLowerCase(); return l.includes('email') || l.includes('e-mail'); });
   
   for(let i = 1; i < rows.length; i++){
     const row = rows[i];
@@ -6311,7 +6382,7 @@ function processarCSV(csvText){
     }
     
     const dataKey = `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}`;
-    registrarVendaTel(telefone, valor, data, 'hubla');
+    registrarVenda(telefone, idxEmailV >= 0 ? row[idxEmailV] : '', cliente, valor, data, 'hubla');
     
     // Inicializa dia se não existe
     if(!acc[mesKey].porDia[dataKey]){
@@ -6384,6 +6455,7 @@ function processarTMB(csvText, acc){
   const idxProd   = find(l => l === 'produto');
   const idxNome   = find(l => l === 'cliente');
   const idxTel    = find(l => l.includes('telefone'));
+  const idxEmailV = find(l => l.includes('email') || l.includes('e-mail'));
 
   if(idxDataEf < 0 || idxPrinc < 0 || idxUtm < 0){
     console.warn('[TMB] Colunas obrigatórias não encontradas (Data efetivado, Valor Principal, utm_source). Cabeçalhos:', header.join(' | '));
@@ -6428,7 +6500,7 @@ function processarTMB(csvText, acc){
     const telefone = idxTel >= 0 ? (row[idxTel]||'').trim() : '';
 
     const dataKey = `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}`;
-    registrarVendaTel(telefone, valor, data, 'tmb');
+    registrarVenda(telefone, idxEmailV >= 0 ? row[idxEmailV] : '', cliente, valor, data, 'tmb');
 
     if(!acc[mesKey].porDia[dataKey]){
       acc[mesKey].porDia[dataKey] = {
@@ -6536,6 +6608,10 @@ function processarEventos(entrada){
   // O CRM não preenche valor (valor_total / valor_liquido vêm vazios), então o
   // faturamento por segmento vem do cruzamento por TELEFONE com Hubla/TMB.
   const idxTelEv = header.findIndex(h => h.includes('telefone') || h.includes('fone') || h.includes('whats'));
+  const idxNomeEv = header.findIndex(h => h === 'nome' || h === 'cliente');
+  // Índice de origem sobre TODO o histórico (sem recorte). Como as linhas vêm
+  // ordenadas por data asc, a última gravação vence = origem mais recente.
+  CRM_ORIGEM_TEL = new Map(); CRM_ORIGEM_EMAIL = new Map(); CRM_ORIGEM_NOME = new Map();
   if(idxTelEv < 0) console.warn('[Eventos] Coluna de telefone não encontrada — faturamento por segmento ficará indisponível. Cabeçalhos:', header.join(', '));
 
   if(idxEmail < 0 || idxProp < 0 || idxEtapa < 0){
@@ -6586,18 +6662,34 @@ function processarEventos(entrada){
       const ehEntrada = acaoRaw.includes('entrou');
       const ehGanhoCrm = acaoRaw.startsWith('ganh') || acaoRaw.includes('venda');
       const tk = idxTelEv >= 0 ? telKey(row[idxTelEv]) : '';
+      const etapaLow = String(row[idxEtapa]||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+      const ehPitch = String(seg).toLowerCase().includes('webinar') && etapaLow.includes('pitch');
       // Chave do lead: TELEFONE primeiro, e-mail como fallback (igual ao Nirla).
       // Evita contar 2x o lead que voltou pelo WhatsApp com outro e-mail.
       const chave = tk || email;
 
       if(ehEntrada){
-        const etNum = parseInt(etapaNum(row[idxEtapa]) || '0', 10);
+        const etNum = etapaOrdinal(row[idxEtapa], row[idxOrigem]);
         if(!porSegmentoDia[dataKey]) porSegmentoDia[dataKey] = {};
         if(!porSegmentoDia[dataKey][seg]) porSegmentoDia[dataKey][seg] = {};
-        const reg = porSegmentoDia[dataKey][seg][chave] || { max: 0, tel: '' };
+        const reg = porSegmentoDia[dataKey][seg][chave] || { max: 0, tel: '', email: '', nk: '', pitch: false };
         if(etNum > reg.max) reg.max = etNum;
+        // Etapa exclusiva do Webinar, marcada à parte por não caber na escala 1-4
+        if(ehPitch) reg.pitch = true;
         if(!reg.tel && tk) reg.tel = tk;
+        if(!reg.email) reg.email = email;
+        if(!reg.nk && idxNomeEv >= 0){ const nk2 = nomeKey(row[idxNomeEv]); if(nk2) reg.nk = nk2; }
         porSegmentoDia[dataKey][seg][chave] = reg;
+      }
+      // Alimenta o índice de origem do CRM (todo o histórico, sem filtro de data)
+      if(idxOrigem >= 0){
+        const org = String(row[idxOrigem]||'').trim();
+        if(org){
+          if(tk) CRM_ORIGEM_TEL.set(tk, org);
+          CRM_ORIGEM_EMAIL.set(email, org);
+          const nk = idxNomeEv >= 0 ? nomeKey(row[idxNomeEv]) : '';
+          if(nk) CRM_ORIGEM_NOME.set(nk, org);
+        }
       }
       if(ehGanhoCrm){
         if(!ganhosCrmDia[dataKey]) ganhosCrmDia[dataKey] = {};
@@ -6620,13 +6712,16 @@ function processarEventos(entrada){
 
     if(!vend || !porVendedor[vend]) continue;
 
-    const etapa = etapaNum(row[idxEtapa]);
+    const ord = etapaOrdinal(row[idxEtapa], idxOrigem >= 0 ? row[idxOrigem] : '');
+    const etapa = ord > 0 ? String(ord) : null;
     if(etapa === null || !porVendedor[vend][etapa]) continue;
 
     if(!email) continue;
 
-    // Conta o lead (email único) como tendo passado por aquela etapa
-    porVendedor[vend][etapa].add(email);
+    // Conta o lead como tendo passado por aquela etapa. Mesma chave do funil por
+    // segmento: telefone primeiro, e-mail como fallback.
+    const chaveVend = (idxTelEv >= 0 ? telKey(row[idxTelEv]) : '') || email;
+    porVendedor[vend][etapa].add(chaveVend);
 
     // Janela de tempo (pra normalizar por hora)
     const hora = idxHora >= 0 ? parseHora(row[idxHora]) : 0;
@@ -6753,13 +6848,19 @@ function calcularFunilSegmentos(){
       const leads = diaSeg[seg];
       Object.keys(leads).forEach(chave => {
         const reg = leads[chave];
-        const cur = alvo.get(chave) || { max: 0, tel: '' };
+        const cur = alvo.get(chave) || { max: 0, tel: '', email: '', nk: '', pitch: false };
         if(reg.max > cur.max) cur.max = reg.max;
+        if(reg.pitch) cur.pitch = true;
         if(!cur.tel && reg.tel) cur.tel = reg.tel;
+        if(!cur.email && reg.email) cur.email = reg.email;
+        if(!cur.nk && reg.nk) cur.nk = reg.nk;
         alvo.set(chave, cur);
-        const curT = totalMap.get(chave) || { max: 0, tel: '' };
+        const curT = totalMap.get(chave) || { max: 0, tel: '', email: '', nk: '', pitch: false };
         if(reg.max > curT.max) curT.max = reg.max;
+        if(reg.pitch) curT.pitch = true;
         if(!curT.tel && reg.tel) curT.tel = reg.tel;
+        if(!curT.email && reg.email) curT.email = reg.email;
+        if(!curT.nk && reg.nk) curT.nk = reg.nk;
         totalMap.set(chave, curT);
       });
     });
@@ -6770,37 +6871,67 @@ function calcularFunilSegmentos(){
     });
   });
 
-  // Etapas 1-4 = nº de leads que ENTRARAM naquela etapa (max >= N).
-  // Etapa 5 (venda) = venda REAL da Hubla/TMB casada por telefone no mesmo recorte.
   const diasSet = new Set(dias);
-  const contarCumulativo = (mapa, ganhosCrm) => {
-    const cont = { '1':0, '2':0, '3':0, '4':0, venda:0, _fat:0, _ganhosCrm: ganhosCrm ? ganhosCrm.size : 0 };
-    // Uma venda só pode ser contada uma vez, mesmo que dois leads compartilhem telefone.
-    const vendasUsadas = new Set();
+
+  // ---- Atribuição PELO LADO DA VENDA (igual ao Nirla) ----
+  // Filtra as vendas pela DATA DA VENDA e busca a origem do lead em todo o
+  // histórico do CRM (telefone -> e-mail -> nome). Não exige que o lead tenha
+  // tido evento dentro do recorte.
+  const vendasPorSeg = {};   // seg -> { qtd, valor }
+  const compradores = new Set(); // identificadores de quem comprou (pro backfill)
+  const attrStats = { total:0, telefone:0, email:0, nome:0, semOrigem:0 };
+  VENDAS_LISTA.forEach(v => {
+    if(!diasSet.has(v.dataKey)) return;
+    attrStats.total++;
+    const r = origemDaVenda(v);
+    const seg = r ? r.origem : SEGMENTO_SEM;
+    if(r) attrStats[r.via]++; else attrStats.semOrigem++;
+    if(!vendasPorSeg[seg]) vendasPorSeg[seg] = { qtd:0, valor:0 };
+    vendasPorSeg[seg].qtd++;
+    vendasPorSeg[seg].valor += v.valor;
+    if(v.tel) compradores.add('t:' + v.tel);
+    if(v.email) compradores.add('e:' + v.email);
+    if(v.nk) compradores.add('n:' + v.nk);
+  });
+  const vendasTotal = Object.keys(vendasPorSeg)
+    .reduce((a, k) => ({ qtd: a.qtd + vendasPorSeg[k].qtd, valor: a.valor + vendasPorSeg[k].valor }), { qtd:0, valor:0 });
+  ULTIMA_ATRIBUICAO = attrStats;
+
+  const comprouLead = reg =>
+       (reg.tel && compradores.has('t:' + reg.tel))
+    || (reg.email && compradores.has('e:' + reg.email))
+    || (reg.nk && compradores.has('n:' + reg.nk));
+
+  // Etapas 1-4: nº de leads com max >= N. Quem comprou é promovido (backfill).
+  // Etapa 5 (venda) e faturamento vêm da atribuição pelo lado da venda.
+  const contarCumulativo = (mapa, ganhosCrm, vendasSeg, temPitch) => {
+    const vs = vendasSeg || { qtd:0, valor:0 };
+    const cont = { '1':0, '2':0, '3':0, '4':0, pitch:0,
+                   venda: vs.qtd, _fat: vs.valor,
+                   _ganhosCrm: ganhosCrm ? ganhosCrm.size : 0,
+                   _temPitch: !!temPitch };
     mapa.forEach(reg => {
-      // Cruza a venda real (Hubla/TMB) ANTES de contar as etapas, porque quem
-      // comprou é promovido para todas as etapas anteriores (backfill).
-      const vendas = reg.tel ? (VENDAS_POR_TEL[reg.tel] || []) : [];
-      let casou = 0;
-      vendas.forEach(vd => {
-        if(!vendasUsadas.has(vd.id) && diasSet.has(vd.dataKey)){
-          cont._fat += vd.valor;
-          vendasUsadas.add(vd.id);
-          casou++;
-        }
-      });
-      const comprou = casou > 0;
+      const comprou = comprouLead(reg);
       for(let n = 1; n <= 4; n++){ if(reg.max >= n || comprou) cont[String(n)]++; }
-      if(comprou) cont.venda++;
+      // Pitch: quem foi marcado, mais quem avançou além dele (backfill)
+      if(reg.pitch || reg.max >= 2 || comprou) cont.pitch++;
     });
     return cont;
   };
 
-  const segmentos = Object.keys(consolidado)
-    .map(seg => ({ seg, leads: consolidado[seg].size, cont: contarCumulativo(consolidado[seg], ganhosSeg[seg]) }))
-    .sort((a,b) => b.leads - a.leads);
+  // Um segmento pode ter venda no recorte sem ter nenhum lead com evento nele
+  // (venda de lead que entrou antes). Ele precisa aparecer mesmo assim.
+  Object.keys(vendasPorSeg).forEach(seg => {
+    if(!consolidado[seg]) consolidado[seg] = new Map();
+  });
 
-  return { segmentos, total: contarCumulativo(totalMap, ganhosTotal), totalLeads: totalMap.size, dias };
+  const segmentos = Object.keys(consolidado)
+    .map(seg => ({ seg, leads: consolidado[seg].size,
+                   cont: contarCumulativo(consolidado[seg], ganhosSeg[seg], vendasPorSeg[seg],
+                                          /webinar/i.test(seg)) }))
+    .sort((a,b) => (b.leads - a.leads) || (b.cont.venda - a.cont.venda));
+
+  return { segmentos, total: contarCumulativo(totalMap, ganhosTotal, vendasTotal), totalLeads: totalMap.size, dias, atribuicao: attrStats };
 }
 
 function calcularFunil(){
@@ -6905,9 +7036,9 @@ async function carregarDados(forceRefresh = false){
       EVENTOS = processarEventos(rowsEv);
       if(EVENTOS) console.log('[Eventos] Processado. Horas ativas:', EVENTOS.periodo.horasAtivas);
       else console.warn('[Eventos] processarEventos retornou null (verifique nomes das colunas)');
-      console.log('[Cruzamento tel] vendas indexadas:', TEL_STATS.comTel, 'de', TEL_STATS.vendas,
-                  '| telefones únicos:', Object.keys(VENDAS_POR_TEL).length,
-                  '| sem telefone válido:', TEL_STATS.semTel);
+      console.log('[Vendas] indexadas:', VENDAS_LISTA.length,
+                  '| com telefone:', TEL_STATS.comTel, '| sem telefone:', TEL_STATS.semTel);
+      console.log('[Origem CRM] índice: tel', CRM_ORIGEM_TEL.size, '| email', CRM_ORIGEM_EMAIL.size, '| nome', CRM_ORIGEM_NOME.size);
     } catch(evErr){
       console.warn('[Eventos] Erro ao carregar do Supabase (funil indisponível):', evErr.message);
       EVENTOS = null;
