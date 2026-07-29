@@ -6656,6 +6656,8 @@ function processarEventos(entrada){
   // faturamento por segmento vem do cruzamento por TELEFONE com Hubla/TMB.
   const idxTelEv = header.findIndex(h => h.includes('telefone') || h.includes('fone') || h.includes('whats'));
   const idxNomeEv = header.findIndex(h => h === 'nome' || h === 'cliente');
+  const idxPipe = header.findIndex(h => h === 'pipeline');
+  if(idxPipe < 0) console.warn('[Eventos] Coluna pipeline não encontrada — o funil do Webinar cai pra origem.');
   // Índice de origem sobre TODO o histórico (sem recorte). Como as linhas vêm
   // ordenadas por data asc, a última gravação vence = origem mais recente.
   CRM_ORIGEM_TEL = new Map(); CRM_ORIGEM_EMAIL = new Map(); CRM_ORIGEM_NOME = new Map();
@@ -6751,6 +6753,7 @@ function processarEventos(entrada){
         cls: nrClassAcao(idxAcao >= 0 ? row[idxAcao] : ''),
         etapa: idxEtapa >= 0 ? String(row[idxEtapa]||'') : '',
         origemLbl: nrOrigemLabel(idxOrigem >= 0 ? row[idxOrigem] : ''),
+        pipeline: idxPipe >= 0 ? String(row[idxPipe]||'') : '',
         tel: idxTelEv >= 0 ? nrNormPhone(row[idxTelEv]) : '',
         email: nrNorm(email)
       });
@@ -6900,16 +6903,22 @@ function calcularFunilSegmentos(){
   // Conta chaves distintas entre os eventos de ENTRADA no período que passam no
   // filtro de origem e no predicado de etapa. Chave: telefone -> e-mail -> índice
   // (o índice faz cada evento sem contato virar um lead distinto, igual ao Nirla).
-  const uniqBy = (origemOk, pred) => {
+  const uniqBy = (filtro, pred) => {
     const s = {};
     for(let i = 0; i < FLAT.length; i++){
       const e = FLAT[i];
-      if(e.cls === 'entrada' && inR(e.dayKey) && origemOk(e.origemLbl) && pred(e)){
+      if(e.cls === 'entrada' && inR(e.dayKey) && filtro(e) && pred(e)){
         s[ e.tel || e.email || ('x' + i) ] = 1;
       }
     }
     return Object.keys(s).length;
   };
+
+  // O Webinar é um PIPELINE, não uma origem. Todo o funil dele sai do campo
+  // `pipeline`; a origem do lead não entra na conta.
+  const ehEvWebinar = e => nrNorm(e.pipeline).includes('webinar');
+  const temWebinar = FLAT.some(e => e.cls === 'entrada' && inR(e.dayKey) && ehEvWebinar(e));
+  const rotuloWebinar = (FLAT.find(e => ehEvWebinar(e)) || {}).pipeline || 'Webinar';
 
   // ---- Atribuição das vendas (pelo lado da venda, como no Nirla) ----
   const vendasPorSeg = {};
@@ -6939,44 +6948,53 @@ function calcularFunilSegmentos(){
   });
 
   // ---- Um bloco de contagem por segmento ----
-  // ehWebinar reproduz o stageByEtapaOnly do Nirla: no Webinar, Entrada e Pitch
-  // são contados SÓ pela etapa (ignoram a origem), porque são etapas exclusivas
-  // desse pipeline. "Em Contato" em diante é sempre por origem.
-  const contarSeg = (segLbl, ehTotal) => {
-    const ehWebinar = nrNorm(segLbl).includes('webinar');
-    const byOrigem = lbl => ehTotal ? true : (lbl === segLbl);
-    const stageOrigem = (ehWebinar && !ehTotal) ? (() => true) : byOrigem;
+  // Todas as barras filtram por ORIGEM, inclusive no Webinar. A etapa de entrada
+  // do Webinar é "Acessou a Live"; nos demais pipelines é a etapa 0 (Base).
+  // tipo: 'total' | 'webinar' (pipeline) | 'origem'
+  const contarSeg = (segLbl, tipo) => {
+    const ehTotal = tipo === 'total';
+    const ehWebinar = tipo === 'webinar';
+
+    // Cada evento pertence a UM card: se está no pipeline do Webinar, ele conta
+    // no card do Webinar e não nos cards de origem.
+    const filtro = ehTotal   ? (() => true)
+                 : ehWebinar ? (e => ehEvWebinar(e))
+                             : (e => !ehEvWebinar(e) && e.origemLbl === segLbl);
 
     const predEntrada = ehTotal
-      ? (e => nrNorm(e.origemLbl).includes('webinar') ? nrIsAcessouLive(e.etapa) : nrIsBaseStage(e.etapa))
+      ? (e => ehEvWebinar(e) ? nrIsAcessouLive(e.etapa) : nrIsBaseStage(e.etapa))
       : (ehWebinar ? (e => nrIsAcessouLive(e.etapa)) : (e => nrIsBaseStage(e.etapa)));
 
     const vs = (ehTotal ? vendasTotal : vendasPorSeg[segLbl]) || { qtd:0, valor:0 };
     const g  = ehTotal ? ganhosTotalSet : ganhosPorSeg[segLbl];
 
     return {
-      '1':    uniqBy(stageOrigem, predEntrada),
-      pitch:  uniqBy(stageOrigem, e => nrIsPitch(e.etapa)),
-      '2':    uniqBy(byOrigem,    e => nrIsContato(e.etapa)),
-      '3':    uniqBy(byOrigem,    e => nrIsNegociacao(e.etapa)),
-      '4':    uniqBy(byOrigem,    e => nrIsLink(e.etapa)),
+      '1':    uniqBy(filtro, predEntrada),
+      pitch:  uniqBy(filtro, e => nrIsPitch(e.etapa)),
+      '2':    uniqBy(filtro, e => nrIsContato(e.etapa)),
+      '3':    uniqBy(filtro, e => nrIsNegociacao(e.etapa)),
+      '4':    uniqBy(filtro, e => nrIsLink(e.etapa)),
       venda:  vs.qtd,
       _fat:   vs.valor,
       _ganhosCrm: g ? g.size : 0,
-      _temPitch: ehWebinar && !ehTotal
+      _temPitch: ehWebinar
     };
   };
 
   // Origens presentes: as que têm evento de entrada no período + as que tiveram venda
   const origens = new Set();
-  FLAT.forEach(e => { if(e.cls === 'entrada' && inR(e.dayKey)) origens.add(e.origemLbl); });
+  FLAT.forEach(e => { if(e.cls === 'entrada' && inR(e.dayKey) && !ehEvWebinar(e)) origens.add(e.origemLbl); });
   Object.keys(vendasPorSeg).forEach(o => origens.add(o));
 
   const segmentos = Array.from(origens)
-    .map(seg => { const cont = contarSeg(seg, false); return { seg, leads: cont['1'], cont }; })
-    .sort((a,b) => (b.leads - a.leads) || (b.cont.venda - a.cont.venda));
+    .map(seg => { const cont = contarSeg(seg, 'origem'); return { seg, leads: cont['1'], cont }; });
+  if(temWebinar){
+    const cw = contarSeg(rotuloWebinar, 'webinar');
+    segmentos.push({ seg: rotuloWebinar, leads: cw['1'], cont: cw });
+  }
+  segmentos.sort((a,b) => (b.leads - a.leads) || (b.cont.venda - a.cont.venda));
 
-  const total = contarSeg(null, true);
+  const total = contarSeg(null, 'total');
   return { segmentos, total, totalLeads: total['1'], dias, atribuicao: attrStats };
 }
 
