@@ -6701,6 +6701,21 @@ function processarEventos(entrada){
     const data = idxData >= 0 ? parseData(row[idxData]) : null;
     const dataKey = data ? `${data.ano}-${String(data.mes).padStart(2,'0')}-${String(data.dia).padStart(2,'0')}` : null;
 
+    // ---- Registro no formato Nirla (usado pela contabilização portada) ----
+    // Exige APENAS a data. Não pode exigir e-mail: lead que chega pelo WhatsApp
+    // vem só com telefone, e a chave do Nirla é telefone || e-mail || índice.
+    if(dataKey){
+      flat.push({
+        dayKey: dataKey,
+        cls: nrClassAcao(idxAcao >= 0 ? row[idxAcao] : ''),
+        etapa: idxEtapa >= 0 ? String(row[idxEtapa]||'') : '',
+        origemLbl: nrOrigemLabel(idxOrigem >= 0 ? row[idxOrigem] : ''),
+        pipeline: idxPipe >= 0 ? String(row[idxPipe]||'') : '',
+        tel: idxTelEv >= 0 ? nrNormPhone(row[idxTelEv]) : '',
+        email: nrNorm(email)
+      });
+    }
+
     // ---- Funil por SEGMENTO (independe do vendedor mapeado) ----
     // Registra, por dia e por segmento, a maior etapa que cada lead (email) alcançou,
     // e se houve "Ganho" (chegou ao fundo do funil = venda).
@@ -6747,16 +6762,6 @@ function processarEventos(entrada){
         ganhosCrmDia[dataKey][seg].add(chave);
       }
 
-      // ---- Registro no formato Nirla (usado pela contabilização portada) ----
-      flat.push({
-        dayKey: dataKey,
-        cls: nrClassAcao(idxAcao >= 0 ? row[idxAcao] : ''),
-        etapa: idxEtapa >= 0 ? String(row[idxEtapa]||'') : '',
-        origemLbl: nrOrigemLabel(idxOrigem >= 0 ? row[idxOrigem] : ''),
-        pipeline: idxPipe >= 0 ? String(row[idxPipe]||'') : '',
-        tel: idxTelEv >= 0 ? nrNormPhone(row[idxTelEv]) : '',
-        email: nrNorm(email)
-      });
     }
 
     // ---- Captura de PERDA (Status = lost) — antes do filtro de etapa ----
@@ -6918,7 +6923,7 @@ function calcularFunilSegmentos(){
   // `pipeline`; a origem do lead não entra na conta.
   const ehEvWebinar = e => nrNorm(e.pipeline).includes('webinar');
   const temWebinar = FLAT.some(e => e.cls === 'entrada' && inR(e.dayKey) && ehEvWebinar(e));
-  const rotuloWebinar = (FLAT.find(e => ehEvWebinar(e)) || {}).pipeline || 'Webinar';
+  const ROTULO_WEBINAR = 'Webinar CMP';  // rótulo fixo: o valor cru do campo pipeline é comprido demais
 
   // ---- Atribuição das vendas (pelo lado da venda, como no Nirla) ----
   const vendasPorSeg = {};
@@ -6927,7 +6932,8 @@ function calcularFunilSegmentos(){
     if(!inR(v.dataKey)) return;
     attrStats.total++;
     const r = origemDaVenda(v);
-    const seg = r ? nrOrigemLabel(r.origem) : SEGMENTO_SEM;
+    let seg = r ? nrOrigemLabel(r.origem) : SEGMENTO_SEM;
+    if(nrNorm(seg).includes('webinar')) seg = 'Webinar CMP';  // consolida no card do pipeline
     if(r) attrStats[r.via]++; else attrStats.semOrigem++;
     if(!vendasPorSeg[seg]) vendasPorSeg[seg] = { qtd:0, valor:0 };
     vendasPorSeg[seg].qtd++;
@@ -6985,12 +6991,15 @@ function calcularFunilSegmentos(){
   const origens = new Set();
   FLAT.forEach(e => { if(e.cls === 'entrada' && inR(e.dayKey) && !ehEvWebinar(e)) origens.add(e.origemLbl); });
   Object.keys(vendasPorSeg).forEach(o => origens.add(o));
+  // O Webinar tem card próprio (por pipeline). Nenhuma origem com "webinar" no
+  // nome pode gerar um segundo card.
+  Array.from(origens).forEach(o => { if(nrNorm(o).includes('webinar')) origens.delete(o); });
 
   const segmentos = Array.from(origens)
     .map(seg => { const cont = contarSeg(seg, 'origem'); return { seg, leads: cont['1'], cont }; });
   if(temWebinar){
-    const cw = contarSeg(rotuloWebinar, 'webinar');
-    segmentos.push({ seg: rotuloWebinar, leads: cw['1'], cont: cw });
+    const cw = contarSeg(ROTULO_WEBINAR, 'webinar');
+    segmentos.push({ seg: ROTULO_WEBINAR, leads: cw['1'], cont: cw });
   }
   segmentos.sort((a,b) => (b.leads - a.leads) || (b.cont.venda - a.cont.venda));
 
