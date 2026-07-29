@@ -4298,6 +4298,24 @@ function filtroAtalho(tipo){
 }
 
 // Recalcula perdas operacionais por vendedor RESPEITANDO o filtro de data atual
+// Reagrega os motivos de perda respeitando o recorte de datas.
+// EVENTOS.perdas.motivos é pré-agregado sobre a base inteira e não pode ser usado
+// direto — o card diz "no recorte" e precisa dizer a verdade.
+function perdasAgregadasFiltrado(){
+  const motivos = {};
+  let operacional = 0, doVendedor = 0, total = 0;
+  if(EVENTOS && EVENTOS.perdas && EVENTOS.perdas.porEmail){
+    Object.values(EVENTOS.perdas.porEmail).forEach(p => {
+      if(p.dataKey && !dentroIntervalo(p.dataKey)) return;
+      total++;
+      if(!motivos[p.motivo]) motivos[p.motivo] = { qtd:0, tipo:p.tipo };
+      motivos[p.motivo].qtd++;
+      if(p.tipo === 'operacional') operacional++; else doVendedor++;
+    });
+  }
+  return { motivos, operacional, doVendedor, total };
+}
+
 function perdasOpPorVendedorFiltrado(){
   const out = {};
   VENDEDORES.forEach(v => out[v] = 0);
@@ -4760,14 +4778,14 @@ function renderTaxaPassagem(){
 
   // ---- BLOCO 2.5: Motivos de perda (pizza) + Taxa de Conversão Real ----
   let bMotivos = '';
-  const perdas = EVENTOS.perdas;
-  if(perdas && perdas.motivos){
-    const entradas = Object.entries(perdas.motivos)
+  const perdasF = perdasAgregadasFiltrado();
+  if(perdasF.total > 0){
+    const entradas = Object.entries(perdasF.motivos)
       .map(([rotulo, o]) => ({ rotulo, qtd:o.qtd, tipo:o.tipo }))
       .sort((a,b)=> b.qtd - a.qtd);
-    const totalPerdas = entradas.reduce((a,e)=>a+e.qtd,0);
-    const opTotal = perdas.perdasOperacional || 0;
-    const vendTotal = perdas.perdasVendedor || 0;
+    const totalPerdas = perdasF.total;
+    const opTotal = perdasF.operacional;
+    const vendTotal = perdasF.doVendedor;
 
     // Taxa Real da equipe: exclui perdas operacionais do denominador
     // base real = leads em Em Contato − perdas operacionais (não podem ir abaixo das vendas)
