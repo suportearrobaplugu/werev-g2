@@ -1299,6 +1299,49 @@ const TMB_LIQUIDO_PCT = 0.5;
 // Precisa ser GLOBAL: usado tanto em processarEventos quanto em calcularFunilSegmentos.
 const SEGMENTO_SEM = 'Sem origem';
 
+/* ===========================================================================
+   PORTE LITERAL DA CONTABILIZAÇÃO DO NIRLA
+   As funções abaixo são cópias das do nirla.html. Não alterar sem alterar lá:
+   a régua das duas telas tem que ser a mesma.
+   =========================================================================== */
+const nrNorm = s => (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+
+function nrNormPhone(p){
+  let d = String(p||'').replace(/\D/g,'');
+  if(d.length > 11) d = d.slice(-11);                                  // remove DDI
+  if(d.length === 11 && d.charAt(2) === '9') d = d.slice(0,2)+d.slice(3); // remove o 9
+  return d.length >= 10 ? d.slice(-10) : d;
+}
+
+function nrNameKey(n){
+  const t = nrNorm(n).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(Boolean);
+  if(!t.length) return '';
+  return t.length === 1 ? t[0] : (t[0] + ' ' + t[t.length-1]);
+}
+
+const nrNumOf = st => { const m = String(st).match(/^\s*(\d+(?:[.,]\d+)?)/); return m ? m[1].replace(',','.') : null; };
+
+// 'entrada' | 'ganho' | 'perdido' | null
+function nrClassAcao(v){
+  const a = nrNorm(v);
+  if(!a) return null;
+  if(a.includes('entrou')) return 'entrada';
+  if(a.startsWith('ganh') || a.includes('venda')) return 'ganho';
+  if(a.startsWith('perd')) return 'perdido';
+  return null;
+}
+
+function nrIsBaseStage(et){ return nrNumOf(et) === '0'; }
+function nrIsAcessouLive(et){ return nrNorm(et).indexOf('acessou') >= 0; }
+function nrIsContato(et){ return nrNorm(et).indexOf('em contato') >= 0; }
+function nrIsPitch(et){ return nrNorm(et).indexOf('pitch') >= 0; }
+// Extensões: o resumo do Nirla não tem estas duas barras, mas a visualização do
+// CIC tem. Seguem o mesmo padrão (casamento pelo nome da etapa).
+function nrIsNegociacao(et){ return nrNorm(et).indexOf('negocia') >= 0; }
+function nrIsLink(et){ return nrNorm(et).indexOf('link') >= 0; }
+
+const nrOrigemLabel = o => (!o || nrNorm(o) === '') ? SEGMENTO_SEM : String(o).trim();
+
 // Lista achatada de TODAS as vendas (Hubla + TMB) do período carregado.
 // A atribuição de origem é feita do lado da VENDA (igual ao Nirla): pega a venda
 // pela data dela e busca a origem do lead em TODO o histórico do CRM.
@@ -6629,6 +6672,8 @@ function processarEventos(entrada){
   // Permite montar funil estilo Pipedrive (cumulativo, teto de 100%) respeitando o filtro de datas.
   // porSegmentoDia[dataKey][segmento][email] = { max: <nº etapa>, ganho: bool }
   const porSegmentoDia = {};
+  // Lista achatada de eventos, no formato que a contabilização do Nirla espera.
+  const flat = [];
   const ganhosCrmDia = {}; // dataKey -> seg -> Set(chave) — só diagnóstico
 
   const porVendedor = {};
@@ -6699,6 +6744,16 @@ function processarEventos(entrada){
         if(!ganhosCrmDia[dataKey][seg]) ganhosCrmDia[dataKey][seg] = new Set();
         ganhosCrmDia[dataKey][seg].add(chave);
       }
+
+      // ---- Registro no formato Nirla (usado pela contabilização portada) ----
+      flat.push({
+        dayKey: dataKey,
+        cls: nrClassAcao(idxAcao >= 0 ? row[idxAcao] : ''),
+        etapa: idxEtapa >= 0 ? String(row[idxEtapa]||'') : '',
+        origemLbl: nrOrigemLabel(idxOrigem >= 0 ? row[idxOrigem] : ''),
+        tel: idxTelEv >= 0 ? nrNormPhone(row[idxTelEv]) : '',
+        email: nrNorm(email)
+      });
     }
 
     // ---- Captura de PERDA (Status = lost) — antes do filtro de etapa ----
@@ -6762,6 +6817,7 @@ function processarEventos(entrada){
     porDia,
     porSegmentoDia,
     ganhosCrmDia,
+    flat,
     perdas: { porEmail: perdasPorEmail, motivos, perdasOperacional, perdasVendedor, perdasOpPorVendedor },
     periodo: {
       primeiraData: minTs ? new Date(minTs) : null,
@@ -6834,107 +6890,94 @@ function vendasNoFiltro(vend, dias){
 // (um lead na etapa 3 necessariamente passou por 1 e 2). "Ganho" = chegou à Venda.
 // Respeita o filtro de datas atual (FUNIL_FILTRO) via diasFiltrados().
 function calcularFunilSegmentos(){
-  if(!EVENTOS || !EVENTOS.porSegmentoDia) return null;
+  if(!EVENTOS || !EVENTOS.flat) return null;
   const dias = diasFiltrados();
-
-  // Consolida por segmento: chave (telefone ou e-mail) -> { max, tel }
-  const consolidado = {};      // seg -> Map(chave -> {max, tel})
-  const totalMap = new Map();  // chave -> {max, tel}  (todos os segmentos juntos)
-  const ganhosSeg = {};        // seg -> Set(chave)   — diagnóstico
-  const ganhosTotal = new Set();
-
-  dias.forEach(dk => {
-    const diaSeg = EVENTOS.porSegmentoDia[dk];
-    if(diaSeg) Object.keys(diaSeg).forEach(seg => {
-      if(!consolidado[seg]) consolidado[seg] = new Map();
-      const alvo = consolidado[seg];
-      const leads = diaSeg[seg];
-      Object.keys(leads).forEach(chave => {
-        const reg = leads[chave];
-        const cur = alvo.get(chave) || { max: 0, tel: '', email: '', nk: '', pitch: false };
-        if(reg.max > cur.max) cur.max = reg.max;
-        if(reg.pitch) cur.pitch = true;
-        if(!cur.tel && reg.tel) cur.tel = reg.tel;
-        if(!cur.email && reg.email) cur.email = reg.email;
-        if(!cur.nk && reg.nk) cur.nk = reg.nk;
-        alvo.set(chave, cur);
-        const curT = totalMap.get(chave) || { max: 0, tel: '', email: '', nk: '', pitch: false };
-        if(reg.max > curT.max) curT.max = reg.max;
-        if(reg.pitch) curT.pitch = true;
-        if(!curT.tel && reg.tel) curT.tel = reg.tel;
-        if(!curT.email && reg.email) curT.email = reg.email;
-        if(!curT.nk && reg.nk) curT.nk = reg.nk;
-        totalMap.set(chave, curT);
-      });
-    });
-    const gDia = EVENTOS.ganhosCrmDia ? EVENTOS.ganhosCrmDia[dk] : null;
-    if(gDia) Object.keys(gDia).forEach(seg => {
-      if(!ganhosSeg[seg]) ganhosSeg[seg] = new Set();
-      gDia[seg].forEach(ch => { ganhosSeg[seg].add(ch); ganhosTotal.add(ch); });
-    });
-  });
-
   const diasSet = new Set(dias);
+  const FLAT = EVENTOS.flat;
+  const inR = dk => diasSet.has(dk);
 
-  // ---- Atribuição PELO LADO DA VENDA (igual ao Nirla) ----
-  // Filtra as vendas pela DATA DA VENDA e busca a origem do lead em todo o
-  // histórico do CRM (telefone -> e-mail -> nome). Não exige que o lead tenha
-  // tido evento dentro do recorte.
-  const vendasPorSeg = {};   // seg -> { qtd, valor }
-  const compradores = new Set(); // identificadores de quem comprou (pro backfill)
+  // ---- uniqBy: cópia literal do Nirla ----
+  // Conta chaves distintas entre os eventos de ENTRADA no período que passam no
+  // filtro de origem e no predicado de etapa. Chave: telefone -> e-mail -> índice
+  // (o índice faz cada evento sem contato virar um lead distinto, igual ao Nirla).
+  const uniqBy = (origemOk, pred) => {
+    const s = {};
+    for(let i = 0; i < FLAT.length; i++){
+      const e = FLAT[i];
+      if(e.cls === 'entrada' && inR(e.dayKey) && origemOk(e.origemLbl) && pred(e)){
+        s[ e.tel || e.email || ('x' + i) ] = 1;
+      }
+    }
+    return Object.keys(s).length;
+  };
+
+  // ---- Atribuição das vendas (pelo lado da venda, como no Nirla) ----
+  const vendasPorSeg = {};
   const attrStats = { total:0, telefone:0, email:0, nome:0, semOrigem:0 };
   VENDAS_LISTA.forEach(v => {
-    if(!diasSet.has(v.dataKey)) return;
+    if(!inR(v.dataKey)) return;
     attrStats.total++;
     const r = origemDaVenda(v);
-    const seg = r ? r.origem : SEGMENTO_SEM;
+    const seg = r ? nrOrigemLabel(r.origem) : SEGMENTO_SEM;
     if(r) attrStats[r.via]++; else attrStats.semOrigem++;
     if(!vendasPorSeg[seg]) vendasPorSeg[seg] = { qtd:0, valor:0 };
     vendasPorSeg[seg].qtd++;
     vendasPorSeg[seg].valor += v.valor;
-    if(v.tel) compradores.add('t:' + v.tel);
-    if(v.email) compradores.add('e:' + v.email);
-    if(v.nk) compradores.add('n:' + v.nk);
   });
-  const vendasTotal = Object.keys(vendasPorSeg)
-    .reduce((a, k) => ({ qtd: a.qtd + vendasPorSeg[k].qtd, valor: a.valor + vendasPorSeg[k].valor }), { qtd:0, valor:0 });
+  const vendasTotal = Object.keys(vendasPorSeg).reduce(
+    (a,k) => ({ qtd:a.qtd + vendasPorSeg[k].qtd, valor:a.valor + vendasPorSeg[k].valor }), { qtd:0, valor:0 });
   ULTIMA_ATRIBUICAO = attrStats;
 
-  const comprouLead = reg =>
-       (reg.tel && compradores.has('t:' + reg.tel))
-    || (reg.email && compradores.has('e:' + reg.email))
-    || (reg.nk && compradores.has('n:' + reg.nk));
-
-  // Etapas 1-4: nº de leads com max >= N. Quem comprou é promovido (backfill).
-  // Etapa 5 (venda) e faturamento vêm da atribuição pelo lado da venda.
-  const contarCumulativo = (mapa, ganhosCrm, vendasSeg, temPitch) => {
-    const vs = vendasSeg || { qtd:0, valor:0 };
-    const cont = { '1':0, '2':0, '3':0, '4':0, pitch:0,
-                   venda: vs.qtd, _fat: vs.valor,
-                   _ganhosCrm: ganhosCrm ? ganhosCrm.size : 0,
-                   _temPitch: !!temPitch };
-    mapa.forEach(reg => {
-      const comprou = comprouLead(reg);
-      for(let n = 1; n <= 4; n++){ if(reg.max >= n || comprou) cont[String(n)]++; }
-      // Pitch: quem foi marcado, mais quem avançou além dele (backfill)
-      if(reg.pitch || reg.max >= 2 || comprou) cont.pitch++;
-    });
-    return cont;
-  };
-
-  // Um segmento pode ter venda no recorte sem ter nenhum lead com evento nele
-  // (venda de lead que entrou antes). Ele precisa aparecer mesmo assim.
-  Object.keys(vendasPorSeg).forEach(seg => {
-    if(!consolidado[seg]) consolidado[seg] = new Map();
+  // Ganhos marcados no CRM, só como diagnóstico no rodapé
+  const ganhosPorSeg = {};
+  const ganhosTotalSet = new Set();
+  FLAT.forEach((e,i) => {
+    if(e.cls !== 'ganho' || !inR(e.dayKey)) return;
+    const k = e.tel || e.email || ('g' + i);
+    (ganhosPorSeg[e.origemLbl] = ganhosPorSeg[e.origemLbl] || new Set()).add(k);
+    ganhosTotalSet.add(k);
   });
 
-  const segmentos = Object.keys(consolidado)
-    .map(seg => ({ seg, leads: consolidado[seg].size,
-                   cont: contarCumulativo(consolidado[seg], ganhosSeg[seg], vendasPorSeg[seg],
-                                          /webinar/i.test(seg)) }))
+  // ---- Um bloco de contagem por segmento ----
+  // ehWebinar reproduz o stageByEtapaOnly do Nirla: no Webinar, Entrada e Pitch
+  // são contados SÓ pela etapa (ignoram a origem), porque são etapas exclusivas
+  // desse pipeline. "Em Contato" em diante é sempre por origem.
+  const contarSeg = (segLbl, ehTotal) => {
+    const ehWebinar = nrNorm(segLbl).includes('webinar');
+    const byOrigem = lbl => ehTotal ? true : (lbl === segLbl);
+    const stageOrigem = (ehWebinar && !ehTotal) ? (() => true) : byOrigem;
+
+    const predEntrada = ehTotal
+      ? (e => nrNorm(e.origemLbl).includes('webinar') ? nrIsAcessouLive(e.etapa) : nrIsBaseStage(e.etapa))
+      : (ehWebinar ? (e => nrIsAcessouLive(e.etapa)) : (e => nrIsBaseStage(e.etapa)));
+
+    const vs = (ehTotal ? vendasTotal : vendasPorSeg[segLbl]) || { qtd:0, valor:0 };
+    const g  = ehTotal ? ganhosTotalSet : ganhosPorSeg[segLbl];
+
+    return {
+      '1':    uniqBy(stageOrigem, predEntrada),
+      pitch:  uniqBy(stageOrigem, e => nrIsPitch(e.etapa)),
+      '2':    uniqBy(byOrigem,    e => nrIsContato(e.etapa)),
+      '3':    uniqBy(byOrigem,    e => nrIsNegociacao(e.etapa)),
+      '4':    uniqBy(byOrigem,    e => nrIsLink(e.etapa)),
+      venda:  vs.qtd,
+      _fat:   vs.valor,
+      _ganhosCrm: g ? g.size : 0,
+      _temPitch: ehWebinar && !ehTotal
+    };
+  };
+
+  // Origens presentes: as que têm evento de entrada no período + as que tiveram venda
+  const origens = new Set();
+  FLAT.forEach(e => { if(e.cls === 'entrada' && inR(e.dayKey)) origens.add(e.origemLbl); });
+  Object.keys(vendasPorSeg).forEach(o => origens.add(o));
+
+  const segmentos = Array.from(origens)
+    .map(seg => { const cont = contarSeg(seg, false); return { seg, leads: cont['1'], cont }; })
     .sort((a,b) => (b.leads - a.leads) || (b.cont.venda - a.cont.venda));
 
-  return { segmentos, total: contarCumulativo(totalMap, ganhosTotal, vendasTotal), totalLeads: totalMap.size, dias, atribuicao: attrStats };
+  const total = contarSeg(null, true);
+  return { segmentos, total, totalLeads: total['1'], dias, atribuicao: attrStats };
 }
 
 function calcularFunil(){
