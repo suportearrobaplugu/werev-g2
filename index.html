@@ -1295,6 +1295,10 @@ const TMB_CSV_URL = TENANT.tmb || null;
 // Percentual do "Valor Principal" que efetivamente cai como líquido nas vendas TMB (boleto parcelado)
 const TMB_LIQUIDO_PCT = 0.5;
 
+// Rótulo do segmento quando o lead não tem origem preenchida no CRM.
+// Precisa ser GLOBAL: usado tanto em processarEventos quanto em calcularFunilSegmentos.
+const SEGMENTO_SEM = 'Sem origem';
+
 // Lista achatada de TODAS as vendas (Hubla + TMB) do período carregado.
 // A atribuição de origem é feita do lado da VENDA (igual ao Nirla): pega a venda
 // pela data dela e busca a origem do lead em TODO o histórico do CRM.
@@ -6620,7 +6624,6 @@ function processarEventos(entrada){
   }
 
   // Funil por segmento (coluna origem): segmento -> etapa -> Set(emails que registraram evento nessa etapa)
-  const SEGMENTO_SEM = 'Sem origem';
   const porSegmento = {};
   // Por dia, por segmento, por lead: a MAIOR etapa que o lead alcançou + se foi Ganho.
   // Permite montar funil estilo Pipedrive (cumulativo, teto de 100%) respeitando o filtro de datas.
