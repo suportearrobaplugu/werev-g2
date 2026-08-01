@@ -6733,27 +6733,42 @@ async function fetchReembolsosSupabase(){ return fetchViewCsvSupabase('vw_dash_r
 async function fetchEventosSupabase(){
   const PAGE = 1000;              // limite do PostgREST por requisição
   const MAX_PAGINAS = 200;       // teto de segurança (200 mil linhas)
-  let todos = [];
+  // Egress: buscamos só as ~12 colunas que o funil usa, e em CSV (não JSON) — o JSON
+  // repetiria os nomes das 22 colunas em cada uma das ~77k linhas. id fica fora do select
+  // mas ainda entra no order (desempate de paginação: evita repetir/pular linhas).
+  const COLS = 'data,hora,email,nome,telefone,acao,origem,status,proprietario,pipeline,etapa_crm,motivo_perda';
+  const key = SUPABASE_EVENTOS.anonKey;
+  let header = null; const linhas = [];
   for(let p = 0; p < MAX_PAGINAS; p++){
     const de = p * PAGE, ate = de + PAGE - 1;
-    // desempate por id.asc: sem ele, linhas com mesma (data,hora) podem repetir/pular entre páginas
-    const url = SUPABASE_EVENTOS.url + '?select=*&order=data.asc,hora.asc,id.asc';
+    const url = SUPABASE_EVENTOS.url + '?select=' + COLS + '&order=data.asc,hora.asc,id.asc';
     const resp = await fetch(url, {
       headers: {
-        'apikey': SUPABASE_EVENTOS.anonKey,
-        'Authorization': 'Bearer ' + SUPABASE_EVENTOS.anonKey,
+        'apikey': key,
+        'Authorization': 'Bearer ' + key,
+        'Accept': 'text/csv',
         'Range-Unit': 'items',
         'Range': de + '-' + ate
       }
     });
-    if(!resp.ok && resp.status !== 206) throw new Error('Supabase HTTP ' + resp.status);
-    const bloco = await resp.json();
-    if(!Array.isArray(bloco)) throw new Error('Resposta do Supabase não é uma lista');
-    todos = todos.concat(bloco);
-    if(bloco.length < PAGE) break; // última página
+    if(!resp.ok && resp.status !== 206) throw new Error('Supabase HTTP ' + resp.status + ' (eventos)');
+    const txt = await resp.text();
+    const partes = txt.split(/\r?\n/);
+    while(partes.length && partes[partes.length-1] === '') partes.pop();
+    if(partes.length === 0) break;
+    if(p === 0){
+      header = partes[0];
+      for(let k = 1; k < partes.length; k++) linhas.push(partes[k]);
+      if(partes.length - 1 < PAGE) break;
+    } else {
+      const dados = partes.slice(1);
+      for(const l of dados) linhas.push(l);
+      if(dados.length < PAGE) break;
+    }
   }
-  console.log('[Eventos] Supabase: total de', todos.length, 'registros (paginado)');
-  return jsonParaRows(todos);
+  console.log('[Eventos] Supabase (CSV, colunas enxutas): total de', linhas.length, 'registros (paginado)');
+  if(header === null) return '';
+  return header + '\n' + linhas.join('\n');   // processarEventos aceita CSV (string) ou rows (array)
 }
 
 // Converte [{col:val,...}, ...] em [[header...], [val...], ...]
