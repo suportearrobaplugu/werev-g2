@@ -5472,12 +5472,15 @@ function processarReembolsos(csvText){
 
   // fallback de posição conforme o print (A=0 data reemb, J=9 valor vendedor)
   const cDataReemb = idxDataReemb >= 0 ? idxDataReemb : 0;
+  const idxDataVenda = find('data da venda','data venda');
+  const cDataVenda = idxDataVenda >= 0 ? idxDataVenda : cDataReemb; // fallback: usa data do reembolso
   const cValorVend = idxValorVend >= 0 ? idxValorVend : 9;
   // se não achar coluna de vendedor por nome, tenta a coluna após "valor do vendedor"+método (M/13)
   const cVendedor = idxVendedorFinal >= 0 ? idxVendedorFinal : 17;
 
-  // Um bucket por mês. O reembolso é atribuído ao MÊS EM QUE O REEMBOLSO OCORREU
-  // (data do reembolso), não ao mês da venda original.
+  // Um bucket por mês. O reembolso é atribuído ao MÊS DA VENDA ORIGINAL
+  // (data da venda), não ao mês em que o reembolso ocorreu. A data do reembolso
+  // segue sendo usada apenas para exibição na linha.
   const novoBucket = () => {
     const pv = {};
     VENDEDORES.forEach(v => pv[v] = { qtd:0, valor:0 });
@@ -5490,9 +5493,12 @@ function processarReembolsos(csvText){
     const row = rows[i];
     if(!row || row.length===0) continue;
     const dataReemb = parseData(row[cDataReemb]);
-    if(!dataReemb) continue;
+    const dataVenda = parseData(row[cDataVenda]) || dataReemb;
+    if(!dataVenda) continue;
+    const dataExib = dataReemb || dataVenda;   // data do reembolso, só p/ exibição
 
-    const mesKey = mesKeyDe(dataReemb);
+    // bucketiza pelo MÊS DA VENDA original
+    const mesKey = mesKeyDe(dataVenda);
     if(!mesKey || !porMes[mesKey]) continue;
     const eventos = porMes[mesKey].eventos;
     const porVendedor = porMes[mesKey].porVendedor;
@@ -5503,8 +5509,8 @@ function processarReembolsos(csvText){
     const vend = mapearVendedor(vendRaw);
 
     const ev = {
-      data: dataReemb,
-      dataStr: `${String(dataReemb.dia).padStart(2,'0')}/${String(dataReemb.mes).padStart(2,'0')}`,
+      data: dataExib,
+      dataStr: `${String(dataExib.dia).padStart(2,'0')}/${String(dataExib.mes).padStart(2,'0')}`,
       nome: idxNome>=0 ? (row[idxNome]||'') : '',
       email: idxEmail>=0 ? (row[idxEmail]||'') : '',
       status: idxStatus>=0 ? (row[idxStatus]||'') : '',
