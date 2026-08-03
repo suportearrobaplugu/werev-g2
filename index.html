@@ -608,10 +608,6 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 <body>
 <div class="container">
   <div class="error-banner" id="errorBanner"></div>
-  <div id="sourceStatus" style="display:none;align-items:center;gap:12px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 12px;margin-bottom:10px;border-radius:8px;background:var(--card,#fff);border:1px solid var(--border,#e5e7eb)">
-    <span id="sourceStatusText" style="color:var(--muted)"></span>
-    <button onclick="carregarDados(true)" class="header-btn" style="margin-left:auto" title="Buscar dados agora">🔄 Atualizar agora</button>
-  </div>
   <div class="header">
     <div class="brand">
       <div class="logo"><img id="werevLogo" src="" alt="Werev"></div>
@@ -625,7 +621,12 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
         <button id="refreshBtn" onclick="carregarDados(true)" class="header-btn" title="Atualizar dados">🔄</button>
         <button id="themeToggle" onclick="toggleTheme()" class="header-btn theme-btn" title="Alternar tema claro/escuro">🌙</button>
       </div>
-      <div class="month-toggle" id="monthToggle"></div>
+      <div class="month-toggle">
+        <button class="month-tab active" onclick="setMonth('julho')">Julho</button>
+        <button class="month-tab" onclick="setMonth('junho')">Junho</button>
+        <button class="month-tab" onclick="setMonth('maio')">Maio</button>
+        <button class="month-tab" onclick="setMonth('abril')">Abril</button>
+      </div>
     </div>
   </div>
   <div class="header-spacer"></div>
@@ -646,7 +647,6 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <button class="sb-item" data-tab="funil" onclick="setTab('funil')"><span class="sb-ic">🚦</span><span class="sb-txt">Funil &amp; Taxa de Passagem</span></button>
       <button class="sb-item" data-tab="taxapassagem" onclick="setTab('taxapassagem')"><span class="sb-ic">📉</span><span class="sb-txt">Taxa de Passagem</span></button>
       <button class="sb-item" data-tab="reembolsos" onclick="setTab('reembolsos')"><span class="sb-ic">💸</span><span class="sb-txt">Reembolsos</span></button>
-      <button class="sb-item" data-tab="nirla" onclick="setTab('nirla')"><span class="sb-ic">🧪</span><span class="sb-txt">MVP Nirla</span></button>
       <div class="sb-grp">Cultura &amp; Operação</div>
       <button class="sb-item" data-tab="regras" onclick="setTab('regras')"><span class="sb-ic">📋</span><span class="sb-txt">Regras e Combinados</span></button>
       <button class="sb-item" data-tab="rotina" onclick="setTab('rotina')"><span class="sb-ic">🗓️</span><span class="sb-txt">Rotina</span></button>
@@ -985,18 +985,6 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <div id="rotinaContent"><div style="padding:24px;text-align:center;color:var(--muted)">Carregando rotina…</div></div>
   </div>
 
-  <div id="tab-nirla" class="tab-content">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
-      <div class="section-title" style="margin:0">🧪 MVP Nirla</div>
-      <a href="nirla.html" target="_blank" rel="noopener" style="margin-left:auto;font-size:12px;color:var(--muted);text-decoration:none">Abrir em nova aba ↗</a>
-    </div>
-    <div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--bg)">
-      <iframe id="nirlaFrame" title="MVP Nirla"
-              style="width:100%;height:calc(100vh - 190px);min-height:600px;border:0;display:block"
-              loading="lazy"></iframe>
-    </div>
-  </div>
-
   <div id="tab-regras" class="tab-content">
     <div class="recordes-hero">
       <h2>📋 Regras e Combinados</h2>
@@ -1252,55 +1240,12 @@ function themeColors(){
 
 // Re-renderizar todos os charts ao trocar de tema
 function updateChartsTheme(){
-  if(typeof render === 'function' && DADOS && DADOS[currentMonth]){
+  if(typeof render === 'function' && DADOS && DADOS.maio){
     try { render(); } catch(e) { console.warn('Erro ao re-renderizar:', e); }
   }
 }
 
-// ===========================================================================
-// CHAVES DE MÊS DINÂMICAS (nome em português, ano-agnóstico na chave interna).
-// Geradas do início do acompanhamento (abril/2026) até o mês corrente REAL.
-// À prova de virada de ano: em 01/01/2027 o mês corrente vira 'janeiro'.
-// Fonte única de verdade — o restante do código deriva daqui.
-// ===========================================================================
-const MES_NOME_FULL  = {1:'janeiro',2:'fevereiro',3:'marco',4:'abril',5:'maio',6:'junho',7:'julho',8:'agosto',9:'setembro',10:'outubro',11:'novembro',12:'dezembro'};
-const MES_LABEL_FULL = {janeiro:'Janeiro',fevereiro:'Fevereiro',marco:'Março',abril:'Abril',maio:'Maio',junho:'Junho',julho:'Julho',agosto:'Agosto',setembro:'Setembro',outubro:'Outubro',novembro:'Novembro',dezembro:'Dezembro'};
-const MES_ABREV_FULL = {janeiro:'JAN',fevereiro:'FEV',marco:'MAR',abril:'ABR',maio:'MAI',junho:'JUN',julho:'JUL',agosto:'AGO',setembro:'SET',outubro:'OUT',novembro:'NOV',dezembro:'DEZ'};
-// número do mês -> nome (inverso do MES_NOME_FULL, cobre os 12 meses)
-const MES_NUM = {}; Object.keys(MES_NOME_FULL).forEach(n => { MES_NUM[MES_NOME_FULL[n]] = +n; });
-// número do mês -> chave (usado no cruzamento de reembolsos por data). Cobre os 12.
-const MES_NUM_KEY = MES_NOME_FULL;
-const MES_INICIO = { ano: 2026, mes: 4 }; // abril/2026 = primeiro mês acompanhado
-// Lista ASCENDENTE de chaves de mês, do início até o mês corrente real (inclusive).
-function buildMesesKeys(){
-  const now = new Date();
-  const curY = now.getFullYear(), curM = now.getMonth()+1;
-  const out = [];
-  let y = MES_INICIO.ano, m = MES_INICIO.mes;
-  for(let guard = 0; guard < 12; guard++){       // teto de 12 evita colisão de nome
-    out.push(MES_NOME_FULL[m]);
-    if(y === curY && m === curM) break;            // chegou no mês corrente
-    if(y > curY || (y === curY && m > curM)) break;// segurança
-    m++; if(m > 12){ m = 1; y++; }
-  }
-  return out;
-}
-const MESES_KEYS = buildMesesKeys();                  // ex.: ['abril','maio','junho','julho','agosto']
-const MESES_KEYS_DESC = MESES_KEYS.slice().reverse(); // corrente -> abril
-// Chave de mês para um {ano,mes,dia}, SÓ se estiver na janela acompanhada
-// [início .. mês corrente]. Fora disso retorna null (evita poluição de outros anos).
-function mesKeyDe(data){
-  if(!data || !data.mes) return null;
-  const now = new Date();
-  const abs = data.ano*12 + data.mes;
-  const ini = MES_INICIO.ano*12 + MES_INICIO.mes;
-  const cur = now.getFullYear()*12 + (now.getMonth()+1);
-  if(abs < ini || abs > cur) return null;
-  return MES_NOME_FULL[data.mes] || null;
-}
-// Bucket vazio de mês (shape leve usado no estado inicial, antes do primeiro load).
-function novoMesVazio(){ return { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }; }
-let DADOS = {}; MESES_KEYS.forEach(m => { DADOS[m] = novoMesVazio(); });
+let DADOS = { julho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, junho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} }, abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {} } };
 
 // ===== MULTI-TENANT: cada time tem suas próprias planilhas =====
 // Para adicionar um novo time, copie um bloco abaixo e troque o id, nome e URLs.
@@ -1477,7 +1422,7 @@ function mapearProprietario(nome){
   if(!nome) return null;
   const s = normalizarUtm(nome); // normaliza acento/caixa; separadores viram espaço
   for(const v of VENDEDOR_MATCH){
-    if(v.partes.every(p => s.includes(p))) return v.key;
+    if(v.aliases.some(a => s.includes(a))) return v.key;
   }
   return null;
 }
@@ -1591,12 +1536,19 @@ const HOJE = (() => {
 })();
 
 let EVENTOS = null;
-// Mês corrente real (o que contém o dia de HOJE). Dinâmico e à prova de virada de ano.
-const MES_CORRENTE = MES_NOME_FULL[new Date().getMonth()+1];
-// Começa exibindo o mês corrente se ele estiver dentro da janela acompanhada; senão, o último.
-let currentMonth = MESES_KEYS.includes(MES_CORRENTE) ? MES_CORRENTE : MESES_KEYS[MESES_KEYS.length-1];
-// MES_NUM (nome->número, 12 meses) e MES_NUM_KEY já definidos no bloco de chaves dinâmicas.
-function mesNum(m){ return MES_NUM[m] || (new Date().getMonth()+1); }
+let currentMonth = 'julho';
+// Número do mês (2026) para cada chave
+const MES_NUM = { julho: 7, junho: 6, maio: 5, abril: 4 };
+function mesNum(m){ return MES_NUM[m] || 7; }
+// Mês corrente real (o que contém o dia de HOJE). Usado p/ "Hoje", projeção, dias úteis.
+const MES_CORRENTE = (() => {
+  const m = new Date().getMonth()+1;
+  if(m === 7) return 'julho';
+  if(m === 6) return 'junho';
+  if(m === 5) return 'maio';
+  if(m === 4) return 'abril';
+  return 'julho';
+})();
 let currentVendor = 'geral';
 
 function fmtMoney(v){return 'R$ ' + Math.round(v).toLocaleString('pt-BR')}
@@ -1609,49 +1561,9 @@ function setMonth(m){
   currentMonth = m;
   document.querySelectorAll('.month-tab').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.month-tab').forEach(b=>{
-    const mk = b.dataset.mes || b.textContent.toLowerCase();
-    if(mk===m)b.classList.add('active');
+    if(b.textContent.toLowerCase()===m)b.classList.add('active');
   });
   renderAll();
-}
-
-// Renderiza as abas de mês dinamicamente (corrente -> abril), marcando a atual.
-function renderMonthTabs(){
-  const wrap = document.getElementById('monthToggle');
-  if(!wrap) return;
-  wrap.innerHTML = MESES_KEYS_DESC.map(mk =>
-    `<button class="month-tab${mk===currentMonth?' active':''}" data-mes="${mk}" onclick="setMonth('${mk}')">${MES_LABEL_FULL[mk]||mk}</button>`
-  ).join('');
-}
-
-// ===== Status por fonte de dados (banner no topo) =====
-// Cada fetch registra ok/erro + horário. O banner nunca deve deixar uma falha
-// parecer "R$0 / não houve venda" — fontes que falham aparecem como FALHOU.
-const FONTE_STATUS = {
-  vendas:     { label:'Vendas',     ok:null, hora:null, erro:null },
-  tmb:        { label:'TMB',        ok:null, hora:null, erro:null },
-  reembolsos: { label:'Reembolsos', ok:null, hora:null, erro:null },
-  eventos:    { label:'Eventos',    ok:null, hora:null, erro:null }
-};
-function marcarFonte(k, ok, erro){
-  const f = FONTE_STATUS[k]; if(!f) return;
-  f.ok = ok;
-  f.hora = new Date().toTimeString().slice(0,5);
-  f.erro = ok ? null : (erro || 'erro');
-  renderSourceStatus();
-}
-function renderSourceStatus(){
-  const box = document.getElementById('sourceStatus');
-  const txt = document.getElementById('sourceStatusText');
-  if(!box || !txt) return;
-  const partes = Object.keys(FONTE_STATUS).map(k => {
-    const f = FONTE_STATUS[k];
-    if(f.ok === null) return `${f.label}: …`;
-    if(f.ok) return `${f.label}: atualizado ${f.hora}`;
-    return `${f.label}: <span style="color:#ef4444;font-weight:700">FALHOU</span>`;
-  });
-  txt.innerHTML = partes.join(' · ');
-  box.style.display = 'flex';
 }
 
 function setVendor(v){
@@ -3011,8 +2923,8 @@ function renderAll(){
 let chartEvoAcum, chartEvoDiario;
 
 // Ordem cronológica dos meses disponíveis
-const EVO_ORDEM = MESES_KEYS;          // ascendente, dinâmico (abril -> corrente)
-const EVO_NOME = MES_LABEL_FULL;       // rótulos de todos os 12 meses
+const EVO_ORDEM = ['abril','maio','junho','julho'];
+const EVO_NOME = { abril:'Abril', maio:'Maio', junho:'Junho', julho:'Julho' };
 
 // Retorna o mês anterior ao informado (ou null se não houver).
 // MVP: sempre o anterior. Depois dá pra trocar por um seletor (ex: melhor mês).
@@ -3179,7 +3091,7 @@ function getSemanasFechadasIso(){
   
   // Coletar todas as datas com vendas
   const datasComVendas = new Set();
-  MESES_KEYS_DESC.forEach(mesKey => {
+  ['julho','junho','maio','abril'].forEach(mesKey => {
     Object.keys(DADOS[mesKey].porDia).forEach(dt => datasComVendas.add(dt));
   });
   
@@ -3240,7 +3152,7 @@ function gerarRelatorioSemana(seg, dom){
   
   for(let h = 9; h <= 21; h++) stats.porHora[h] = 0;
   
-  MESES_KEYS_DESC.forEach(mesKey => {
+  ['julho','junho','maio','abril'].forEach(mesKey => {
     Object.entries(DADOS[mesKey].porDia).forEach(([dt, info]) => {
       if(dt >= segStr && dt <= domStr){
         stats.fat += info.total || 0;
@@ -4015,7 +3927,7 @@ function calcStatsSemana(offset){
   const stats = { fat: 0, qtd: 0, ticket: 0, porVendedor: {}, label: '' };
   VENDEDORES.forEach(v => { stats.porVendedor[v] = { valor: 0, qtd: 0 }; });
   
-  MESES_KEYS_DESC.forEach(mesKey => {
+  ['julho','junho','maio','abril'].forEach(mesKey => {
     Object.entries(DADOS[mesKey].porDia).forEach(([dt, info]) => {
       if(dt >= segStr && dt <= domStr){
         stats.fat += info.total || 0;
@@ -4160,9 +4072,9 @@ function renderInsights(){
   let labelComp = '';
   
   if(insightsPeriod === 'mes'){
-    const ORDEM = MESES_KEYS;
-    const NOME = MES_LABEL_FULL;
-    const ABREV = MES_ABREV_FULL;
+    const ORDEM = ['abril','maio','junho','julho'];
+    const NOME = { abril:'Abril', maio:'Maio', junho:'Junho', julho:'Julho' };
+    const ABREV = { abril:'ABR', maio:'MAI', junho:'JUN', julho:'JUL' };
     const idx = ORDEM.indexOf(currentMonth);
     const mAtual = currentMonth;
     const mAnterior = idx > 0 ? ORDEM[idx-1] : 'junho';
@@ -4610,11 +4522,15 @@ function renderTaxaPassagem(){
       const base = Math.max(p.vendas, p.etapas['2'] - op);
       return base > 0 ? Math.min(p.vendas / base, 1) : 0;
     };
+    // Vendedor SEM "Em Contato" no recorte não tem base real -> não pode virar
+    // 100% falso. Fica de fora da média, é ordenado por último e a taxa vira "—".
+    const semBaseV = v => f.porVendedor[v].etapas['2'] === 0;
     const taxasR = {};
     VENDEDORES.forEach(v=> taxasR[v]=taxaRealV(v));
-    const valsR = VENDEDORES.map(v=>taxasR[v]).filter(x=>x>0);
+    const valsR = VENDEDORES.filter(v=> !semBaseV(v)).map(v=>taxasR[v]).filter(x=>x>0);
     const mediaR = valsR.length ? valsR.reduce((a,b)=>a+b,0)/valsR.length : 0;
-    const ordR = [...VENDEDORES].sort((a,b)=> taxasR[b]-taxasR[a]);
+    const sortKeyR = v => semBaseV(v) ? -1 : taxasR[v];
+    const ordR = [...VENDEDORES].sort((a,b)=> sortKeyR(b)-sortKeyR(a));
 
     let totOpV = 0; VENDEDORES.forEach(v=> totOpV += (opV[v]||0));
 
@@ -4641,22 +4557,25 @@ function renderTaxaPassagem(){
     let linhasR = ordR.map(v=>{
       const p=f.porVendedor[v];
       const op = opV[v] || 0;
+      const semBase = semBaseV(v);
       const base = Math.max(p.vendas, p.etapas['2'] - op);
       const t = taxasR[v];
       const tBruta = taxaC2V(v);
-      const acima = t>0 && t>=mediaR;
-      const c = t===0 ? 'var(--muted)' : (acima ? 'var(--green)' : 'var(--text-strong)');
+      const acima = !semBase && t>0 && t>=mediaR;
+      const c = semBase ? 'var(--muted)' : (t===0 ? 'var(--muted)' : (acima ? 'var(--green)' : 'var(--text-strong)'));
       // seta de variação vs bruta
       const dif = t - tBruta;
-      const setinha = dif > 0.001 ? `<span style="color:var(--green);font-size:10px"> ▲</span>` : '';
+      const setinha = (!semBase && dif > 0.001) ? `<span style="color:var(--green);font-size:10px"> ▲</span>` : '';
+      const baseCell = semBase ? '—' : base;
+      const taxaRealCell = semBase ? '—' : (pct(t)+setinha);
       return `<tr style="border-bottom:1px solid var(--border)">
         <td style="padding:9px 12px;font-weight:700;color:var(--text-strong)"><span style="display:inline-flex;align-items:center">${avatar(v)}${displayName(v)}</span></td>
         <td style="padding:9px 8px;text-align:center;color:var(--text)">${p.etapas['2']}</td>
         <td style="padding:9px 8px;text-align:center;color:var(--muted)">${op>0?'−'+op:'·'}</td>
-        <td style="padding:9px 8px;text-align:center;color:var(--text)">${base}</td>
+        <td style="padding:9px 8px;text-align:center;color:var(--text)">${baseCell}</td>
         <td style="padding:9px 8px;text-align:center;font-weight:700;color:var(--green)">${p.vendas}</td>
         <td style="padding:9px 8px;text-align:center;color:var(--muted)">${pct(tBruta)}</td>
-        <td style="padding:9px 8px;text-align:center;font-weight:800;color:${c}">${pct(t)}${setinha}</td>
+        <td style="padding:9px 8px;text-align:center;font-weight:800;color:${c}">${taxaRealCell}</td>
       </tr>`;
     }).join('');
 
@@ -4933,7 +4852,7 @@ function renderTaxaPassagem(){
   } else {
     const vendasDia = dk => {
       let q=0;
-      MESES_KEYS_DESC.some(mk=>{
+      ['julho','junho','maio','abril'].some(mk=>{
         const mes=DADOS[mk]; if(!mes) return false;
         const dia=mes.porDia[dk];
         if(dia){ Object.values(dia.porVendedor).forEach(x=> q+=x.qtd); return true; }
@@ -5404,7 +5323,8 @@ function responderChat(q){
 // ===== Aba Reembolsos: lê a aba BD Reembolso da planilha de vendas =====
 const REEMBOLSOS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBV0F7S_7b1qi9WFTeGORVnJZ6J76tYEvPqAmWQjtwIsSv-dgbuOq_Qqef4YWNKIz0D1F8n_dqHK_F/pub?gid=595173569&single=true&output=csv';
 let REEMBOLSOS_DADOS = null;
-// MESES_KEYS e MES_NUM_KEY agora são dinâmicos (definidos no bloco de chaves de mês).
+const MESES_KEYS = ['abril','maio','junho','julho'];
+const MES_NUM_KEY = { 4:'abril', 5:'maio', 6:'junho', 7:'julho' };
 
 // valor que trata tanto 1.199,88 quanto 1199.88
 function parseValorBR(v){
@@ -5425,9 +5345,9 @@ function parseValorBR(v){
 // Busca e processa a base de reembolsos (todos os meses). Usada tanto no carregamento
 // principal (pra abater do faturamento) quanto pela aba.
 async function fetchReembolsos(){
-  // Fonte migrada para o Supabase (view vw_dash_reembolso). O CSV retornado tem os
-  // mesmos cabeçalhos que processarReembolsos espera. REEMBOLSOS_CSV_URL fica como legado.
-  const txt = await fetchReembolsosSupabase();
+  const resp = await fetch(REEMBOLSOS_CSV_URL + '&_t=' + Date.now(), { cache:'no-store' });
+  if(!resp.ok) throw new Error('HTTP '+resp.status);
+  const txt = await resp.text();
   REEMBOLSOS_DADOS = processarReembolsos(txt);
   return REEMBOLSOS_DADOS;
 }
@@ -5472,15 +5392,12 @@ function processarReembolsos(csvText){
 
   // fallback de posição conforme o print (A=0 data reemb, J=9 valor vendedor)
   const cDataReemb = idxDataReemb >= 0 ? idxDataReemb : 0;
-  const idxDataVenda = find('data da venda','data venda');
-  const cDataVenda = idxDataVenda >= 0 ? idxDataVenda : cDataReemb; // fallback: usa data do reembolso
   const cValorVend = idxValorVend >= 0 ? idxValorVend : 9;
   // se não achar coluna de vendedor por nome, tenta a coluna após "valor do vendedor"+método (M/13)
   const cVendedor = idxVendedorFinal >= 0 ? idxVendedorFinal : 17;
 
-  // Um bucket por mês. O reembolso é atribuído ao MÊS DA VENDA ORIGINAL
-  // (data da venda), não ao mês em que o reembolso ocorreu. A data do reembolso
-  // segue sendo usada apenas para exibição na linha.
+  // Um bucket por mês. O reembolso é atribuído ao MÊS EM QUE O REEMBOLSO OCORREU
+  // (data do reembolso), não ao mês da venda original.
   const novoBucket = () => {
     const pv = {};
     VENDEDORES.forEach(v => pv[v] = { qtd:0, valor:0 });
@@ -5493,13 +5410,11 @@ function processarReembolsos(csvText){
     const row = rows[i];
     if(!row || row.length===0) continue;
     const dataReemb = parseData(row[cDataReemb]);
-    const dataVenda = parseData(row[cDataVenda]) || dataReemb;
-    if(!dataVenda) continue;
-    const dataExib = dataReemb || dataVenda;   // data do reembolso, só p/ exibição
+    if(!dataReemb) continue;
 
-    // bucketiza pelo MÊS DA VENDA original
-    const mesKey = mesKeyDe(dataVenda);
-    if(!mesKey || !porMes[mesKey]) continue;
+    const mesKey = MES_NUM_KEY[dataReemb.mes];
+    if(!mesKey) continue;
+    if(dataReemb.ano && dataReemb.ano !== 2026) continue;
     const eventos = porMes[mesKey].eventos;
     const porVendedor = porMes[mesKey].porVendedor;
     const semVendedor = porMes[mesKey].semVendedor;
@@ -5509,8 +5424,8 @@ function processarReembolsos(csvText){
     const vend = mapearVendedor(vendRaw);
 
     const ev = {
-      data: dataExib,
-      dataStr: `${String(dataExib.dia).padStart(2,'0')}/${String(dataExib.mes).padStart(2,'0')}`,
+      data: dataReemb,
+      dataStr: `${String(dataReemb.dia).padStart(2,'0')}/${String(dataReemb.mes).padStart(2,'0')}`,
       nome: idxNome>=0 ? (row[idxNome]||'') : '',
       email: idxEmail>=0 ? (row[idxEmail]||'') : '',
       status: idxStatus>=0 ? (row[idxStatus]||'') : '',
@@ -5868,11 +5783,6 @@ function setTab(tab){
   if(tab==='relatorios'){ renderRelEventos(); }
   if(tab==='rotina' && !window._rotinaCarregada){ carregarRotina(); }
   if(tab==='reembolsos'){ carregarReembolsos(); }
-  // MVP Nirla: dashboard independente, carregado em iframe só na primeira abertura
-  if(tab==='nirla'){
-    const fr = document.getElementById('nirlaFrame');
-    if(fr && !fr.src) fr.src = 'nirla.html';
-  }
   // expande/recolhe submenu de Processos
   const subProc = document.getElementById('sbSubProcessos');
   const parentProc = document.querySelector('.sb-parent');
@@ -6013,7 +5923,7 @@ try{
 function calcularRecordes(){
   // Cria uma lista plana com (vendedor, data, valor, qtd, ticket) pra cada par vendedor-dia
   const dias = [];
-  MESES_KEYS_DESC.forEach(mes => {
+  ['julho','junho','maio','abril'].forEach(mes => {
     Object.entries(DADOS[mes].porDia).forEach(([data, dia]) => {
       VENDEDORES.forEach(v => {
         const vendasV = (dia.vendas||[]).filter(x => x.vendedor === v);
@@ -6148,7 +6058,7 @@ function getISOWeek(dateStr){
 function calcularRecordesPeriodo(){
   // Junta TODAS as vendas (Abril + Maio) com vendedor e data
   const todasVendas = [];
-  MESES_KEYS_DESC.forEach(mesKey => {
+  ['julho','junho','maio','abril'].forEach(mesKey => {
     Object.entries(DADOS[mesKey].porDia).forEach(([data, info]) => {
       (info.vendas||[]).forEach(v => {
         todasVendas.push({ data, vendedor: v.vendedor, valor: v.valor });
@@ -6380,23 +6290,38 @@ function mapearProduto(produto){
 // Tabela de vendedores: cada um exige nome + sobrenome no UTM (evita colisões
 // como Walisson Henrique vs Gustavo Henrique, ou João Guilherme vs Guilherme Trinchão).
 // Ordem: os mais específicos primeiro. Mitsuo casa só pelo nome (canal automático).
+// Mapa de vendedores. Um vendedor casa se o texto do "Proprietário" (CRM) OU do
+// UTM contiver QUALQUER um dos apelidos (`aliases`) abaixo — não exige nome
+// completo. Isso é à prova de grafia: o CRM às vezes grava só o primeiro nome
+// ("Lorena"), às vezes só o sobrenome ("Trinchao"), às vezes com erro de digitação
+// ("Wallison"). Por isso cada vendedor tem pelo menos um TOKEN ÚNICO que sempre
+// aparece no nome dele.
+//
+// AO CADASTRAR UM VENDEDOR NOVO: escolha um token que NÃO colida com outro nome.
+//   - Use 'poloni' em vez de 'gabriel' (existe também "Gabriel Dibachti").
+//   - Os dois "João" precisam do nome composto ('joao guilherme' / 'joao paulo')
+//     pra não se confundirem entre si.
+//   - Evite tokens genéricos ('henrique' aparece em mais de um nome).
+// Avaliado em ORDEM: o primeiro alias que casar vence. Se um proprietário não
+// casar com ninguém, o console mostra um aviso [Eventos] com o nome e a contagem
+// (rede de segurança pra nunca mais um vendedor ficar zerado em silêncio).
 const VENDEDOR_MATCH = [
-  { key: 'JoaoG',    partes: ['joao', 'guilherme'] },
-  { key: 'JoaoP',    partes: ['joao', 'paulo'] },
-  { key: 'GabrielP', partes: ['gabriel', 'poloni'] },
-  { key: 'Guilherme',partes: ['guilherme', 'trinchao'] },
-  { key: 'Felipe',   partes: ['felipe', 'padovani'] },
-  { key: 'Pedro',    partes: ['pedro', 'barach'] },
-  { key: 'Lorena',   partes: ['lorena', 'ruas'] },
-  { key: 'Walisson', partes: ['walisson', 'henrique'] },
-  { key: 'GustavoH', partes: ['gustavo', 'henrique'] },
-  { key: 'Thalita',  partes: ['thalita', 'azevedo'] },
-  { key: 'Jocinete', partes: ['jocinete', 'pereira'] },
-  { key: 'Vanessa',  partes: ['vanessa', 'vieira'] },
-  // Não entram na listagem de vendedores (só somam no total):
-  { key: '__OUTROS__', partes: ['aline', 'silva'] },  // líder
-  { key: '__OUTROS__', partes: ['mitsuo'] },          // canal automático (só nome)
-  { key: 'Daniel',   partes: ['daniel'] }
+  { key: 'JoaoG',    aliases: ['joao guilherme'] },
+  { key: 'JoaoP',    aliases: ['joao paulo'] },
+  { key: 'GabrielP', aliases: ['poloni'] },
+  { key: 'Guilherme',aliases: ['trinchao'] },
+  { key: 'Felipe',   aliases: ['felipe', 'padovani'] },
+  { key: 'Pedro',    aliases: ['pedro', 'barach'] },
+  { key: 'Lorena',   aliases: ['lorena'] },
+  { key: 'Walisson', aliases: ['wallison', 'walisson'] },
+  { key: 'GustavoH', aliases: ['gustavo'] },
+  { key: 'Thalita',  aliases: ['thalita'] },
+  { key: 'Jocinete', aliases: ['jocinete'] },
+  { key: 'Vanessa',  aliases: ['vanessa'] },
+  // Não entram na listagem de vendedores (só somam no total / são ignorados):
+  { key: '__OUTROS__', aliases: ['aline'] },   // líder
+  { key: '__OUTROS__', aliases: ['mitsuo'] },  // canal automático (só nome)
+  { key: 'Daniel',   aliases: ['daniel'] }
 ];
 
 function normalizarUtm(s){
@@ -6409,9 +6334,9 @@ function normalizarUtm(s){
 function mapearVendedor(utm){
   if(!utm) return null;
   const s = normalizarUtm(utm);
-  // Casa o primeiro vendedor cujas TODAS as partes estejam presentes no UTM.
+  // Casa o primeiro vendedor cujo QUALQUER alias esteja presente no UTM.
   for(const v of VENDEDOR_MATCH){
-    if(v.partes.every(p => s.includes(p))) return v.key;
+    if(v.aliases.some(a => s.includes(a))) return v.key;
   }
   return null;
 }
@@ -6453,17 +6378,23 @@ function processarCSV(csvText){
     throw new Error('Colunas obrigatórias não encontradas (Data, Valor Líquido/Valor, utm_source). Cabeçalhos vistos: ' + header.join(', '));
   }
   
-  // Inicializar estrutura — um bucket por mês acompanhado (dinâmico).
-  const acc = {};
-  MESES_KEYS.forEach(m => {
-    acc[m] = { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 }, base: { liquido:0, bruto:0 } };
-  });
+  // Inicializar estrutura
+  const acc = {
+
+    julho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 }, base: { liquido:0, bruto:0 } },
+    junho: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 }, base: { liquido:0, bruto:0 } },
+    maio: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 }, base: { liquido:0, bruto:0 } },
+    abril: { totalFaturamento: 0, totalVendas: 0, porDia: {}, porVendedor: {}, porPlataforma: { hubla:0, tmb:0 }, base: { liquido:0, bruto:0 } }
+  };
 
   // Auditoria de parcelas: conta quantas linhas foram descartadas por serem recorrência (Parcela Atual > 1)
-  const auditoria = { colunaParcelaEncontrada: idxParcelaAtual >= 0 };
-  MESES_KEYS.forEach(m => {
-    auditoria[m] = { contadas: 0, descartadasParcela: 0, valorDescartado: 0, exemplos: [] };
-  });
+  const auditoria = {
+    colunaParcelaEncontrada: idxParcelaAtual >= 0,
+    julho: { contadas: 0, descartadasParcela: 0, valorDescartado: 0, exemplos: [] },
+    junho: { contadas: 0, descartadasParcela: 0, valorDescartado: 0, exemplos: [] },
+    maio:  { contadas: 0, descartadasParcela: 0, valorDescartado: 0, exemplos: [] },
+    abril: { contadas: 0, descartadasParcela: 0, valorDescartado: 0, exemplos: [] }
+  };
   
   // Localizar coluna Produto
   const idxProduto = header.findIndex(h => h.toLowerCase() === 'produto');
@@ -6479,11 +6410,15 @@ function processarCSV(csvText){
     if(!row || row.length === 0 || !row[idxData]) continue;
     
     const data = parseData(row[idxData]);
-    if(!data) continue;
-    // Bucket pelo nome do mês real, só dentro da janela acompanhada (abril/2026 -> corrente).
-    const mesKey = mesKeyDe(data);
-    if(!mesKey || !acc[mesKey]) continue;
-
+    if(!data || data.ano !== 2026) continue;
+    
+    let mesKey;
+    if(data.mes === 7) mesKey = 'julho';
+    else if(data.mes === 6) mesKey = 'junho';
+    else if(data.mes === 5) mesKey = 'maio';
+    else if(data.mes === 4) mesKey = 'abril';
+    else continue;
+    
     // Valor da venda: usa o Líquido da linha; se vier vazio, usa o Bruto.
     let valor = 0, baseValor = '';
     if(idxValorLiq >= 0) valor = parseValor(row[idxValorLiq]);
@@ -6560,7 +6495,7 @@ function processarCSV(csvText){
   // Expõe a auditoria no console: digite  __auditoriaParcelas  no console do navegador
   window.__auditoriaParcelas = auditoria;
   console.log('[Auditoria de parcelas] Coluna "Parcela Atual" encontrada:', auditoria.colunaParcelaEncontrada);
-  MESES_KEYS_DESC.forEach(m => {
+  ['julho','junho','maio','abril'].forEach(m => {
     const b = acc[m].base;
     console.log(`[${m}] vendas contadas: ${auditoria[m].contadas} | parcelas descartadas: ${auditoria[m].descartadasParcela} | base: ${b.liquido} líquido / ${b.bruto} bruto`);
   });
@@ -6610,9 +6545,14 @@ function processarTMB(csvText, acc){
     }
 
     const data = parseData(row[idxDataEf]);
-    if(!data) continue;
-    const mesKey = mesKeyDe(data);
-    if(!mesKey || !acc[mesKey]) continue;
+    if(!data || data.ano !== 2026) continue;
+
+    let mesKey;
+    if(data.mes === 7) mesKey = 'julho';
+    else if(data.mes === 6) mesKey = 'junho';
+    else if(data.mes === 5) mesKey = 'maio';
+    else if(data.mes === 4) mesKey = 'abril';
+    else continue;
 
     // Líquido = 50% do Valor Principal
     const bruto = parseValorBR(row[idxPrinc]);
@@ -6669,7 +6609,7 @@ function processarTMB(csvText, acc){
   }
 
   console.log(`[TMB] vendas contadas: ${contadas} | ignoradas (status): ${ignoradasStatus} | sem vendedor: ${semVendedor}`);
-  MESES_KEYS_DESC.forEach(m => {
+  ['julho','junho','maio','abril'].forEach(m => {
     const p = acc[m].porPlataforma;
     console.log(`[${m}] Hubla: R$ ${p.hubla.toFixed(2)} | TMB: R$ ${p.tmb.toFixed(2)}`);
   });
@@ -6683,98 +6623,29 @@ function processarTMB(csvText, acc){
 //   periodo: { primeiraData, ultimaData, horasAtivas } }
 // Busca os eventos no Supabase (JSON) e converte para o formato "rows" (cabeçalho + linhas)
 // que processarEventos já entende — assim a lógica do funil não muda.
-// ===========================================================================
-// CAMADA DE FETCH SUPABASE (views via PostgREST, saída em CSV)
-// As views expõem exatamente os mesmos nomes de coluna que os parsers de CSV
-// esperam, então o texto retornado aqui vai direto pros processar*() existentes.
-// A anon key é a mesma do SUPABASE_EVENTOS (pública por natureza; RLS só SELECT).
-// ===========================================================================
-const SUPABASE_BASE = 'https://moaoqmnbckoaooqutwir.supabase.co';
-
-// Busca uma view inteira como CSV, paginando por header Range (páginas de 1000).
-// Cada página do PostgREST em text/csv repete a linha de cabeçalho: usamos o
-// cabeçalho só da 1ª página e descartamos a 1ª linha das seguintes.
-// Retorna UMA string CSV completa (cabeçalho + todas as linhas de dados).
-async function fetchViewCsvSupabase(viewName){
-  const PAGE = 1000;             // limite do PostgREST por requisição
-  const MAX_PAGINAS = 200;      // teto de segurança (200 mil linhas)
-  const key = SUPABASE_EVENTOS.anonKey;
-  let header = null;
-  const linhas = [];
-  for(let p = 0; p < MAX_PAGINAS; p++){
-    const de = p * PAGE, ate = de + PAGE - 1;
-    const url = SUPABASE_BASE + '/rest/v1/' + viewName + '?select=*';
-    const resp = await fetch(url, {
-      headers: {
-        'apikey': key,
-        'Authorization': 'Bearer ' + key,
-        'Accept': 'text/csv',
-        'Range-Unit': 'items',
-        'Range': de + '-' + ate
-      }
-    });
-    if(!resp.ok && resp.status !== 206) throw new Error('Supabase HTTP ' + resp.status + ' (' + viewName + ')');
-    const txt = await resp.text();
-    const partes = txt.split(/\r?\n/);
-    while(partes.length && partes[partes.length-1] === '') partes.pop(); // remove linha vazia final
-    if(partes.length === 0) break;
-    if(p === 0){
-      header = partes[0];
-      for(let k = 1; k < partes.length; k++) linhas.push(partes[k]);
-      if(partes.length - 1 < PAGE) break;          // menos dados que a página = última
-    } else {
-      const dados = partes.slice(1);               // descarta cabeçalho repetido
-      for(const l of dados) linhas.push(l);
-      if(dados.length < PAGE) break;               // última página
-    }
-  }
-  if(header === null) return '';
-  console.log('[Supabase] ' + viewName + ': ' + linhas.length + ' linhas (paginado)');
-  return header + '\n' + linhas.join('\n');
-}
-async function fetchVendasSupabase(){     return fetchViewCsvSupabase('vw_dash_vendas'); }
-async function fetchTMBSupabase(){        return fetchViewCsvSupabase('vw_dash_tmb'); }
-async function fetchReembolsosSupabase(){ return fetchViewCsvSupabase('vw_dash_reembolso'); }
-
 async function fetchEventosSupabase(){
   const PAGE = 1000;              // limite do PostgREST por requisição
   const MAX_PAGINAS = 200;       // teto de segurança (200 mil linhas)
-  // Egress: buscamos só as ~12 colunas que o funil usa, e em CSV (não JSON) — o JSON
-  // repetiria os nomes das 22 colunas em cada uma das ~77k linhas. id fica fora do select
-  // mas ainda entra no order (desempate de paginação: evita repetir/pular linhas).
-  const COLS = 'data,hora,email,nome,telefone,acao,origem,status,proprietario,pipeline,etapa_crm,motivo_perda';
-  const key = SUPABASE_EVENTOS.anonKey;
-  let header = null; const linhas = [];
+  let todos = [];
   for(let p = 0; p < MAX_PAGINAS; p++){
     const de = p * PAGE, ate = de + PAGE - 1;
-    const url = SUPABASE_EVENTOS.url + '?select=' + COLS + '&order=data.asc,hora.asc,id.asc';
+    const url = SUPABASE_EVENTOS.url + '?select=*&order=data.asc,hora.asc';
     const resp = await fetch(url, {
       headers: {
-        'apikey': key,
-        'Authorization': 'Bearer ' + key,
-        'Accept': 'text/csv',
+        'apikey': SUPABASE_EVENTOS.anonKey,
+        'Authorization': 'Bearer ' + SUPABASE_EVENTOS.anonKey,
         'Range-Unit': 'items',
         'Range': de + '-' + ate
       }
     });
-    if(!resp.ok && resp.status !== 206) throw new Error('Supabase HTTP ' + resp.status + ' (eventos)');
-    const txt = await resp.text();
-    const partes = txt.split(/\r?\n/);
-    while(partes.length && partes[partes.length-1] === '') partes.pop();
-    if(partes.length === 0) break;
-    if(p === 0){
-      header = partes[0];
-      for(let k = 1; k < partes.length; k++) linhas.push(partes[k]);
-      if(partes.length - 1 < PAGE) break;
-    } else {
-      const dados = partes.slice(1);
-      for(const l of dados) linhas.push(l);
-      if(dados.length < PAGE) break;
-    }
+    if(!resp.ok && resp.status !== 206) throw new Error('Supabase HTTP ' + resp.status);
+    const bloco = await resp.json();
+    if(!Array.isArray(bloco)) throw new Error('Resposta do Supabase não é uma lista');
+    todos = todos.concat(bloco);
+    if(bloco.length < PAGE) break; // última página
   }
-  console.log('[Eventos] Supabase (CSV, colunas enxutas): total de', linhas.length, 'registros (paginado)');
-  if(header === null) return '';
-  return header + '\n' + linhas.join('\n');   // processarEventos aceita CSV (string) ou rows (array)
+  console.log('[Eventos] Supabase: total de', todos.length, 'registros (paginado)');
+  return jsonParaRows(todos);
 }
 
 // Converte [{col:val,...}, ...] em [[header...], [val...], ...]
@@ -6843,6 +6714,7 @@ function processarEventos(entrada){
 
   let minTs = null, maxTs = null;
   const horasSet = new Set(); // chaves "YYYY-MM-DD HH" pra contar horas ativas
+  const propNaoMapeados = {}; // proprietários do CRM que não casaram com nenhum vendedor (diagnóstico)
 
   for(let i = 1; i < rows.length; i++){
     const row = rows[i];
@@ -6928,7 +6800,14 @@ function processarEventos(entrada){
       };
     }
 
-    if(!vend || !porVendedor[vend]) continue;
+    if(!vend){
+      // Proprietário preenchido no CRM mas sem vendedor correspondente: registra
+      // pra avisar no console (evita que um vendedor novo fique zerado sem ninguém ver).
+      const rawProp = idxProp >= 0 ? String(row[idxProp]||'').trim() : '';
+      if(rawProp) propNaoMapeados[rawProp] = (propNaoMapeados[rawProp]||0) + 1;
+      continue;
+    }
+    if(!porVendedor[vend]) continue;
 
     const ord = etapaOrdinal(row[idxEtapa], idxOrigem >= 0 ? row[idxOrigem] : '');
     const etapa = ord > 0 ? String(ord) : null;
@@ -6958,6 +6837,15 @@ function processarEventos(entrada){
       }
       porDia[dataKey][vend][etapa].add(email);
     }
+  }
+
+  // Rede de segurança: avisa (uma vez) quais proprietários do CRM não casaram com
+  // nenhum vendedor. Se um vendedor ATIVO aparecer aqui, é só adicionar o token
+  // dele em VENDEDOR_MATCH — assim nunca mais alguém fica zerado em silêncio.
+  const naoMap = Object.entries(propNaoMapeados).sort((a,b)=> b[1]-a[1]);
+  if(naoMap.length){
+    console.warn('[Eventos] Proprietários NÃO mapeados p/ vendedor (eventos fora do placar individual). Se for vendedor ativo, adicione o token em VENDEDOR_MATCH:',
+      naoMap.map(([n,q]) => `${n} (${q})`).join(' · '));
   }
 
   // Agrega perdas por motivo e por tipo (operacional vs vendedor)
@@ -7035,7 +6923,7 @@ function vendasNoFiltro(vend, dias){
   const diasComEventos = new Set(dias);
   let total = 0;
   diasComEventos.forEach(dk => {
-    MESES_KEYS_DESC.some(mk => {
+    ['julho','junho','maio','abril'].some(mk => {
       const mes = DADOS[mk];
       if(!mes || !mes.porDia[dk]) return false;
       if(mes.porDia[dk].porVendedor[vend]) total += mes.porDia[dk].porVendedor[vend].qtd;
@@ -7205,52 +7093,60 @@ async function carregarDados(forceRefresh = false){
   const btn = document.getElementById('refreshBtn');
   const banner = document.getElementById('errorBanner');
   
-  console.log('[Dashboard] Iniciando carregamento (fontes: Supabase views).');
-
+  console.log('[Dashboard] Iniciando carregamento. URL:', CSV_URL);
+  
   if(dot) dot.className = 'live-dot loading';
   if(btn) btn.classList.add('loading');
   if(status) status.innerHTML = 'Carregando dados...';
   if(banner) banner.classList.remove('show');
-
+  
   try {
-    // ===== VENDAS (Hubla) — view vw_dash_vendas =====
-    const text = await fetchVendasSupabase();
-    console.log('[Dashboard] CSV vendas recebido. Tamanho:', text.length, 'chars.');
+    const url = CSV_URL + (forceRefresh ? '&_t=' + Date.now() : '');
+    console.log('[Dashboard] Fetch:', url);
+    const resp = await fetch(url, { cache: forceRefresh ? 'no-store' : 'default' });
+    console.log('[Dashboard] Resposta HTTP:', resp.status);
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    console.log('[Dashboard] CSV recebido. Tamanho:', text.length, 'chars. Primeiras 300:', text.substring(0,300));
+    
     const novosDados = processarCSV(text);
-    marcarFonte('vendas', true);
-    console.log('[Dashboard] Dados processados.', MES_CORRENTE + ':',
-                (novosDados[MES_CORRENTE]||{}).totalFaturamento, 'faturamento');
+    console.log('[Dashboard] Dados processados. Maio:', novosDados.maio.totalFaturamento, 'em', novosDados.maio.totalVendas, 'vendas');
 
-    // ===== TMB (boleto parcelado) — view vw_dash_tmb. Não bloqueia o dash se falhar. =====
-    try {
-      const textTmb = await fetchTMBSupabase();
-      console.log('[TMB] CSV recebido. Tamanho:', textTmb.length);
-      processarTMB(textTmb, novosDados);
-      marcarFonte('tmb', true);
-    } catch(tmbErr){
-      console.warn('[TMB] Erro ao carregar:', tmbErr.message, '— total fica só com Hubla');
-      marcarFonte('tmb', false, tmbErr.message);
+    // Carrega a aba TMB (boleto parcelado) e mescla no total. Não bloqueia o dash se falhar.
+    if(TMB_CSV_URL){
+      try {
+        const urlTmb = TMB_CSV_URL + (forceRefresh ? '&_t=' + Date.now() : '');
+        console.log('[TMB] Fetch:', urlTmb);
+        const respTmb = await fetch(urlTmb, { cache: forceRefresh ? 'no-store' : 'default' });
+        if(respTmb.ok){
+          const textTmb = await respTmb.text();
+          console.log('[TMB] CSV recebido. Tamanho:', textTmb.length);
+          processarTMB(textTmb, novosDados);
+        } else {
+          console.warn('[TMB] HTTP', respTmb.status, '— vendas TMB não entrarão no total');
+        }
+      } catch(tmbErr){
+        console.warn('[TMB] Erro ao carregar:', tmbErr.message);
+      }
     }
 
-    // ===== REEMBOLSOS — view vw_dash_reembolso. Se falhar, faturamento fica BRUTO. =====
+    // Carrega os reembolsos e abate do faturamento (total + por vendedor).
+    // Se falhar, o dash segue com o faturamento bruto.
     try {
       await fetchReembolsos();
       aplicarReembolsos(novosDados);
-      marcarFonte('reembolsos', true);
-      console.log('[Reembolsos] Aplicado.', MES_CORRENTE + ':', (novosDados[MES_CORRENTE]||{}).reembolsos);
+      console.log('[Reembolsos] Aplicado. Julho:', novosDados.julho.reembolsos);
     } catch(reErr){
       console.warn('[Reembolsos] Erro ao carregar — faturamento fica BRUTO:', reErr.message);
       aplicarReembolsos(novosDados); // ainda cria faturamentoBruto/valorBruto com reembolso zero
-      marcarFonte('reembolsos', false, reErr.message);
     }
 
     DADOS = novosDados;
 
-    // ===== EVENTOS (funil) — Supabase. Não bloqueia o dash se falhar. =====
+    // Carrega os Eventos (funil) do Supabase. Não bloqueia o dash se falhar.
     try {
       const rowsEv = await fetchEventosSupabase();
       EVENTOS = processarEventos(rowsEv);
-      marcarFonte('eventos', true);
       if(EVENTOS) console.log('[Eventos] Processado. Horas ativas:', EVENTOS.periodo.horasAtivas);
       else console.warn('[Eventos] processarEventos retornou null (verifique nomes das colunas)');
       console.log('[Vendas] indexadas:', VENDAS_LISTA.length,
@@ -7259,9 +7155,8 @@ async function carregarDados(forceRefresh = false){
     } catch(evErr){
       console.warn('[Eventos] Erro ao carregar do Supabase (funil indisponível):', evErr.message);
       EVENTOS = null;
-      marcarFonte('eventos', false, evErr.message);
     }
-
+    
     if(dot) dot.className = 'live-dot';
     const agora = new Date();
     const horaStr = agora.toTimeString().slice(0,5);
@@ -7272,13 +7167,10 @@ async function carregarDados(forceRefresh = false){
   } catch(err){
     console.error('[Dashboard] ERRO:', err);
     console.error('[Dashboard] Stack:', err.stack);
-    // A falha só chega aqui quando VENDAS (fonte principal) falha. Marca como FALHOU
-    // e NÃO sobrescreve DADOS — os cards mantêm o último dado bom em vez de virar R$0.
-    marcarFonte('vendas', false, err.message);
     if(dot) dot.className = 'live-dot error';
     if(status) status.innerHTML = 'Erro ao carregar';
     if(banner){
-      banner.textContent = '⚠️ Vendas indisponível: ' + err.message + ' — os valores exibidos podem estar defasados (não são R$0 reais). Abra o Console (F12) pra detalhes.';
+      banner.textContent = '⚠️ Erro: ' + err.message + ' — abra o Console (F12) pra ver detalhes.';
       banner.classList.add('show');
     }
   } finally {
@@ -7287,7 +7179,6 @@ async function carregarDados(forceRefresh = false){
 }
 
 renderVendorTabs();
-renderMonthTabs();
 
 // Iniciar aba a partir da URL (qualquer aba existente, ex: ?aba=nirla)
 const urlParams = new URLSearchParams(window.location.search);
@@ -7297,18 +7188,6 @@ if(tabInicial && document.getElementById('tab-' + tabInicial)){
 }
 
 carregarDados();
-
-// ===== Auto-refresh a cada 5 min, pausando em aba de segundo plano =====
-let __ultimoLoad = Date.now();
-const __origCarregar = carregarDados;
-carregarDados = function(f){ __ultimoLoad = Date.now(); return __origCarregar(f); };
-setInterval(() => {
-  if(!document.hidden) carregarDados(true);           // só atualiza aba visível
-}, 300000);                                            // 5 minutos
-document.addEventListener('visibilitychange', () => {
-  // Ao voltar a ficar visível, atualiza (se passou >60s desde o último load).
-  if(!document.hidden && (Date.now() - __ultimoLoad) > 60000) carregarDados(true);
-});
 </script>
 </body>
 </html>
