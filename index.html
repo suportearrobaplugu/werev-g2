@@ -1,11 +1,17 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-03
+  CIC-G2 · BUILD 2026-08-03b
   Base: migração Supabase (views vw_dash_vendas/tmb/reembolso) + meses dinâmicos + banner de fontes.
-  Aplicado nesta build: (1) filtro universal de período p/ todas as telas,
-  (2) Em Contato por NOME de etapa, (3) mapeamento de vendedor por token único + guard 100%,
-  (4) MVP Nirla removido do menu.
+  Build 2026-08-03: (1) filtro universal de período, (2) Em Contato por NOME de etapa,
+  (3) mapeamento de vendedor por token único + guard 100%, (4) MVP Nirla removido.
+  Build 2026-08-03b (atribuição): chave de lead = telefone->email->índice (não exige e-mail;
+  lead de WhatsApp conta) no funil por vendedor e nas perdas; normalizador de telefone unificado
+  (telKey); dias do funil por segmento não dependem mais de vendedor mapeado; conversão conta TODAS
+  as vendas do período; aba Reembolsos respeita o período; totais rotulados como "soma de cargas";
+  código morto removido (porSegmentoDia/ganhosCrmDia).
+  Build 2026-08-03c: índice de origem do CRM não exige mais e-mail — grava origem por
+  telefone/nome também p/ lead só-telefone (WhatsApp), reduzindo "sem origem" na atribuição de vendas.
   Fonte canônica: repositório GitHub werev01/cic-g2. Sempre editar a partir da versão do repo.
   ============================================================================
 -->
@@ -4693,6 +4699,7 @@ function renderTaxaPassagem(){
         + (at.semOrigem > 0 ? ` · <span style="color:#d95926">${at.semOrigem} sem origem</span>` : '')
         + `</div>`;
     }
+    bFunil += `<div style="font-size:11px;color:var(--muted);margin:0 0 10px">O <b>Total · todos os segmentos</b> é de <b>leads únicos</b> (deduplicado). A <b>soma dos cards</b> de origem pode passar do Total: um lead com mais de uma origem aparece em cada card.</div>`;
     bFunil += `<div class="funil-grid">`;
     // Total primeiro (destacado)
     bFunil += desenhaFunil('Total · todos os segmentos', fSeg.total, fSeg.totalLeads, true);
@@ -4860,7 +4867,7 @@ function renderTaxaPassagem(){
         <th style="padding:10px 8px;text-align:center">Taxa bruta</th>
         <th style="padding:10px 8px;text-align:center">Taxa REAL</th>
       </tr></thead><tbody>${linhasR}${linhaTotal}</tbody></table>
-      <div style="padding:10px 16px 14px;font-size:11px;color:var(--muted)">Só perdas operacionais com vendedor identificado entram na conta individual (${totOpV} no total). Perdas operacionais sem dono ficam só no placar da equipe.</div>
+      <div style="padding:10px 16px 14px;font-size:11px;color:var(--muted)">Só perdas operacionais com vendedor identificado entram na conta individual (${totOpV} no total). Perdas operacionais sem dono ficam só no placar da equipe.<br><b>TOTAL EQUIPE</b> em "Em Contato" é <b>soma de cargas</b> — cada vendedor que atendeu o lead conta 1×; lead atendido por 2 vendedores soma 2 aqui. Não é o total de leads únicos (esse está no funil por segmento).</div>
     </div>`;
   }
 
@@ -5324,7 +5331,8 @@ function renderFunil(){
 
   // ---- Funil visual macro ----
   let funilHtml = `<div class="card" style="padding:20px;margin-bottom:16px">
-    <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:14px">Funil da equipe · ${f.nDias} dia(s) · ${horas}h (${HORAS_POR_DIA}h/dia)</div>`;
+    <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">Funil da equipe · ${f.nDias} dia(s) · ${horas}h (${HORAS_POR_DIA}h/dia)</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Soma de cargas por vendedor (lead atendido por N vendedores conta N×). Para leads únicos, veja o funil por segmento.</div>`;
   etapasViz.forEach((e,i)=>{
     const w = Math.max(6, (e.n/maxN)*100);
     const taxa = i>0 && etapasViz[i-1].n>0 ? (e.n/etapasViz[i-1].n) : null;
@@ -5704,7 +5712,8 @@ function processarReembolsos(csvText){
       status: idxStatus>=0 ? (row[idxStatus]||'') : '',
       produto: idxProduto>=0 ? (row[idxProduto]||'') : '',
       metodo: idxMetodo>=0 ? (row[idxMetodo]||'') : '',
-      valor, vendedor: vend, vendRaw
+      valor, vendedor: vend, vendRaw,
+      vendaKey: `${dataVenda.ano}-${String(dataVenda.mes).padStart(2,'0')}-${String(dataVenda.dia).padStart(2,'0')}`
     };
     eventos.push(ev);
     porMes[mesKey].total += valor;
@@ -5754,22 +5763,40 @@ function aplicarReembolsos(acc){
   });
 }
 
+// Agrega os reembolsos EFETIVADOS dentro do período ativo (mesma base do KPI:
+// atribui pelo dia da VENDA original). Mantém a lista de eventos p/ a tabela.
+function agregarReembolsoPeriodo(){
+  const out = { eventos: [], porVendedor: {}, total: 0 };
+  VENDEDORES.forEach(v => out.porVendedor[v] = { qtd:0, valor:0 });
+  if(!REEMBOLSOS_DADOS || !REEMBOLSOS_DADOS.porMes) return out;
+  Object.values(REEMBOLSOS_DADOS.porMes).forEach(bucket => {
+    bucket.eventos.forEach(e => {
+      if(e.vendaKey && !dentroIntervalo(e.vendaKey)) return;
+      out.eventos.push(e);
+      out.total += e.valor;
+      if(e.vendedor && out.porVendedor[e.vendedor]){ out.porVendedor[e.vendedor].qtd++; out.porVendedor[e.vendedor].valor += e.valor; }
+    });
+  });
+  out.eventos.sort((a,b)=> (b.data.ano-a.data.ano)||(b.data.mes-a.data.mes)||(b.data.dia-a.data.dia));
+  return out;
+}
+
 function renderReembolsos(){
   const el = document.getElementById('reembolsosContent');
-  const d = (REEMBOLSOS_DADOS && REEMBOLSOS_DADOS.porMes) ? REEMBOLSOS_DADOS.porMes[currentMonth] : null;
+  const d = agregarReembolsoPeriodo();
   if(!d || d.eventos.length === 0){
     el.innerHTML = `<div class="card" style="padding:24px;text-align:center;color:var(--muted)">
       <div style="font-size:28px;margin-bottom:6px">💸</div>
-      Nenhum reembolso em ${currentMonth.charAt(0).toUpperCase()+currentMonth.slice(1)}.
+      Nenhum reembolso no período (${labelPeriodo()}).
     </div>`;
     return;
   }
   const fmt = v => 'R$ ' + (Math.round(v*100)/100).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
   const pct = x => (x*100).toFixed(1).replace('.0','')+'%';
-  const mesLabel = currentMonth.charAt(0).toUpperCase()+currentMonth.slice(1);
+  const mesLabel = labelPeriodo();
 
-  // vendas do mês por vendedor (da base DADOS já carregada)
-  const mes = DADOS[currentMonth] || dadosAtivos();
+  // vendas do período por vendedor (respeita o filtro universal)
+  const mes = dadosAtivos();
   const vendasVend = {};
   // valorBruto = antes do abatimento de reembolso (evita descontar duas vezes nesta aba)
   VENDEDORES.forEach(v => {
@@ -5782,7 +5809,7 @@ function renderReembolsos(){
   // ---- KPIs topo ----
   let kpis = `<div class="grid-4" style="margin-bottom:16px">
     <div class="card red"><div class="card-icon">💸</div><div class="card-label">Reembolsos em ${mesLabel}</div><div class="card-value">${fmt(totalReembMes)}</div><div class="card-sub">${d.eventos.length} eventos</div></div>
-    <div class="card green"><div class="card-icon">💰</div><div class="card-label">Vendas do mês</div><div class="card-value">${fmt(totalVendasMes)}</div></div>
+    <div class="card green"><div class="card-icon">💰</div><div class="card-label">Vendas no período</div><div class="card-value">${fmt(totalVendasMes)}</div></div>
     <div class="card blue"><div class="card-icon">✅</div><div class="card-label">Vendas − Reembolso</div><div class="card-value">${fmt(totalVendasMes - totalReembMes)}</div></div>
     <div class="card amber"><div class="card-icon">📊</div><div class="card-label">% Reembolso da equipe</div><div class="card-value">${totalVendasMes>0?pct(totalReembMes/totalVendasMes):'—'}</div></div>
   </div>`;
@@ -5822,7 +5849,7 @@ function renderReembolsos(){
 
   let tabela = `<div class="card" style="padding:0;overflow-x:auto;margin-bottom:16px">
     <div style="padding:16px 16px 4px;font-weight:800;color:var(--text-strong);font-size:15px">Reembolso por vendedor · ${mesLabel}</div>
-    <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">Valor do vendedor (coluna J) · vendas − reembolso do mês · % sobre as vendas</div>
+    <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">Valor do vendedor (coluna J) · vendas − reembolso no período · % sobre as vendas</div>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
       <th style="padding:10px 12px">VENDEDOR</th>
@@ -5837,7 +5864,7 @@ function renderReembolsos(){
   // ---- Lista de eventos ----
   let eventos = `<div class="card" style="padding:0;overflow-x:auto">
     <div style="padding:16px 16px 4px;font-weight:800;color:var(--text-strong);font-size:15px">Lista de reembolsos · ${mesLabel}</div>
-    <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">${d.eventos.length} eventos no mês</div>
+    <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">${d.eventos.length} eventos no período</div>
     <table style="width:100%;border-collapse:collapse;font-size:12.5px">
     <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
       <th style="padding:9px 12px">Data</th>
@@ -7016,13 +7043,11 @@ function processarEventos(entrada){
 
   // Funil por segmento (coluna origem): segmento -> etapa -> Set(emails que registraram evento nessa etapa)
   const porSegmento = {};
-  // Por dia, por segmento, por lead: a MAIOR etapa que o lead alcançou + se foi Ganho.
-  // Permite montar funil estilo Pipedrive (cumulativo, teto de 100%) respeitando o filtro de datas.
-  // porSegmentoDia[dataKey][segmento][email] = { max: <nº etapa>, ganho: bool }
-  const porSegmentoDia = {};
   // Lista achatada de eventos, no formato que a contabilização do Nirla espera.
   const flat = [];
-  const ganhosCrmDia = {}; // dataKey -> seg -> Set(chave) — só diagnóstico
+  // Todos os dias (YYYY-MM-DD) com QUALQUER evento — independe de vendedor mapeado.
+  // Usado por diasFiltrados() p/ o funil por segmento não perder dias sem dono.
+  const diasTodos = new Set();
 
   const porVendedor = {};
   VENDEDORES.forEach(v => {
@@ -7052,21 +7077,22 @@ function processarEventos(entrada){
     // Exige APENAS a data. Não pode exigir e-mail: lead que chega pelo WhatsApp
     // vem só com telefone, e a chave do Nirla é telefone || e-mail || índice.
     if(dataKey){
+      diasTodos.add(dataKey);
       flat.push({
         dayKey: dataKey,
         cls: nrClassAcao(idxAcao >= 0 ? row[idxAcao] : ''),
         etapa: idxEtapa >= 0 ? String(row[idxEtapa]||'') : '',
         origemLbl: nrOrigemLabel(idxOrigem >= 0 ? row[idxOrigem] : ''),
         pipeline: idxPipe >= 0 ? String(row[idxPipe]||'') : '',
-        tel: idxTelEv >= 0 ? nrNormPhone(row[idxTelEv]) : '',
+        tel: idxTelEv >= 0 ? telKey(row[idxTelEv]) : '',
         email: nrNorm(email)
       });
     }
 
-    // ---- Funil por SEGMENTO (independe do vendedor mapeado) ----
-    // Registra, por dia e por segmento, a maior etapa que cada lead (email) alcançou,
-    // e se houve "Ganho" (chegou ao fundo do funil = venda).
-    if(email && dataKey){
+    // ---- Índice de origem do CRM (independe de vendedor mapeado E de e-mail) ----
+    // Grava a origem do lead por telefone/nome também quando só há telefone (WhatsApp),
+    // pra venda desse lead não cair em "sem origem". E-mail entra no mapa só se existir.
+    if(dataKey && idxOrigem >= 0){
       const seg = (idxOrigem >= 0 && String(row[idxOrigem]||'').trim()) ? String(row[idxOrigem]).trim() : SEGMENTO_SEM;
       const acaoRaw = idxAcao >= 0 ? String(row[idxAcao]||'').toLowerCase() : '';
       // Mesma classificação do Nirla: só evento de ENTRADA em etapa conta como
@@ -7080,42 +7106,25 @@ function processarEventos(entrada){
       // Evita contar 2x o lead que voltou pelo WhatsApp com outro e-mail.
       const chave = tk || email;
 
-      if(ehEntrada){
-        const etNum = etapaOrdinal(row[idxEtapa], row[idxOrigem]);
-        if(!porSegmentoDia[dataKey]) porSegmentoDia[dataKey] = {};
-        if(!porSegmentoDia[dataKey][seg]) porSegmentoDia[dataKey][seg] = {};
-        const reg = porSegmentoDia[dataKey][seg][chave] || { max: 0, tel: '', email: '', nk: '', pitch: false };
-        if(etNum > reg.max) reg.max = etNum;
-        // Etapa exclusiva do Webinar, marcada à parte por não caber na escala 1-4
-        if(ehPitch) reg.pitch = true;
-        if(!reg.tel && tk) reg.tel = tk;
-        if(!reg.email) reg.email = email;
-        if(!reg.nk && idxNomeEv >= 0){ const nk2 = nomeKey(row[idxNomeEv]); if(nk2) reg.nk = nk2; }
-        porSegmentoDia[dataKey][seg][chave] = reg;
-      }
       // Alimenta o índice de origem do CRM (todo o histórico, sem filtro de data)
       if(idxOrigem >= 0){
         const org = String(row[idxOrigem]||'').trim();
         if(org){
           if(tk) CRM_ORIGEM_TEL.set(tk, org);
-          CRM_ORIGEM_EMAIL.set(email, org);
+          if(email) CRM_ORIGEM_EMAIL.set(email, org);
           const nk = idxNomeEv >= 0 ? nomeKey(row[idxNomeEv]) : '';
           if(nk) CRM_ORIGEM_NOME.set(nk, org);
         }
       }
-      if(ehGanhoCrm){
-        if(!ganhosCrmDia[dataKey]) ganhosCrmDia[dataKey] = {};
-        if(!ganhosCrmDia[dataKey][seg]) ganhosCrmDia[dataKey][seg] = new Set();
-        ganhosCrmDia[dataKey][seg].add(chave);
-      }
-
     }
 
     // ---- Captura de PERDA (Status = lost) — antes do filtro de etapa ----
     const status = idxStatus >= 0 ? String(row[idxStatus]||'').trim().toLowerCase() : '';
-    if(status === 'lost' && email){
+    if(status === 'lost'){
+      // Chave do lead: telefone -> e-mail -> índice (não exige e-mail).
+      const perdaKey = (idxTelEv >= 0 ? telKey(row[idxTelEv]) : '') || email || ('perda' + i);
       const motivoRaw = idxMotivo >= 0 ? row[idxMotivo] : '';
-      perdasPorEmail[email] = {
+      perdasPorEmail[perdaKey] = {
         motivo: rotuloMotivo(motivoRaw),
         tipo: classificarMotivo(motivoRaw),
         vendedor: vend || null,
@@ -7134,11 +7143,9 @@ function processarEventos(entrada){
     const etapa = ord > 0 ? String(ord) : null;
     if(etapa === null || !porVendedor[vend][etapa]) continue;
 
-    if(!email) continue;
-
-    // Conta o lead como tendo passado por aquela etapa. Mesma chave do funil por
-    // segmento: telefone primeiro, e-mail como fallback.
-    const chaveVend = (idxTelEv >= 0 ? telKey(row[idxTelEv]) : '') || email;
+    // Chave do lead: telefone -> e-mail -> índice do evento (MESMA régua do funil).
+    // NÃO exige e-mail: lead de WhatsApp (só telefone) também conta.
+    const chaveVend = (idxTelEv >= 0 ? telKey(row[idxTelEv]) : '') || email || ('ev' + i);
     porVendedor[vend][etapa].add(chaveVend);
 
     // Janela de tempo (pra normalizar por hora)
@@ -7156,7 +7163,7 @@ function processarEventos(entrada){
         porDia[dataKey][vend] = {};
         FUNIL_ETAPAS.forEach(e => porDia[dataKey][vend][e.key] = new Set());
       }
-      porDia[dataKey][vend][etapa].add(email);
+      porDia[dataKey][vend][etapa].add(chaveVend);
     }
   }
 
@@ -7182,9 +7189,8 @@ function processarEventos(entrada){
   return {
     porVendedor,
     porDia,
-    porSegmentoDia,
-    ganhosCrmDia,
     flat,
+    diasTodos,
     perdas: { porEmail: perdasPorEmail, motivos, perdasOperacional, perdasVendedor, perdasOpPorVendedor },
     periodo: {
       primeiraData: minTs ? new Date(minTs) : null,
@@ -7213,7 +7219,11 @@ function dentroIntervalo(dataKey){
 
 // Lista os dias (YYYY-MM-DD) dentro do filtro que têm eventos
 function diasFiltrados(){
-  const todos = Object.keys(EVENTOS && EVENTOS.porDia ? EVENTOS.porDia : {});
+  // Usa TODOS os dias com evento (não só os de vendedor mapeado) — assim o funil por
+  // segmento e a atribuição de vendas não perdem dias sem dono reconhecido.
+  const fonte = EVENTOS && EVENTOS.diasTodos ? EVENTOS.diasTodos
+              : (EVENTOS && EVENTOS.porDia ? Object.keys(EVENTOS.porDia) : []);
+  const todos = Array.isArray(fonte) ? fonte : Array.from(fonte);
   return todos.filter(dentroIntervalo).sort();
 }
 
@@ -7234,19 +7244,16 @@ function etapasNoFiltro(vend, dias){
   return out;
 }
 
-// Soma as vendas de um vendedor nos dias do filtro (cruzando com DADOS por dia)
+// Conta TODAS as vendas do vendedor no período (bate com KPI/Tabela),
+// não só as de dias com evento de CRM. `dias` é ignorado (compat).
 function vendasNoFiltro(vend, dias){
-  // Só conta vendas em dias que TÊM eventos (mesma janela dos leads).
-  // Evita dado sujo: venda de um dia sem eventos correspondentes não entra.
-  // `dias` = dias de eventos dentro do filtro atual.
-  const diasComEventos = new Set(dias);
   let total = 0;
-  diasComEventos.forEach(dk => {
-    MESES_KEYS_DESC.some(mk => {
-      const mes = DADOS[mk];
-      if(!mes || !mes.porDia[dk]) return false;
-      if(mes.porDia[dk].porVendedor[vend]) total += mes.porDia[dk].porVendedor[vend].qtd;
-      return true; // o dia só existe em um mês; para no primeiro encontrado
+  Object.values(DADOS || {}).forEach(mes => {
+    if(!mes || !mes.porDia) return;
+    Object.keys(mes.porDia).forEach(dk => {
+      if(!dentroIntervalo(dk)) return;
+      const pv = mes.porDia[dk].porVendedor[vend];
+      if(pv) total += pv.qtd;
     });
   });
   return total;
@@ -7497,7 +7504,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-03 — Supabase + filtro universal + Em Contato/vendedor corrigidos + Nirla removido','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-03c — Supabase + filtro universal + atribuição unificada (lead e origem por telefone->email->índice, sem exigir e-mail) + Reembolsos por período','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
