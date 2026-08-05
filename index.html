@@ -685,6 +685,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <button class="sb-item" data-tab="funil" onclick="setTab('funil')"><span class="sb-ic">🚦</span><span class="sb-txt">Funil &amp; Taxa de Passagem</span></button>
       <button class="sb-item" data-tab="taxapassagem" onclick="setTab('taxapassagem')"><span class="sb-ic">📉</span><span class="sb-txt">Taxa de Passagem</span></button>
       <button class="sb-item" data-tab="reembolsos" onclick="setTab('reembolsos')"><span class="sb-ic">💸</span><span class="sb-txt">Reembolsos</span></button>
+      <button class="sb-item" data-tab="discadora" onclick="setTab('discadora')"><span class="sb-ic">📞</span><span class="sb-txt">Discadora</span></button>
       <div class="sb-grp">Cultura &amp; Operação</div>
       <button class="sb-item" data-tab="regras" onclick="setTab('regras')"><span class="sb-ic">📋</span><span class="sb-txt">Regras e Combinados</span></button>
       <button class="sb-item" data-tab="rotina" onclick="setTab('rotina')"><span class="sb-ic">🗓️</span><span class="sb-txt">Rotina</span></button>
@@ -1048,6 +1049,107 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div class="regras-d">As regras serão adicionadas aqui em breve.</div>
     </div>
   </div>
+
+  <div id="tab-discadora" class="tab-content">
+    <style>
+    #tab-discadora .dc-sec{margin:22px 0 12px;display:flex;align-items:center;gap:10px}
+    #tab-discadora .dc-sec h2{font-family:'Sora','Space Grotesk',sans-serif;font-size:15px;color:var(--text-strong);margin:0}
+    #tab-discadora .dc-sec .bar{width:4px;height:18px;border-radius:3px;background:var(--accent)}
+    #tab-discadora .dc-sec small{color:var(--muted);font-size:12px}
+    #tab-discadora .dc-grid{display:grid;gap:16px}
+    #tab-discadora .dc-g6{grid-template-columns:repeat(6,1fr)}
+    #tab-discadora .dc-g2{grid-template-columns:1fr 1fr}
+    #tab-discadora .dc-g23{grid-template-columns:1.45fr 1fr}
+    #tab-discadora .dc-card{background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:16px}
+    #tab-discadora .dc-card h3{font-family:'Sora','Space Grotesk',sans-serif;font-size:13.5px;color:var(--text-strong);margin:0 0 2px}
+    #tab-discadora .dc-cap{color:var(--muted);font-size:11.5px;margin-bottom:12px;line-height:1.4}
+    #tab-discadora .dc-kpi .dc-lab{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+    #tab-discadora .dc-kpi .dc-val{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:var(--text-strong);margin-top:6px;line-height:1}
+    #tab-discadora .dc-kpi .dc-sub{font-size:11px;margin-top:5px;color:var(--muted)}
+    #tab-discadora .dc-box{position:relative;height:230px}
+    #tab-discadora .dc-box.tall{height:300px}
+    #tab-discadora .dc-box.sm{height:120px}
+    #tab-discadora .dc-bignum{font-family:'JetBrains Mono',monospace;font-size:44px;font-weight:700;color:var(--green);line-height:1}
+    #tab-discadora table.dc-t{width:100%;border-collapse:collapse;font-size:12.5px}
+    #tab-discadora table.dc-t th,#tab-discadora table.dc-t td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line,var(--border))}
+    #tab-discadora table.dc-t th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase}
+    #tab-discadora table.dc-t td:first-child,#tab-discadora table.dc-t th:first-child{text-align:left}
+    #tab-discadora .dc-hm{display:grid;gap:4px;font-size:11px}
+    #tab-discadora .dc-hm .cell{min-height:30px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:#eaf2ff}
+    #tab-discadora .dc-hm .hh{color:var(--muted);text-align:center;font-family:'JetBrains Mono',monospace}
+    #tab-discadora .dc-hm .hl{color:var(--text);display:flex;align-items:center;font-weight:600;white-space:nowrap;overflow:hidden}
+    #tab-discadora .dc-tgl{display:inline-flex;background:rgba(0,0,0,.25);border:1px solid var(--line,var(--border));border-radius:9px;padding:3px;gap:2px}
+    #tab-discadora .dc-tgl button{background:none;border:none;color:var(--muted);font-family:inherit;font-weight:600;font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer}
+    #tab-discadora .dc-tgl button.on{background:var(--accent);color:#fff}
+    #tab-discadora .dc-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+    #tab-discadora .dc-note{color:var(--muted);font-size:11.5px;line-height:1.5}
+    #tab-discadora .dc-flag{border:1px dashed rgba(245,158,11,.4);background:rgba(245,158,11,.05)}
+    #tab-discadora .dc-flag .tg{display:inline-block;background:rgba(245,158,11,.16);color:var(--gold,#fbbf24);font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;margin-bottom:8px}
+    @media(max-width:900px){#tab-discadora .dc-g6{grid-template-columns:repeat(3,1fr)}#tab-discadora .dc-g2,#tab-discadora .dc-g23{grid-template-columns:1fr}}
+    </style>
+
+    <div class="section-title">📞 Discadora · Operação de Ligações (Callix)</div>
+    <div id="dc-err" style="color:var(--red,#ef4444);font-size:12px;margin-bottom:8px"></div>
+    <div id="dc-loading" class="dc-note" style="margin-bottom:8px">Carregando dados da discadora…</div>
+
+    <div class="dc-sec"><span class="bar"></span><h2>Visão geral</h2><small>— período disponível (agregado)</small></div>
+    <div class="dc-grid dc-g6">
+      <div class="dc-card dc-kpi"><div class="dc-lab">Discado</div><div class="dc-val" id="dc-k-disc">–</div><div class="dc-sub">tentativas</div></div>
+      <div class="dc-card dc-kpi"><div class="dc-lab">Atendidas</div><div class="dc-val" id="dc-k-atend">–</div><div class="dc-sub">completadas</div></div>
+      <div class="dc-card dc-kpi"><div class="dc-lab">TMA médio</div><div class="dc-val" id="dc-k-tma">–</div><div class="dc-sub">tempo de fala</div></div>
+      <div class="dc-card dc-kpi"><div class="dc-lab">Vendas atribuídas</div><div class="dc-val" id="dc-k-vend">–</div><div class="dc-sub" id="dc-k-vendsub">Hubla + TMB · até 5d após ligação</div></div>
+      <div class="dc-card dc-kpi"><div class="dc-lab">Receita</div><div class="dc-val" id="dc-k-rec">–</div><div class="dc-sub">de ligações</div></div>
+      <div class="dc-card dc-kpi"><div class="dc-lab">Agentes ativos</div><div class="dc-val" id="dc-k-ag">–</div><div class="dc-sub">no período</div></div>
+    </div>
+
+    <div class="dc-grid dc-g23" style="margin-top:16px">
+      <div class="dc-card"><h3>Volume por dia — discado vs. atendido</h3><div class="dc-cap">Atendidas + perdidas = total discado.</div><div class="dc-box"><canvas id="dcVolume"></canvas></div></div>
+      <div class="dc-card"><h3>Taxa de atendimento</h3><div class="dc-cap">answered ÷ discado.</div>
+        <div style="display:flex;align-items:baseline;gap:10px"><div class="dc-bignum" id="dc-taxa-big">–</div><div class="dc-note" id="dc-taxa-sub" style="margin:0">no período</div></div>
+        <div class="dc-box sm" style="margin-top:8px"><canvas id="dcTaxa"></canvas></div></div>
+    </div>
+
+    <div class="dc-grid dc-g23" style="margin-top:16px">
+      <div class="dc-card"><h3>Onde a discagem se perde</h3><div class="dc-cap">Decomposição das perdidas.</div><div class="dc-box"><canvas id="dcPerda"></canvas></div></div>
+      <div class="dc-card"><h3>Leitura rápida</h3><div class="dc-cap">Destaques do período.</div><div class="dc-note" id="dc-leitura" style="line-height:1.9">–</div></div>
+    </div>
+
+    <div class="dc-sec"><span class="bar" style="background:var(--gold,#fbbf24)"></span><h2>Produtividade do agente</h2><small>— uso do tempo logado</small></div>
+    <div class="dc-grid dc-g23">
+      <div class="dc-card"><h3>Composição do tempo logado</h3><div class="dc-cap">Jornada por estado. Expõe quem fica parado em modo manual sem falar.</div><div class="dc-box tall"><canvas id="dcTempo"></canvas></div></div>
+      <div class="dc-card"><h3>Ranking operacional</h3><div class="dc-cap">Por agente no período.</div><div style="max-height:300px;overflow:auto"><table class="dc-t"><thead><tr><th>Agente</th><th>Lig.</th><th>TMA</th><th>Falado</th><th>Vendas</th></tr></thead><tbody id="dc-rank"></tbody></table></div></div>
+    </div>
+    <div class="dc-grid dc-g2" style="margin-top:16px">
+      <div class="dc-card"><h3>Tentativas no 1×1 (discagem manual)</h3><div class="dc-cap">Ligações manuais por agente.</div><div class="dc-box"><canvas id="dc1x1"></canvas></div></div>
+      <div class="dc-card"><h3>Tempo em campanha × tempo logado</h3><div class="dc-cap">Tempo falado em campanha vs. total logado.</div><div class="dc-box"><canvas id="dcCamp"></canvas></div></div>
+    </div>
+
+    <div class="dc-sec"><span class="bar" style="background:var(--green,#22c55e)"></span><h2>Eficiência &amp; conversão</h2><small>— vendas via Hubla + TMB (até 5d após a ligação)</small></div>
+    <div class="dc-grid dc-g23">
+      <div class="dc-card"><h3>Tempo falado × vendas</h3><div class="dc-cap">Bolha = agente (tamanho = ligações). Sup-esquerda = fala pouco e vende muito.</div><div class="dc-box tall"><canvas id="dcScatter"></canvas></div></div>
+      <div class="dc-card"><h3>Funil comercial</h3><div class="dc-cap">Discadas → atendidas → vendas.</div><div class="dc-box tall"><canvas id="dcFunil"></canvas></div></div>
+    </div>
+
+    <div class="dc-sec"><span class="bar" style="background:var(--purple,#a78bfa)"></span><h2>Janela de discagem</h2><small>— melhor horário</small></div>
+    <div class="dc-card">
+      <div class="dc-hd"><div><h3>Heatmap hora × vendedor</h3><div class="dc-cap" style="margin:0">Cor = intensidade por hora.</div></div>
+        <div class="dc-tgl"><button class="on" id="dc-hm-vol" onclick="dcSetHeat('atendidas')">Atendidas</button><button id="dc-hm-ven" onclick="dcSetHeat('vendas')">Vendas</button></div></div>
+      <div id="dc-heat"></div>
+    </div>
+    <div class="dc-card" style="margin-top:16px"><h3>Curva horária</h3><div class="dc-cap">Discado vs. atendido ao longo do dia.</div><div class="dc-box"><canvas id="dcHora"></canvas></div></div>
+
+    <div class="dc-sec"><span class="bar" style="background:var(--orange,#f59e0b)"></span><h2>Velocidade de atendimento ao lead</h2><small>— chegada na base de disparos → 1ª ligação</small></div>
+    <div class="dc-grid dc-g2">
+      <div class="dc-card dc-flag"><span class="tg">⏳ MÉTRICA EM MATURAÇÃO</span><h3>Tempo até a 1ª tentativa (speed-to-lead)</h3>
+        <div class="dc-cap">Tempo entre o lead entrar na etapa "0. Base/Entrada" do Pipeline Disparos e receber a 1ª ligação.</div>
+        <div class="dc-box"><canvas id="dcSpeed"></canvas></div>
+        <div class="dc-note" id="dc-speed-note" style="margin-top:10px">Cruzamento Callix ↔ Unnichat (telefone). Popula conforme leads novos entram na base e são ligados.</div></div>
+      <div class="dc-card"><h3>Sobre este painel</h3><div class="dc-cap">Contexto das métricas cruzadas.</div>
+        <div class="dc-note" style="line-height:1.8">📊 <b>9 painéis</b> vêm 100% da Callix (dado rico agora).<br>🛒 <b>Vendas</b> cruzam com Hubla e TMB (telefone), só contam compras <b>0–5 dias após</b> a ligação atendida.<br>⏳ <b>Speed-to-lead</b> cruza com o Unnichat; amadurece com o acúmulo de ligações.<br>ℹ️ A base atende leads que já compraram o MVS (modelo de <b>pós-venda/upsell</b>), então vendas atribuídas crescem à medida que os upsells acontecem.</div></div>
+    </div>
+
+  </div>
+
 
   <div id="tab-processos" class="tab-content">
     <!-- PÁGINA: VISÃO GERAL (metodologia + cards) -->
@@ -6087,6 +6189,7 @@ function setTab(tab){
   if(tab==='relatorios'){ renderRelEventos(); }
   if(tab==='rotina' && !window._rotinaCarregada){ carregarRotina(); }
   if(tab==='reembolsos'){ carregarReembolsos(); }
+  if(tab==='discadora'){ (function _dcTry(){ if(typeof window.carregarDiscadora==='function'){ window.carregarDiscadora(); } else { setTimeout(_dcTry,50); } })(); }
   // expande/recolhe submenu de Processos
   const subProc = document.getElementById('sbSubProcessos');
   const parentProc = document.querySelector('.sb-parent');
@@ -7527,5 +7630,169 @@ document.addEventListener('visibilitychange', () => {
   if(!document.hidden && (Date.now() - __ultimoLoad) > 60000) carregarDados(true);
 });
 </script>
+<script>
+/* ===== Aba Discadora (Callix) — data-driven, lê as views vw_callix_dash_* ===== */
+(function(){
+  var DCP={accent:'#335FEB',green:'#22c55e',red:'#ef4444',orange:'#f59e0b',gold:'#fbbf24',silver:'#cbd5e1',purple:'#a78bfa',blue2:'#4f86f0',grid:'rgba(143,163,199,.14)',muted:'#8FA3C7'};
+  window._dcCharts={}; window._dcLoaded=false; window._dcHeat=null; window._dcHeatMetric='atendidas';
+
+  function dcCSV(txt){
+    if(!txt) return [];
+    var lines=txt.split(/\r?\n/).filter(function(l){return l.length});
+    if(!lines.length) return [];
+    function split(line){var out=[],cur='',q=false;for(var i=0;i<line.length;i++){var c=line[i];
+      if(q){ if(c=='"'){ if(line[i+1]=='"'){cur+='"';i++} else q=false } else cur+=c }
+      else { if(c=='"')q=true; else if(c==','){out.push(cur);cur=''} else cur+=c } }
+      out.push(cur);return out;}
+    var head=split(lines[0]);var rows=[];
+    for(var r=1;r<lines.length;r++){var v=split(lines[r]);var o={};for(var k=0;k<head.length;k++)o[head[k]]=v[k];rows.push(o);}
+    return rows;
+  }
+  function N(v){ if(v===undefined||v===null||v==='')return 0; var n=parseFloat(v); return isNaN(n)?0:n; }
+  function fmt(n){ return Math.round(n).toLocaleString('pt-BR'); }
+  function mmss(s){ s=Math.round(N(s)); return Math.floor(s/60)+'m'+String(s%60).padStart(2,'0'); }
+  function ini(s){ s=(s||'?').trim(); var p=s.split(/\s+/); return ((p[0]||'')[0]||'')+((p[1]||'')[0]||''); }
+  function groupSum(rows,keyFn,fields){var m={};rows.forEach(function(r){var k=keyFn(r);if(!m[k]){m[k]={_k:k};fields.forEach(function(f){m[k][f]=0})}fields.forEach(function(f){m[k][f]+=N(r[f])})});return m;}
+  function chart(id,cfg){ if(window._dcCharts[id]){window._dcCharts[id].destroy();} var el=document.getElementById(id); if(!el)return; window._dcCharts[id]=new Chart(el,cfg); }
+  var baseScales={x:{grid:{display:false},ticks:{color:DCP.muted}},y:{grid:{color:DCP.grid},ticks:{color:DCP.muted}}};
+
+  window.carregarDiscadora=function(){
+    if(window._dcLoaded) return; window._dcLoaded=true;
+    var views=['vw_callix_dash_agente_dia','vw_callix_dash_volume_dia','vw_callix_dash_hora','vw_callix_dash_heatmap','vw_callix_dash_speed'];
+    Promise.all(views.map(function(v){return fetchViewCsvSupabase(v).catch(function(){return ''})})).then(function(res){
+      try{
+        var ag=dcCSV(res[0]),vol=dcCSV(res[1]),hr=dcCSV(res[2]),hm=dcCSV(res[3]),sp=dcCSV(res[4]);
+        dcRender(ag,vol,hr,hm,sp);
+        var ld=document.getElementById('dc-loading'); if(ld)ld.style.display='none';
+      }catch(e){ var er=document.getElementById('dc-err'); if(er)er.textContent='Erro ao renderizar: '+e.message; window._dcLoaded=false; }
+    }).catch(function(e){ var er=document.getElementById('dc-err'); if(er)er.textContent='Erro ao carregar: '+e.message; window._dcLoaded=false; });
+  };
+
+  function dcRender(ag,vol,hr,hm,sp){
+    /* ---- KPIs ---- */
+    var discado=0,atend=0,vendas=0,receita=0;
+    vol.forEach(function(r){discado+=N(r.discado);atend+=N(r.completado);vendas+=N(r.vendas);receita+=N(r.receita_brl);});
+    var tmaNum=0,tmaDen=0,agSet={};
+    ag.forEach(function(r){var l=N(r.ligacoes_completadas)||N(r.total_ligacoes);tmaNum+=N(r.tma_s)*l;tmaDen+=l;if((N(r.total_ligacoes)||N(r.ligacoes_completadas))>0)agSet[r.callix_user_id]=1;});
+    var taxa=discado?(100*atend/discado):0;
+    function set(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}
+    set('dc-k-disc',fmt(discado)); set('dc-k-atend',fmt(atend)); set('dc-k-tma',tmaDen?mmss(tmaNum/tmaDen):'–');
+    set('dc-k-vend',fmt(vendas)); set('dc-k-rec','R$'+fmt(receita)); set('dc-k-ag',fmt(Object.keys(agSet).length));
+    set('dc-taxa-big',taxa.toFixed(1).replace('.',',')+'%');
+    if(vendas===0) set('dc-k-vendsub','janela ainda no futuro');
+
+    /* ---- Volume por dia ---- */
+    var vs=vol.slice().sort(function(a,b){return (a.data<b.data?-1:1)});
+    chart('dcVolume',{type:'bar',data:{labels:vs.map(function(r){return r.data.slice(5)}),datasets:[
+      {label:'Atendidas',data:vs.map(function(r){return N(r.completado)}),backgroundColor:DCP.green,stack:'v',borderRadius:4,borderSkipped:false},
+      {label:'Perdidas',data:vs.map(function(r){return N(r.perdido)}),backgroundColor:DCP.red,stack:'v',borderRadius:4,borderSkipped:false}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:DCP.muted}}},scales:{x:{stacked:true,grid:{display:false},ticks:{color:DCP.muted}},y:{stacked:true,grid:{color:DCP.grid},ticks:{color:DCP.muted}}}}});
+
+    /* ---- Taxa por dia ---- */
+    chart('dcTaxa',{type:'line',data:{labels:vs.map(function(r){return r.data.slice(8)}),datasets:[
+      {data:vs.map(function(r){return N(r.taxa_atendimento_pct)}),borderColor:DCP.green,backgroundColor:'rgba(34,197,94,.15)',fill:true,tension:.35,borderWidth:2,pointRadius:0}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:DCP.muted}},y:{grid:{color:DCP.grid},ticks:{color:DCP.muted,callback:function(v){return v+'%'}}}}}});
+
+    /* ---- Perda decomposta ---- */
+    var pl=[['Caixa postal','perdido_caixa_postal',DCP.orange],['Não atende','perdido_nao_atende',DCP.gold],['Outro','perdido_outro',DCP.silver],['Falta agente','perdido_falta_agente',DCP.red],['Nº inexistente','perdido_num_inexistente',DCP.purple],['Abandono','perdido_abandono',DCP.blue2],['URA','perdido_ura','#334155']];
+    var psum=pl.map(function(p){var t=0;vol.forEach(function(r){t+=N(r[p[1]])});return {n:p[0],v:t,c:p[2]}}).sort(function(a,b){return b.v-a.v});
+    chart('dcPerda',{type:'bar',data:{labels:psum.map(function(p){return p.n}),datasets:[{data:psum.map(function(p){return p.v}),backgroundColor:psum.map(function(p){return p.c}),borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:DCP.grid},ticks:{color:DCP.muted}},y:{grid:{display:false},ticks:{color:DCP.muted}}}}});
+
+    /* ---- Agregado por agente ---- */
+    var gm=groupSum(ag,function(r){return r.callix_user_id},['tempo_logado_s','tempo_falado_s','tempo_modo_manual_s','in_break_time_s','idle_time_s','tempo_online_campanha_s','tentativas_1x1','vendas','ligacoes_completadas','total_ligacoes']);
+    var nmeMap={};ag.forEach(function(r){nmeMap[r.callix_user_id]=r.agente_nome||r.callix_user_id});
+    var tmaMap={};(function(){var num={},den={};ag.forEach(function(r){var l=N(r.ligacoes_completadas)||N(r.total_ligacoes);num[r.callix_user_id]=(num[r.callix_user_id]||0)+N(r.tma_s)*l;den[r.callix_user_id]=(den[r.callix_user_id]||0)+l});Object.keys(num).forEach(function(k){tmaMap[k]=den[k]?num[k]/den[k]:0})})();
+    var agentes=Object.keys(gm).map(function(k){var g=gm[k];return {id:k,nome:nmeMap[k],logado:g.tempo_logado_s,falado:g.tempo_falado_s,manual:g.tempo_modo_manual_s,pausa:g.in_break_time_s,ocioso:g.idle_time_s,camp:g.tempo_online_campanha_s,t1:g.tentativas_1x1,vendas:g.vendas,lig:g.ligacoes_completadas||g.total_ligacoes,tma:tmaMap[k]}});
+    agentes.sort(function(a,b){return b.lig-a.lig});
+    var nomes=agentes.map(function(a){return a.nome});
+    var m=function(s){return N(s)/60;};
+
+    /* ---- Composição do tempo ---- */
+    chart('dcTempo',{type:'bar',data:{labels:nomes,datasets:[
+      {label:'Falado',data:agentes.map(function(a){return m(a.falado)}),backgroundColor:DCP.accent,stack:'t'},
+      {label:'Modo manual',data:agentes.map(function(a){return m(a.manual)}),backgroundColor:DCP.orange,stack:'t'},
+      {label:'Pausa',data:agentes.map(function(a){return m(a.pausa)}),backgroundColor:DCP.red,stack:'t'},
+      {label:'Ocioso',data:agentes.map(function(a){return m(a.ocioso)}),backgroundColor:DCP.silver,stack:'t'},
+      {label:'Outros',data:agentes.map(function(a){return Math.max(0,m(a.logado)-m(a.falado)-m(a.manual)-m(a.pausa)-m(a.ocioso))}),backgroundColor:DCP.green,stack:'t'}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:DCP.muted}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+Math.round(c.raw)+' min'}}}},scales:{x:{stacked:true,grid:{color:DCP.grid},ticks:{color:DCP.muted},title:{display:true,text:'minutos',color:DCP.muted}},y:{stacked:true,grid:{display:false},ticks:{color:DCP.muted}}}}});
+
+    /* ---- Ranking ---- */
+    var tb=document.getElementById('dc-rank');
+    if(tb) tb.innerHTML=agentes.map(function(a){return '<tr><td>'+ini(a.nome)+' '+a.nome+'</td><td>'+fmt(a.lig)+'</td><td>'+mmss(a.tma)+'</td><td>'+Math.round(m(a.falado))+'m</td><td>'+fmt(a.vendas)+'</td></tr>'}).join('');
+
+    /* ---- 1x1 ---- */
+    chart('dc1x1',{type:'bar',data:{labels:nomes.map(function(n){return n.split(' ')[0]}),datasets:[{data:agentes.map(function(a){return a.t1}),backgroundColor:DCP.accent,borderRadius:4,borderSkipped:false}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales}});
+
+    /* ---- Campanha x logado ---- */
+    chart('dcCamp',{type:'bar',data:{labels:nomes.map(function(n){return n.split(' ')[0]}),datasets:[
+      {label:'Falado em campanha',data:agentes.map(function(a){return m(a.camp)}),backgroundColor:DCP.purple,borderRadius:4,borderSkipped:false},
+      {label:'Tempo logado',data:agentes.map(function(a){return m(a.logado)}),backgroundColor:'#3b5a86',borderRadius:4,borderSkipped:false}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:DCP.muted}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+Math.round(c.raw)+' min'}}}},scales:{x:{grid:{display:false},ticks:{color:DCP.muted}},y:{grid:{color:DCP.grid},ticks:{color:DCP.muted},title:{display:true,text:'minutos',color:DCP.muted}}}}});
+
+    /* ---- Scatter ---- */
+    var cats=[DCP.accent,DCP.orange,DCP.gold,DCP.green,DCP.purple,DCP.red,DCP.silver,DCP.blue2];
+    chart('dcScatter',{type:'bubble',data:{datasets:agentes.map(function(a,i){return {label:a.nome,data:[{x:Math.round(m(a.falado)),y:a.vendas,r:6+a.lig/6}],backgroundColor:cats[i%cats.length]+'cc'}})},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:DCP.muted,boxWidth:8}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+c.raw.x+'min · '+c.raw.y+' vendas'}}}},scales:{x:{grid:{color:DCP.grid},ticks:{color:DCP.muted},title:{display:true,text:'tempo falado (min)',color:DCP.muted}},y:{grid:{color:DCP.grid},ticks:{color:DCP.muted},title:{display:true,text:'vendas',color:DCP.muted},beginAtZero:true}}}});
+
+    /* ---- Funil ---- */
+    chart('dcFunil',{type:'bar',data:{labels:['Discadas','Atendidas','Vendas'],datasets:[{data:[discado,atend,vendas],backgroundColor:[DCP.accent,DCP.blue2,DCP.green],borderRadius:5,borderSkipped:false}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return fmt(c.raw)}}}},scales:{x:{type:'logarithmic',grid:{color:DCP.grid},ticks:{color:DCP.muted}},y:{grid:{display:false},ticks:{color:DCP.muted}}}}});
+
+    /* ---- Curva horária ---- */
+    var hg=groupSum(hr,function(r){return r.hora},['discado','completado']);
+    var horas=Object.keys(hg).map(function(h){return +h}).sort(function(a,b){return a-b});
+    chart('dcHora',{type:'line',data:{labels:horas.map(function(h){return String(h).padStart(2,'0')+'h'}),datasets:[
+      {label:'Discado',data:horas.map(function(h){return hg[h].discado}),borderColor:DCP.accent,tension:.35,borderWidth:2,pointRadius:0},
+      {label:'Atendido',data:horas.map(function(h){return hg[h].completado}),borderColor:DCP.green,tension:.35,borderWidth:2,pointRadius:0}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:DCP.muted}}},scales:baseScales}});
+
+    /* ---- Heatmap ---- */
+    var hmg={};var agH={};var hrsH={};
+    hm.forEach(function(r){var a=r.agente_nome||r.callix_user_id,h=+r.hora;agH[a]=(agH[a]||0)+N(r.atendidas);hrsH[h]=1;var k=a+'|'+h;if(!hmg[k])hmg[k]={atendidas:0,vendas:0};hmg[k].atendidas+=N(r.atendidas);hmg[k].vendas+=N(r.vendas);});
+    var hmAgents=Object.keys(agH).sort(function(a,b){return agH[b]-agH[a]});
+    var hmHoras=Object.keys(hrsH).map(function(h){return +h}).sort(function(a,b){return a-b});
+    window._dcHeat={g:hmg,agents:hmAgents,horas:hmHoras};
+    dcSetHeat(window._dcHeatMetric);
+
+    /* ---- Speed ---- */
+    var order=['1. <5min','2. 5-60min','3. 1-6h','4. 6-24h','5. 1-7d','6. +7d'];
+    var scnt={};order.forEach(function(o){scnt[o]=0});sp.forEach(function(r){if(scnt[r.faixa]!==undefined)scnt[r.faixa]++});
+    var labels=['<5min','5-60min','1-6h','6-24h','1-7d','+7d'];
+    var scols=[DCP.green,DCP.green,DCP.gold,DCP.orange,DCP.red,DCP.red];
+    chart('dcSpeed',{type:'bar',data:{labels:labels,datasets:[{data:order.map(function(o){return scnt[o]}),backgroundColor:scols,borderRadius:4,borderSkipped:false}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales}});
+    if(sp.length===0){var sn=document.getElementById('dc-speed-note');if(sn)sn.innerHTML='<b>Ainda sem leads suficientes</b> — a métrica só conta leads que entraram na base já com a discadora coletando e cuja 1ª ligação foi capturada. Popula nas próximas semanas. '+sn.innerHTML;}
+
+    /* ---- Leitura rápida ---- */
+    var maisManual=agentes.slice().sort(function(a,b){return b.manual-a.manual})[0];
+    var topPerda=psum[0];
+    var li=[];
+    if(topPerda&&discado)li.push('🟠 <b>'+Math.round(100*topPerda.v/(discado-atend||1))+'%</b> das perdas são '+topPerda.n.toLowerCase()+'.');
+    if(maisManual&&maisManual.manual>0)li.push('🔵 <b>'+maisManual.nome+'</b>: '+Math.round(m(maisManual.manual))+'min em modo manual vs '+Math.round(m(maisManual.falado))+'min falando.');
+    li.push('🟢 Taxa de atendimento no período: <b>'+taxa.toFixed(1).replace('.',',')+'%</b>.');
+    if(vendas===0)li.push('🟡 Vendas atribuídas ainda em <b>0</b> — janela de 5 dias das ligações recentes está no futuro (pós-venda/upsell).');
+    var lr=document.getElementById('dc-leitura');if(lr)lr.innerHTML=li.join('<br>');
+  }
+
+  window.dcSetHeat=function(metric){
+    window._dcHeatMetric=metric;
+    var vb=document.getElementById('dc-hm-vol'),vn=document.getElementById('dc-hm-ven');
+    if(vb)vb.classList.toggle('on',metric==='atendidas'); if(vn)vn.classList.toggle('on',metric==='vendas');
+    var H=window._dcHeat; var el=document.getElementById('dc-heat'); if(!H||!el)return;
+    if(!H.agents.length){el.innerHTML='<div class="dc-note">Sem dados no período.</div>';return;}
+    var max=0;H.agents.forEach(function(a){H.horas.forEach(function(h){var v=(H.g[a+'|'+h]||{})[metric]||0;if(v>max)max=v;})});
+    var colsV=['#0e2a4d','#173f73','#1e4b8a','#2f6fd6','#5b9bff','#a8ccff'];
+    var colsS=['#0e2a4d','#14532d','#166534','#16a34a','#22c55e','#86efac'];
+    var cols=metric==='vendas'?colsS:colsV;
+    var gcss='grid-template-columns:120px repeat('+H.horas.length+',1fr)';
+    var html='<div class="dc-hm" style="'+gcss+'"><div></div>'+H.horas.map(function(h){return '<div class="hh">'+String(h).padStart(2,'0')+'h</div>'}).join('');
+    H.agents.forEach(function(a){html+='<div class="hl">'+a.split(' ')[0]+'</div>';H.horas.forEach(function(h){var v=(H.g[a+'|'+h]||{})[metric]||0;var idx=max?Math.min(cols.length-1,Math.round(v/max*(cols.length-1))):0;html+='<div class="cell" style="background:'+(v?cols[idx]:'#0a1f38')+'">'+(v||'')+'</div>'})});
+    html+='</div>';el.innerHTML=html;
+  };
+})();
+</script>
+
 </body>
 </html>
