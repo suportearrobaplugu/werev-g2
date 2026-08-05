@@ -1139,14 +1139,10 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <div class="dc-card" style="margin-top:16px"><h3>Curva horária</h3><div class="dc-cap">Discado vs. atendido ao longo do dia.</div><div class="dc-box"><canvas id="dcHora"></canvas></div></div>
 
     <div class="dc-sec"><span class="bar" style="background:var(--orange,#f59e0b)"></span><h2>Velocidade de atendimento ao lead</h2><small>— chegada na base de disparos → 1ª ligação</small></div>
-    <div class="dc-grid dc-g2">
-      <div class="dc-card dc-flag"><span class="tg">⏳ MÉTRICA EM MATURAÇÃO</span><h3>Tempo até a 1ª tentativa (speed-to-lead)</h3>
-        <div class="dc-cap">Tempo entre o lead entrar na etapa "0. Base/Entrada" do Pipeline Disparos e receber a 1ª ligação.</div>
-        <div class="dc-box"><canvas id="dcSpeed"></canvas></div>
-        <div class="dc-note" id="dc-speed-note" style="margin-top:10px">Cruzamento Callix ↔ Unnichat (telefone). Popula conforme leads novos entram na base e são ligados.</div></div>
-      <div class="dc-card"><h3>Sobre este painel</h3><div class="dc-cap">Contexto das métricas cruzadas.</div>
-        <div class="dc-note" style="line-height:1.8">📊 <b>9 painéis</b> vêm 100% da Callix (dado rico agora).<br>🛒 <b>Vendas</b> cruzam com Hubla e TMB (telefone), só contam compras <b>0–5 dias após</b> a ligação atendida.<br>⏳ <b>Speed-to-lead</b> cruza com o Unnichat; amadurece com o acúmulo de ligações.<br>ℹ️ A base atende leads que já compraram o MVS (modelo de <b>pós-venda/upsell</b>), então vendas atribuídas crescem à medida que os upsells acontecem.</div></div>
-    </div>
+    <div class="dc-card dc-flag"><span class="tg">⏳ MÉTRICA EM MATURAÇÃO</span><h3>Tempo até a 1ª tentativa (speed-to-lead)</h3>
+      <div class="dc-cap">Tempo entre o lead entrar na etapa "0. Base/Entrada" do Pipeline Disparos e receber a 1ª ligação.</div>
+      <div class="dc-box"><canvas id="dcSpeed"></canvas></div>
+      <div class="dc-note" id="dc-speed-note" style="margin-top:10px">Cruzamento Callix ↔ Unnichat (telefone). Popula conforme leads novos entram na base e são ligados.</div></div>
 
   </div>
 
@@ -1846,6 +1842,7 @@ function setPeriodo(tipo, custDe, custAte){
   FUNIL_FILTRO.de = PERIODO.de; FUNIL_FILTRO.ate = PERIODO.ate;
   currentMonth = mesAncora(PERIODO.ate || PERIODO.de);
   if(typeof renderAll === 'function') renderAll();
+  if(typeof dcOnPeriodo === 'function') dcOnPeriodo();
 }
 function escolherPeriodoInicial(){
   const r = rangeDoPeriodo('mesAtual'); PERIODO = { tipo:'mesAtual', de:r.de, ate:r.ate };
@@ -7656,16 +7653,27 @@ document.addEventListener('visibilitychange', () => {
   function chart(id,cfg){ if(window._dcCharts[id]){window._dcCharts[id].destroy();} var el=document.getElementById(id); if(!el)return; window._dcCharts[id]=new Chart(el,cfg); }
   var baseScales={x:{grid:{display:false},ticks:{color:DCP.muted}},y:{grid:{color:DCP.grid},ticks:{color:DCP.muted}}};
 
+  function dcFiltraPeriodo(rows){
+    if(typeof periodoContem!=='function') return rows;
+    return rows.filter(function(r){ return r.data==null || r.data==='' || periodoContem(r.data); });
+  }
+  function dcAplicarRender(){
+    var R=window._dcRaw; if(!R) return;
+    dcRender(dcFiltraPeriodo(R.ag),dcFiltraPeriodo(R.vol),dcFiltraPeriodo(R.hr),dcFiltraPeriodo(R.hm),dcFiltraPeriodo(R.sp));
+    var ld=document.getElementById('dc-loading'); if(ld)ld.style.display='none';
+  }
+  window.dcOnPeriodo=function(){ if(window._dcRaw){ dcAplicarRender(); } };
   window.carregarDiscadora=function(){
-    if(window._dcLoaded) return; window._dcLoaded=true;
+    if(window._dcRaw){ dcAplicarRender(); return; }
+    if(window._dcLoading) return; window._dcLoading=true;
     var views=['vw_callix_dash_agente_dia','vw_callix_dash_volume_dia','vw_callix_dash_hora','vw_callix_dash_heatmap','vw_callix_dash_speed'];
     Promise.all(views.map(function(v){return fetchViewCsvSupabase(v).catch(function(){return ''})})).then(function(res){
       try{
-        var ag=dcCSV(res[0]),vol=dcCSV(res[1]),hr=dcCSV(res[2]),hm=dcCSV(res[3]),sp=dcCSV(res[4]);
-        dcRender(ag,vol,hr,hm,sp);
-        var ld=document.getElementById('dc-loading'); if(ld)ld.style.display='none';
-      }catch(e){ var er=document.getElementById('dc-err'); if(er)er.textContent='Erro ao renderizar: '+e.message; window._dcLoaded=false; }
-    }).catch(function(e){ var er=document.getElementById('dc-err'); if(er)er.textContent='Erro ao carregar: '+e.message; window._dcLoaded=false; });
+        window._dcRaw={ag:dcCSV(res[0]),vol:dcCSV(res[1]),hr:dcCSV(res[2]),hm:dcCSV(res[3]),sp:dcCSV(res[4])};
+        dcAplicarRender();
+      }catch(e){ var er=document.getElementById('dc-err'); if(er)er.textContent='Erro ao renderizar: '+e.message; }
+      window._dcLoading=false;
+    }).catch(function(e){ var er=document.getElementById('dc-err'); if(er)er.textContent='Erro ao carregar: '+e.message; window._dcLoading=false; });
   };
 
   function dcRender(ag,vol,hr,hm,sp){
@@ -7737,7 +7745,8 @@ document.addEventListener('visibilitychange', () => {
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:DCP.muted,boxWidth:8}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+c.raw.x+'min · '+c.raw.y+' vendas'}}}},scales:{x:{grid:{color:DCP.grid},ticks:{color:DCP.muted},title:{display:true,text:'tempo falado (min)',color:DCP.muted}},y:{grid:{color:DCP.grid},ticks:{color:DCP.muted},title:{display:true,text:'vendas',color:DCP.muted},beginAtZero:true}}}});
 
     /* ---- Funil ---- */
-    chart('dcFunil',{type:'bar',data:{labels:['Discadas','Atendidas','Vendas'],datasets:[{data:[discado,atend,vendas],backgroundColor:[DCP.accent,DCP.blue2,DCP.green],borderRadius:5,borderSkipped:false}]},
+    var _pA=discado?(100*atend/discado):0,_pV=atend?(100*vendas/atend):0;
+    chart('dcFunil',{type:'bar',data:{labels:['Discadas',['Atendidas',_pA.toFixed(1).replace('.',',')+'% da discada'],['Vendas',_pV.toFixed(1).replace('.',',')+'% da atendida']],datasets:[{data:[discado,atend,vendas],backgroundColor:[DCP.accent,DCP.blue2,DCP.green],borderRadius:5,borderSkipped:false}]},
       options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return fmt(c.raw)}}}},scales:{x:{type:'logarithmic',grid:{color:DCP.grid},ticks:{color:DCP.muted}},y:{grid:{display:false},ticks:{color:DCP.muted}}}}});
 
     /* ---- Curva horária ---- */
