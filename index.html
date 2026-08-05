@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-03b
+  CIC-G2 · BUILD 2026-08-05
   Base: migração Supabase (views vw_dash_vendas/tmb/reembolso) + meses dinâmicos + banner de fontes.
   Build 2026-08-03: (1) filtro universal de período, (2) Em Contato por NOME de etapa,
   (3) mapeamento de vendedor por token único + guard 100%, (4) MVP Nirla removido.
@@ -12,6 +12,11 @@
   código morto removido (porSegmentoDia/ganhosCrmDia).
   Build 2026-08-03c: índice de origem do CRM não exige mais e-mail — grava origem por
   telefone/nome também p/ lead só-telefone (WhatsApp), reduzindo "sem origem" na atribuição de vendas.
+  Build 2026-08-05 (dobradinha): 4ª chave de atribuição = 8 últimos dígitos do telefone (sem DDD)
+  + primeiro nome, usada SÓ quando telefone/e-mail/nome falham. Resolve DDD divergente entre CRM e
+  plataforma (ex.: 54 x 49) em lead sem e-mail e com só o primeiro nome no CRM. Guarda de ambiguidade:
+  se a mesma chave apontar pra 2+ pessoas distintas, é descartada. Diagnóstico "tel+nome" no rodapé
+  do funil e no console.
   Fonte canônica: repositório GitHub werev01/cic-g2. Sempre editar a partir da versão do repo.
   ============================================================================
 -->
@@ -1519,6 +1524,16 @@ let TEL_STATS = { vendas:0, comTel:0, semTel:0 };
 let CRM_ORIGEM_TEL = new Map();
 let CRM_ORIGEM_EMAIL = new Map();
 let CRM_ORIGEM_NOME = new Map();
+// DOBRADINHA (build 2026-08-05): último recurso quando telefone/e-mail/nome falham.
+// Chave composta = 8 últimos dígitos do telefone (sem DDD) + primeiro nome.
+// Motivo: DDD divergente entre CRM e plataforma (ex.: 54 x 49 no mesmo número)
+// derruba o match por telKey, e lead de WhatsApp costuma vir sem e-mail e só com
+// o primeiro nome — nomeKey (2+ palavras) descarta. Sozinho, o "8 dígitos" seria
+// frouxo demais; exigir o primeiro nome junto é o que segura o falso-positivo.
+// Valor: { org, ids:Set } — ids guarda as identidades distintas vistas na chave.
+// Se a chave apontar pra 2+ pessoas diferentes, ela é ambígua e NÃO é usada.
+let CRM_ORIGEM_TELNOME = new Map();
+let TELNOME_STATS = { chaves:0, ambiguas:0 };
 let ULTIMA_ATRIBUICAO = null;
 
 // Canoniza nome pra cruzamento: sem acento, minúsculo, espaços colapsados.
@@ -1532,13 +1547,43 @@ function nomeKey(n){
   return t;
 }
 
-// Resolve a origem de uma venda: telefone -> e-mail -> nome.
+// Resolve a origem de uma venda: telefone -> e-mail -> nome -> (tel8+1º nome).
+// A dobradinha é o ÚLTIMO recurso: só entra quando as 3 chaves fortes falharam,
+// então nenhuma atribuição que já funcionava muda de valor por causa dela.
 // Retorna { origem, via } ou null se não achou o lead no CRM.
 function origemDaVenda(v){
   if(v.tel && CRM_ORIGEM_TEL.has(v.tel))     return { origem: CRM_ORIGEM_TEL.get(v.tel),   via:'telefone' };
   if(v.email && CRM_ORIGEM_EMAIL.has(v.email)) return { origem: CRM_ORIGEM_EMAIL.get(v.email), via:'email' };
   if(v.nk && CRM_ORIGEM_NOME.has(v.nk))      return { origem: CRM_ORIGEM_NOME.get(v.nk),   via:'nome' };
+  if(v.tn){
+    const e = CRM_ORIGEM_TELNOME.get(v.tn);
+    // ids.size > 1 = a mesma dobradinha bate em pessoas diferentes: descarta.
+    if(e && e.ids.size === 1) return { origem: e.org, via:'telnome' };
+  }
   return null;
+}
+
+// 8 últimos dígitos do telefone, sem DDD e sem país. Tolera DDD errado/trocado.
+// "+5549991349118" -> "91349118" ; "54991349118" -> "91349118"
+function tel8Key(t){
+  const d = String(t || '').replace(/\D/g, '');
+  return d.length >= 8 ? d.slice(-8) : '';
+}
+
+// Primeiro nome canonizado (sem acento, minúsculo). Exige 3+ letras — "ana",
+// "jose" servem; iniciais soltas ("a", "j") não, porque colidiriam demais.
+function primeiroNomeKey(n){
+  const t = String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z\s]/g,' ').replace(/\s+/g,' ').trim();
+  const p = t.split(' ')[0] || '';
+  return p.length >= 3 ? p : '';
+}
+
+// Chave da dobradinha. Vazia se faltar qualquer uma das duas metades —
+// nunca cai pra telefone-só nem pra nome-só.
+function telNomeKey(tel, nome){
+  const t8 = tel8Key(tel), pn = primeiroNomeKey(nome);
+  return (t8 && pn) ? (t8 + '|' + pn) : '';
 }
 
 // Canoniza telefone BR pra comparação: tira +55, tira o 9º dígito de celular.
@@ -1563,7 +1608,8 @@ function registrarVenda(tel, email, nome, valor, data, plat){
     valor, dataKey, plat,
     tel: k,
     email: String(email || '').trim().toLowerCase(),
-    nk: nomeKey(nome)
+    nk: nomeKey(nome),
+    tn: telNomeKey(tel, nome)   // dobradinha: 8 dígitos + primeiro nome
   });
 }
 
@@ -4791,10 +4837,11 @@ function renderTaxaPassagem(){
     bFunil += `<div style="font-weight:800;color:var(--text-strong);font-size:16px;margin:4px 0 4px">🧭 Funil de passagem</div>`;
     const at = fSeg.atribuicao;
     if(at && at.total > 0){
-      const casou = at.telefone + at.email + at.nome;
+      const casou = at.telefone + at.email + at.nome + (at.telnome||0);
       bFunil += `<div style="font-size:11.5px;color:var(--muted);margin:0 0 12px">`
         + `${at.total} venda(s) no recorte · origem identificada em ${casou} `
-        + `(tel ${at.telefone} · e-mail ${at.email} · nome ${at.nome})`
+        + `(tel ${at.telefone} · e-mail ${at.email} · nome ${at.nome}`
+        + (at.telnome > 0 ? ` · tel+nome ${at.telnome}` : '') + `)`
         + (at.semOrigem > 0 ? ` · <span style="color:#d95926">${at.semOrigem} sem origem</span>` : '')
         + `</div>`;
     }
@@ -7134,6 +7181,7 @@ function processarEventos(entrada){
   // Índice de origem sobre TODO o histórico (sem recorte). Como as linhas vêm
   // ordenadas por data asc, a última gravação vence = origem mais recente.
   CRM_ORIGEM_TEL = new Map(); CRM_ORIGEM_EMAIL = new Map(); CRM_ORIGEM_NOME = new Map();
+  CRM_ORIGEM_TELNOME = new Map(); TELNOME_STATS = { chaves:0, ambiguas:0 };
   if(idxTelEv < 0) console.warn('[Eventos] Coluna de telefone não encontrada — faturamento por segmento ficará indisponível. Cabeçalhos:', header.join(', '));
 
   if(idxEmail < 0 || idxProp < 0 || idxEtapa < 0){
@@ -7212,8 +7260,25 @@ function processarEventos(entrada){
         if(org){
           if(tk) CRM_ORIGEM_TEL.set(tk, org);
           if(email) CRM_ORIGEM_EMAIL.set(email, org);
-          const nk = idxNomeEv >= 0 ? nomeKey(row[idxNomeEv]) : '';
+          const nomeEv = idxNomeEv >= 0 ? row[idxNomeEv] : '';
+          const nk = nomeKey(nomeEv);
           if(nk) CRM_ORIGEM_NOME.set(nk, org);
+          // ---- Dobradinha: 8 dígitos do telefone + primeiro nome ----
+          // Guarda a identidade do lead (e-mail > nome completo > telefone cheio)
+          // pra detectar quando a mesma chave representa DUAS pessoas distintas.
+          const tn = telNomeKey(idxTelEv >= 0 ? row[idxTelEv] : '', nomeEv);
+          if(tn){
+            // Identidade = TELEFONE canônico (DDD+8), nunca o nome: o CRM grava o
+            // mesmo lead como "Max", "Max Garcia", "MAX HENRIQUE..." e usar o nome
+            // marcaria a mesma pessoa como várias — ambiguidade falsa. Duas pessoas
+            // diferentes na mesma chave se distinguem justamente pelo DDD.
+            const telRaw = String(row[idxTelEv]||'').replace(/\D/g,'');
+            const ident = tk || telRaw;
+            let e = CRM_ORIGEM_TELNOME.get(tn);
+            if(!e){ e = { org, ids:new Set() }; CRM_ORIGEM_TELNOME.set(tn, e); }
+            e.org = org;                 // mais recente vence, igual aos outros índices
+            if(ident) e.ids.add(ident);
+          }
         }
       }
     }
@@ -7273,6 +7338,11 @@ function processarEventos(entrada){
     console.warn('[Eventos] Proprietários NÃO mapeados p/ vendedor (fora do placar individual). Se for vendedor ativo, adicione o token em VENDEDOR_MATCH:',
       naoMap.map(([n,q]) => `${n} (${q})`).join(' · '));
   }
+
+  // Contabiliza a saúde do índice da dobradinha (diagnóstico no console).
+  TELNOME_STATS.chaves = CRM_ORIGEM_TELNOME.size;
+  TELNOME_STATS.ambiguas = 0;
+  CRM_ORIGEM_TELNOME.forEach(e => { if(e.ids.size > 1) TELNOME_STATS.ambiguas++; });
 
   // Agrega perdas por motivo e por tipo (operacional vs vendedor)
   const motivos = {};   // rotulo -> { qtd, tipo }
@@ -7393,7 +7463,7 @@ function calcularFunilSegmentos(){
 
   // ---- Atribuição das vendas (pelo lado da venda, como no Nirla) ----
   const vendasPorSeg = {};
-  const attrStats = { total:0, telefone:0, email:0, nome:0, semOrigem:0 };
+  const attrStats = { total:0, telefone:0, email:0, nome:0, telnome:0, semOrigem:0 };
   VENDAS_LISTA.forEach(v => {
     if(!inR(v.dataKey)) return;
     attrStats.total++;
@@ -7569,7 +7639,8 @@ async function carregarDados(forceRefresh = false){
       else console.warn('[Eventos] processarEventos retornou null (verifique nomes das colunas)');
       console.log('[Vendas] indexadas:', VENDAS_LISTA.length,
                   '| com telefone:', TEL_STATS.comTel, '| sem telefone:', TEL_STATS.semTel);
-      console.log('[Origem CRM] índice: tel', CRM_ORIGEM_TEL.size, '| email', CRM_ORIGEM_EMAIL.size, '| nome', CRM_ORIGEM_NOME.size);
+      console.log('[Origem CRM] índice: tel', CRM_ORIGEM_TEL.size, '| email', CRM_ORIGEM_EMAIL.size, '| nome', CRM_ORIGEM_NOME.size,
+                  '| tel+nome', CRM_ORIGEM_TELNOME.size, '(ambíguas descartadas:', TELNOME_STATS.ambiguas + ')');
     } catch(evErr){
       console.warn('[Eventos] Erro ao carregar do Supabase (funil indisponível):', evErr.message);
       EVENTOS = null;
