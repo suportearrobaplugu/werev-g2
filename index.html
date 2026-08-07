@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-07d
+  CIC-G2 · BUILD 2026-08-07e
   Base: migração Supabase (views vw_dash_vendas/tmb/reembolso) + meses dinâmicos + banner de fontes.
   Build 2026-08-03: (1) filtro universal de período, (2) Em Contato por NOME de etapa,
   (3) mapeamento de vendedor por token único + guard 100%, (4) MVP Nirla removido.
@@ -40,6 +40,12 @@
   comercial", "· jornada webinar" e os cards de "Perda por origem" viraram PIZZA — motivo de perda
   se lê majoritariamente em pizza. Matriz motivo x etapa, motivo x origem, Top motivos e Perda por
   vendedor seguem como estavam (tabela e barras).
+  Build 2026-08-07e (perdas por MOTIVO): as pizzas quebram por MOTIVO, não por etapa — é assim que
+  o time lê perda. Ordem da aba: (1) pizza geral de motivos, (2) motivos do funil comercial,
+  (3) motivos da jornada webinar, (4) motivos por origem (um card/pizza por segmento, top 6 +
+  "Outros motivos"), (5) matriz motivo x etapa, (6) matriz motivo x origem, (7) top motivos,
+  (8) perda por vendedor. Paleta FIXA por motivo (CORM): o mesmo motivo tem a mesma cor em todas as
+  pizzas; operacional em tons de cinza, igual à convenção antiga da Taxa de Passagem.
   Fonte canônica: repositório GitHub werev01/cic-g2. Sempre editar a partir da versão do repo.
   ============================================================================
 -->
@@ -7702,7 +7708,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-07d — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas) · menu Funil & Taxa de Passagem removido','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-07e — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -8052,86 +8058,89 @@ document.addEventListener('visibilitychange', () => {
       return;
     }
     var total = rows.length;
+    var op = rows.filter(function(r){ return r.tipo==='operacional'; }).length;
 
     // A jornada de webinar (Acessou a Live / Assistiu / Estava no Pitch / Clicou na Oferta) tem
-    // etapas próprias, que não são passos do funil comercial. Separadas pra não inflar Disparos.
+    // etapas próprias, que não são passos do funil comercial.
     var ehWeb = function(r){ return r.etapa_grupo === 'webinar'; };
     var rowsCom = rows.filter(function(r){ return !ehWeb(r); });
     var rowsWeb = rows.filter(ehWeb);
 
-    // ---- etapas do funil comercial ----
-    var porEt = contaLeads(rowsCom, function(r){ return String(r.etapa_ord||'0'); });
-    var etItens = ['1','2','3','4','0'].filter(function(k){ return porEt[k]; }).map(function(k){
-      return { rot: k==='0' ? 'Sem histórico de etapa' : ORD_LAB[k], n: porEt[k].n, cor: COR_ET[k] };
+    var rotulo = function(r){ return (r.motivo_rotulo || r.motivo || '(sem motivo)') + (r.tipo==='operacional' ? ' ·op' : ''); };
+
+    // ---- paleta FIXA por motivo: o mesmo motivo tem a mesma cor em todas as pizzas ----
+    // vendedor = paleta colorida · operacional = tons de cinza (mesma convenção da tela antiga).
+    var CORES_V = ['#3b82f6','#a855f7','#06b6d4','#14b8a6','#22c55e','#f59e0b','#ec4899','#7c3aed','#ef4444','#84cc16','#38bdf8','#f43f5e','#eab308','#8b5cf6'];
+    var CINZAS  = ['#6b7280','#9ca3af','#4b5563','#d1d5db','#374151','#8b98a9'];
+    var totMot = contaLeads(rows, rotulo);
+    var ordemMot = Object.keys(totMot).sort(function(a,b){ return totMot[b].n - totMot[a].n; });
+    var tipoDoMotivo = {};
+    rows.forEach(function(r){ tipoDoMotivo[rotulo(r)] = r.tipo; });
+    var CORM = {}; var ci = 0, cj = 0;
+    ordemMot.forEach(function(m){
+      CORM[m] = tipoDoMotivo[m] === 'operacional' ? CINZAS[cj++ % CINZAS.length] : CORES_V[ci++ % CORES_V.length];
     });
 
-    // ---- etapas da jornada de webinar, pelo nome real, na ordem do pipeline ----
-    var webItensDe = function(lista){
-      var m = {};
-      lista.forEach(function(r){
-        var k = r.etapa_nome || '(sem etapa)';
-        if(!m[k]) m[k] = { rot:k, n:0, num: parseInt(r.etapa_num,10) || 99 };
-        m[k].n++;
-      });
-      return Object.keys(m).map(function(k){ return m[k]; })
-        .sort(function(a,b){ return a.num - b.num; })
-        .map(function(i,ix){ return { rot:i.rot, n:i.n, cor: COR_WEB[ix % COR_WEB.length] }; });
-    };
-    var webItens = webItensDe(rowsWeb);
+    // Itens de pizza POR MOTIVO de um conjunto de linhas. topN>0 agrupa a cauda em "Outros".
+    function itensPorMotivo(lista, topN){
+      var m = contaLeads(lista, rotulo);
+      var arr = Object.keys(m).map(function(k){ return { rot:k, n:m[k].n, cor: CORM[k] || '#6b7280' }; })
+                  .sort(function(a,b){ return b.n - a.n; });
+      if(topN && arr.length > topN){
+        var resto = arr.slice(topN).reduce(function(a,i){ return a + i.n; }, 0);
+        arr = arr.slice(0, topN);
+        if(resto > 0) arr.push({ rot:'Outros motivos', n:resto, cor:'#3a4a63' });
+      }
+      return arr;
+    }
 
-    // ---- por origem: uma pizza por origem, comercial + webinar na mesma roda ----
+    // ---- por origem: uma pizza de MOTIVOS por origem ----
     var porOr = contaLeads(rows, function(r){ return r.origem || 'Sem origem'; });
     var orKeys = Object.keys(porOr).sort(function(a,b){ return porOr[b].n - porOr[a].n; });
     var cardsOr = orKeys.map(function(o){
-      var sub  = rows.filter(function(r){ return (r.origem||'Sem origem')===o; });
-      var subC = sub.filter(function(r){ return !ehWeb(r); });
-      var subW = sub.filter(ehWeb);
+      var sub = rows.filter(function(r){ return (r.origem||'Sem origem')===o; });
       var n = porOr[o].n;
-      var pe = contaLeads(subC, function(r){ return String(r.etapa_ord||'0'); });
-      var itens = ['1','2','3','4','0'].filter(function(k){ return pe[k]; }).map(function(k){
-        return { rot: k==='0' ? 'Sem histórico de etapa' : ORD_LAB[k], n: pe[k].n, cor: COR_ET[k] };
-      }).concat(webItensDe(subW));
+      var itens = itensPorMotivo(sub, 6);
       var opO = sub.filter(function(r){ return r.tipo==='operacional'; }).length;
       return '<div class="card" style="padding:18px">'
         + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">'
         + '<span style="font-weight:800;color:var(--text-strong);font-size:14px">'+esc(o)+'</span>'
         + '<span style="font-weight:800;color:var(--text-strong)">'+n+'</span></div>'
-        + '<div style="font-size:11px;color:var(--muted);margin-bottom:14px">'+pct(n,total)+' das perdas · '+opO+' operacionais'
-        + (subW.length ? ' · <span style="color:'+COR_WEB[0]+'">'+subW.length+' na jornada webinar</span>' : '')+'</div>'
+        + '<div style="font-size:11px;color:var(--muted);margin-bottom:14px">'+pct(n,total)+' das perdas · '+opO+' operacionais</div>'
         + '<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">'
         + pizzaSvg(itens, n, 130)
-        + '<div style="flex:1;min-width:160px">'+legendaPizza(itens, n, true)+'</div>'
+        + '<div style="flex:1;min-width:170px">'+legendaPizza(itens, n, true)+'</div>'
         + '</div></div>';
     }).join('');
 
-    var blocoOr = '<div style="font-weight:800;color:var(--text-strong);font-size:15px;margin:22px 0 4px">Perda por origem</div>'
-      + '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Mesma quebra do funil por segmento, agora do lado da perda. As etapas da jornada de webinar aparecem em roxo, separadas do funil comercial.</div>'
+    var blocoOr = '<div style="font-weight:800;color:var(--text-strong);font-size:15px;margin:22px 0 4px">Motivo de perda por origem</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">O mesmo motivo pesa muito diferente entre os segmentos. Cada card mostra os 6 maiores motivos daquela origem; o resto vai pra "Outros motivos".</div>'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;margin-bottom:16px">'+cardsOr+'</div>';
 
-    // ---- colunas das matrizes (webinar entra como UMA coluna, pra tabela não explodir) ----
+    // ---- colunas da matriz motivo x etapa ----
+    var porEt = contaLeads(rowsCom, function(r){ return String(r.etapa_ord||'0'); });
     var colsEt = ['1','2','3','4','0'].filter(function(k){ return porEt[k]; })
       .map(function(k){ return { k:k, rot: k==='0' ? 'Sem hist.' : ORD_LAB[k].replace(/^\d+\.\s*/,''), cor: COR_ET[k] }; });
     if(rowsWeb.length) colsEt.push({ k:'W', rot:'Webinar', cor: COR_WEB[0] });
     var colsOr = orKeys.map(function(o){ return { k:o, rot:o, cor:'var(--muted)' }; });
 
-    var rotulo = function(r){ return (r.motivo_rotulo || r.motivo || '(sem motivo)') + (r.tipo==='operacional' ? ' ·op' : ''); };
-    var topMot = contaLeads(rows, rotulo);
-
     el.innerHTML =
-        pizza('Perda por etapa · funil comercial',
-              total + ' perdas no recorte (leads únicos). Etapa em que o lead estava quando foi fechado como perdido — reconstruída pelo histórico de eventos, porque o CRM manda a perda sem etapa.',
-              etItens, total)
-      + (webItens.length ? pizza('Perda por etapa · jornada webinar',
-              'Etapas exclusivas do webinar (engajamento na live). Ficam fora do funil comercial pra não inflar Disparos — um lead que saiu em "Assistiu 60min" nunca chegou a ser abordado.',
-              webItens, total) : '')
+        pizza('Motivos de perda',
+              total + ' perdas no recorte (leads únicos) · ' + op + ' operacionais (' + pct(op,total) + '), em cinza, não contam contra o vendedor. Visão geral, sem separar etapa nem origem.',
+              itensPorMotivo(rows, 0), total)
+      + pizza('Motivos de perda · funil comercial',
+              rowsCom.length + ' perdas de leads que estavam no funil comercial (Entrada, Em Contato, Negociação, Link/Forecast).',
+              itensPorMotivo(rowsCom, 0), rowsCom.length)
+      + (rowsWeb.length ? pizza('Motivos de perda · jornada webinar',
+              rowsWeb.length + ' perdas de leads que saíram ainda na jornada da live (Acessou a Live, Assistiu 30/60min, Estava no Pitch, Clicou na Oferta) — nunca chegaram a ser abordados pelo comercial.',
+              itensPorMotivo(rowsWeb, 0), rowsWeb.length) : '')
       + blocoOr
-      + matriz('Motivo × etapa', 'Onde cada motivo realmente acontece. Célula destacada = mais da metade daquele motivo se concentra ali. "·op" marca motivo operacional.',
+      + matriz('Motivo × etapa', 'As etapas do funil e os motivos dentro de cada uma. Célula destacada = mais da metade daquele motivo se concentra ali. "·op" marca motivo operacional.',
                rows, function(r){ return ehWeb(r) ? 'W' : String(r.etapa_ord||'0'); }, colsEt, rotulo)
-      + matriz('Motivo × origem', 'O mesmo motivo pode pesar muito diferente entre os segmentos.',
+      + matriz('Motivo × origem', 'O mesmo cruzamento, agora por segmento.',
                rows, function(r){ return r.origem || 'Sem origem'; }, colsOr, rotulo)
       + barras('Top motivos', 'Todos os motivos do recorte, do maior pro menor.',
-               Object.keys(topMot).map(function(k){ return { rot:k, n:topMot[k].n, cor:'#3b82f6' }; })
-                 .sort(function(a,b){ return b.n-a.n; }), total)
+               ordemMot.map(function(k){ return { rot:k, n:totMot[k].n, cor: CORM[k] }; }), total)
       + (function(){
           var pv = contaLeads(rows.filter(function(r){ return r.vendedor && r.vendedor!=='__OUTROS__'; }), function(r){ return r.vendedor; });
           var it = Object.keys(pv).map(function(k){ return { rot: (typeof displayName==='function'?displayName(k):k), n:pv[k].n, cor:'#a855f7' }; })
