@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-07c
+  CIC-G2 · BUILD 2026-08-07d
   Base: migração Supabase (views vw_dash_vendas/tmb/reembolso) + meses dinâmicos + banner de fontes.
   Build 2026-08-03: (1) filtro universal de período, (2) Em Contato por NOME de etapa,
   (3) mapeamento de vendedor por token único + guard 100%, (4) MVP Nirla removido.
@@ -35,6 +35,11 @@
   ordem do pipeline, separada do funil de Disparos — antes caía num balde "Outras etapas" e as duas
   primeiras ainda inflavam "Entrada de leads"; (6) menu "Funil & Taxa de Passagem" REMOVIDO (em
   desuso). renderFunil() continua no arquivo, mas sai cedo porque o container não existe mais.
+  Build 2026-08-07d (leitura das perdas): (7) removida a faixa de KPI em texto do topo da aba de
+  perdas (ficava sem estilo, as classes dc-* são da aba Discadora); (8) "Perda por etapa · funil
+  comercial", "· jornada webinar" e os cards de "Perda por origem" viraram PIZZA — motivo de perda
+  se lê majoritariamente em pizza. Matriz motivo x etapa, motivo x origem, Top motivos e Perda por
+  vendedor seguem como estavam (tabela e barras).
   Fonte canônica: repositório GitHub werev01/cic-g2. Sempre editar a partir da versão do repo.
   ============================================================================
 -->
@@ -7697,7 +7702,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-07c — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado) · menu Funil & Taxa de Passagem removido','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-07d — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas) · menu Funil & Taxa de Passagem removido','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -7910,6 +7915,7 @@ document.addEventListener('visibilitychange', () => {
   var MP = { raw:null, carregando:false, carregado:false };
   var COR_ET = { '1':'#2a78d6', '2':'#1baf7a', '3':'#eda100', '4':'#eb6834', '0':'#6b7280' };
   var ORD_LAB = { '1':'1. Entrada de leads', '2':'2. Em Contato', '3':'3. Negociação', '4':'4. Link Pgto / Forecast', '0':'Outras etapas' };
+  var COR_WEB = ['#8b7ffe','#a78bfa','#c4b5fd','#7c3aed','#5b21b6'];
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function pct(n, d){ return d>0 ? (100*n/d).toFixed(1).replace('.',',')+'%' : '—'; }
@@ -7946,6 +7952,50 @@ document.addEventListener('visibilitychange', () => {
     return '<div class="card" style="padding:20px;margin-bottom:16px">'
       + '<div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">'+titulo+'</div>'
       + '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">'+sub+'</div>'+linhas+'</div>';
+  }
+
+  // Pizza SVG (mesma linguagem visual da que existia na Taxa de Passagem).
+  function pizzaSvg(itens, total, size){
+    var r = size/2 - 2, cx = size/2, cy = size/2, ang = -90;
+    if(!total) return '';
+    // fatia única = círculo cheio (o path de arco degenera em 360°)
+    if(itens.length === 1) return '<svg viewBox="0 0 '+size+' '+size+'" style="width:'+size+'px;height:'+size+'px;flex-shrink:0">'
+      + '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="'+(itens[0].cor||'#3b82f6')+'"/></svg>';
+    var fatias = itens.map(function(i){
+      var frac = i.n/total, a0 = ang, a1 = ang + frac*360; ang = a1;
+      var rad = function(d){ return d*Math.PI/180; };
+      var x0 = cx + r*Math.cos(rad(a0)), y0 = cy + r*Math.sin(rad(a0));
+      var x1 = cx + r*Math.cos(rad(a1)), y1 = cy + r*Math.sin(rad(a1));
+      var large = (a1-a0) > 180 ? 1 : 0;
+      return '<path d="M '+cx+' '+cy+' L '+x0.toFixed(2)+' '+y0.toFixed(2)
+           + ' A '+r+' '+r+' 0 '+large+' 1 '+x1.toFixed(2)+' '+y1.toFixed(2)+' Z" fill="'+(i.cor||'#3b82f6')
+           + '" stroke="var(--bg2)" stroke-width="1"/>';
+    }).join('');
+    return '<svg viewBox="0 0 '+size+' '+size+'" style="width:'+size+'px;height:'+size+'px;flex-shrink:0">'+fatias+'</svg>';
+  }
+
+  function legendaPizza(itens, total, compacta){
+    var fs = compacta ? 11 : 12;
+    return itens.map(function(i){
+      return '<div style="display:flex;align-items:center;gap:8px;font-size:'+fs+'px;margin-bottom:'+(compacta?4:6)+'px">'
+        + '<span style="width:10px;height:10px;border-radius:2px;background:'+(i.cor||'#3b82f6')+';flex-shrink:0"></span>'
+        + '<span style="flex:1;color:var(--text)">'+esc(i.rot)+'</span>'
+        + '<span style="color:var(--text-strong);font-weight:700">'+i.n+'</span>'
+        + '<span style="color:var(--muted);width:44px;text-align:right">'+pct(i.n,total)+'</span></div>';
+    }).join('');
+  }
+
+  function pizza(titulo, sub, itens, totalRef){
+    itens = itens.filter(function(i){ return i.n > 0; });
+    if(!itens.length) return '';
+    var soma = itens.reduce(function(a,i){ return a + i.n; }, 0);
+    return '<div class="card" style="padding:20px;margin-bottom:16px">'
+      + '<div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">'+titulo+'</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">'+sub+'</div>'
+      + '<div style="display:flex;gap:26px;flex-wrap:wrap;align-items:center">'
+      + pizzaSvg(itens, soma, 180)
+      + '<div style="flex:1;min-width:260px">'+legendaPizza(itens, soma, false)+'</div>'
+      + '</div></div>';
   }
 
   // Matriz motivo x (coluna). Colunas vêm prontas como [{k,rot,cor}].
@@ -7987,8 +8037,7 @@ document.addEventListener('visibilitychange', () => {
     var el = document.getElementById('motivosPerdaContent');
     if(!el || !MP.raw) return;
     // Um lead pode ser fechado como perdido em dias diferentes dentro do mesmo recorte.
-    // Contamos LEADS ÚNICOS (igual ao funil por segmento), mantendo a perda mais recente —
-    // senão o KPI do topo e a soma das barras divergem.
+    // Contamos LEADS ÚNICOS (igual ao funil por segmento), mantendo a perda mais recente.
     var vistos = {}, rows = [];
     mpFiltra(MP.raw)
       .slice()
@@ -8003,8 +8052,6 @@ document.addEventListener('visibilitychange', () => {
       return;
     }
     var total = rows.length;
-    var op = rows.filter(function(r){ return r.tipo==='operacional'; }).length;
-    var vend = total - op;
 
     // A jornada de webinar (Acessou a Live / Assistiu / Estava no Pitch / Clicou na Oferta) tem
     // etapas próprias, que não são passos do funil comercial. Separadas pra não inflar Disparos.
@@ -8019,89 +8066,64 @@ document.addEventListener('visibilitychange', () => {
     });
 
     // ---- etapas da jornada de webinar, pelo nome real, na ordem do pipeline ----
-    var webMap = {};
-    rowsWeb.forEach(function(r){
-      var k = r.etapa_nome || '(sem etapa)';
-      if(!webMap[k]) webMap[k] = { rot:k, n:0, num: parseInt(r.etapa_num,10) || 99 };
-      webMap[k].n++;
-    });
-    var webItens = Object.keys(webMap).map(function(k){ return webMap[k]; })
-      .sort(function(a,b){ return a.num - b.num; })
-      .map(function(i){ return { rot:i.rot, n:i.n, cor:'#8b7ffe' }; });
+    var webItensDe = function(lista){
+      var m = {};
+      lista.forEach(function(r){
+        var k = r.etapa_nome || '(sem etapa)';
+        if(!m[k]) m[k] = { rot:k, n:0, num: parseInt(r.etapa_num,10) || 99 };
+        m[k].n++;
+      });
+      return Object.keys(m).map(function(k){ return m[k]; })
+        .sort(function(a,b){ return a.num - b.num; })
+        .map(function(i,ix){ return { rot:i.rot, n:i.n, cor: COR_WEB[ix % COR_WEB.length] }; });
+    };
+    var webItens = webItensDe(rowsWeb);
 
-    var topEt = etItens.concat(webItens).slice().sort(function(a,b){ return b.n-a.n; })[0];
-
-    // ---- KPIs ----
-    var kpi = '<div class="dc-grid dc-g6" style="margin-bottom:16px">'
-      + '<div class="dc-card dc-kpi"><div class="dc-lab">Perdas no período</div><div class="dc-val">'+total+'</div><div class="dc-sub">leads únicos</div></div>'
-      + '<div class="dc-card dc-kpi"><div class="dc-lab">Do vendedor</div><div class="dc-val">'+vend+'</div><div class="dc-sub">'+pct(vend,total)+' do total</div></div>'
-      + '<div class="dc-card dc-kpi"><div class="dc-lab">Operacionais</div><div class="dc-val">'+op+'</div><div class="dc-sub">'+pct(op,total)+' · não contam contra o vendedor</div></div>'
-      + '<div class="dc-card dc-kpi"><div class="dc-lab">Etapa que mais perde</div><div class="dc-val" style="font-size:19px">'+(topEt?esc(topEt.rot.replace(/^\d+\.\s*/,'')):'—')+'</div><div class="dc-sub">'+(topEt?topEt.n+' leads · '+pct(topEt.n,total):'')+'</div></div>'
-      + '</div>';
-
-    // ---- por origem: barras do funil comercial + bloco separado da jornada de webinar ----
+    // ---- por origem: uma pizza por origem, comercial + webinar na mesma roda ----
     var porOr = contaLeads(rows, function(r){ return r.origem || 'Sem origem'; });
     var orKeys = Object.keys(porOr).sort(function(a,b){ return porOr[b].n - porOr[a].n; });
-    var linhaMini = function(rot, n, base, cor){
-      var w = base>0 ? Math.max(2, 100*n/base) : 0;
-      return '<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'
-        + '<span style="color:var(--text)">'+esc(rot)+'</span><span style="color:var(--text-strong);font-weight:700">'+n+'</span></div>'
-        + '<div style="height:7px;background:rgba(255,255,255,.05);border-radius:4px;overflow:hidden">'
-        + '<div style="height:100%;width:'+w.toFixed(1)+'%;background:'+cor+';border-radius:4px"></div></div></div>';
-    };
     var cardsOr = orKeys.map(function(o){
       var sub  = rows.filter(function(r){ return (r.origem||'Sem origem')===o; });
       var subC = sub.filter(function(r){ return !ehWeb(r); });
       var subW = sub.filter(ehWeb);
       var n = porOr[o].n;
       var pe = contaLeads(subC, function(r){ return String(r.etapa_ord||'0'); });
-      var linhas = ['1','2','3','4','0'].filter(function(k){ return pe[k]; }).map(function(k){
-        return linhaMini(k==='0' ? 'Sem histórico de etapa' : ORD_LAB[k], pe[k].n, n, COR_ET[k]);
-      }).join('');
-      var blocoW = '';
-      if(subW.length){
-        var wm = {};
-        subW.forEach(function(r){
-          var k = r.etapa_nome || '(sem etapa)';
-          if(!wm[k]) wm[k] = { rot:k, n:0, num: parseInt(r.etapa_num,10) || 99 };
-          wm[k].n++;
-        });
-        blocoW = '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)">'
-          + '<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8b7ffe;font-weight:700;margin-bottom:7px">Jornada webinar · '+subW.length+'</div>'
-          + Object.keys(wm).map(function(k){ return wm[k]; }).sort(function(a,b){ return a.num-b.num; })
-              .map(function(i){ return linhaMini(i.rot, i.n, n, '#8b7ffe'); }).join('')
-          + '</div>';
-      }
+      var itens = ['1','2','3','4','0'].filter(function(k){ return pe[k]; }).map(function(k){
+        return { rot: k==='0' ? 'Sem histórico de etapa' : ORD_LAB[k], n: pe[k].n, cor: COR_ET[k] };
+      }).concat(webItensDe(subW));
       var opO = sub.filter(function(r){ return r.tipo==='operacional'; }).length;
-      return '<div class="card" style="padding:16px">'
+      return '<div class="card" style="padding:18px">'
         + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">'
         + '<span style="font-weight:800;color:var(--text-strong);font-size:14px">'+esc(o)+'</span>'
         + '<span style="font-weight:800;color:var(--text-strong)">'+n+'</span></div>'
-        + '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+pct(n,total)+' das perdas · '+opO+' operacionais</div>'
-        + linhas + blocoW + '</div>';
+        + '<div style="font-size:11px;color:var(--muted);margin-bottom:14px">'+pct(n,total)+' das perdas · '+opO+' operacionais'
+        + (subW.length ? ' · <span style="color:'+COR_WEB[0]+'">'+subW.length+' na jornada webinar</span>' : '')+'</div>'
+        + '<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">'
+        + pizzaSvg(itens, n, 130)
+        + '<div style="flex:1;min-width:160px">'+legendaPizza(itens, n, true)+'</div>'
+        + '</div></div>';
     }).join('');
 
     var blocoOr = '<div style="font-weight:800;color:var(--text-strong);font-size:15px;margin:22px 0 4px">Perda por origem</div>'
-      + '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Mesma quebra do funil por segmento, agora do lado da perda. Onde houver jornada de webinar, ela aparece destacada no rodapé do card.</div>'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:16px">'+cardsOr+'</div>';
+      + '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Mesma quebra do funil por segmento, agora do lado da perda. As etapas da jornada de webinar aparecem em roxo, separadas do funil comercial.</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;margin-bottom:16px">'+cardsOr+'</div>';
 
     // ---- colunas das matrizes (webinar entra como UMA coluna, pra tabela não explodir) ----
     var colsEt = ['1','2','3','4','0'].filter(function(k){ return porEt[k]; })
       .map(function(k){ return { k:k, rot: k==='0' ? 'Sem hist.' : ORD_LAB[k].replace(/^\d+\.\s*/,''), cor: COR_ET[k] }; });
-    if(rowsWeb.length) colsEt.push({ k:'W', rot:'Webinar', cor:'#8b7ffe' });
+    if(rowsWeb.length) colsEt.push({ k:'W', rot:'Webinar', cor: COR_WEB[0] });
     var colsOr = orKeys.map(function(o){ return { k:o, rot:o, cor:'var(--muted)' }; });
 
     var rotulo = function(r){ return (r.motivo_rotulo || r.motivo || '(sem motivo)') + (r.tipo==='operacional' ? ' ·op' : ''); };
     var topMot = contaLeads(rows, rotulo);
 
     el.innerHTML =
-        kpi
-      + barras('Perda por etapa · funil comercial',
-               'Etapa em que o lead estava quando foi fechado como perdido — reconstruída pelo histórico de eventos, porque o CRM manda a perda sem etapa.',
-               etItens, total)
-      + (webItens.length ? barras('Perda por etapa · jornada webinar',
-               'Etapas exclusivas do webinar (engajamento na live). Ficam fora do funil comercial pra não inflar Disparos — um lead que saiu em "Assistiu 60min" nunca chegou a ser abordado.',
-               webItens, total) : '')
+        pizza('Perda por etapa · funil comercial',
+              total + ' perdas no recorte (leads únicos). Etapa em que o lead estava quando foi fechado como perdido — reconstruída pelo histórico de eventos, porque o CRM manda a perda sem etapa.',
+              etItens, total)
+      + (webItens.length ? pizza('Perda por etapa · jornada webinar',
+              'Etapas exclusivas do webinar (engajamento na live). Ficam fora do funil comercial pra não inflar Disparos — um lead que saiu em "Assistiu 60min" nunca chegou a ser abordado.',
+              webItens, total) : '')
       + blocoOr
       + matriz('Motivo × etapa', 'Onde cada motivo realmente acontece. Célula destacada = mais da metade daquele motivo se concentra ali. "·op" marca motivo operacional.',
                rows, function(r){ return ehWeb(r) ? 'W' : String(r.etapa_ord||'0'); }, colsEt, rotulo)
