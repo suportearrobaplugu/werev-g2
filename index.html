@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-05
+  CIC-G2 · BUILD 2026-08-07
   Base: migração Supabase (views vw_dash_vendas/tmb/reembolso) + meses dinâmicos + banner de fontes.
   Build 2026-08-03: (1) filtro universal de período, (2) Em Contato por NOME de etapa,
   (3) mapeamento de vendedor por token único + guard 100%, (4) MVP Nirla removido.
@@ -17,6 +17,13 @@
   plataforma (ex.: 54 x 49) em lead sem e-mail e com só o primeiro nome no CRM. Guarda de ambiguidade:
   se a mesma chave apontar pra 2+ pessoas distintas, é descartada. Diagnóstico "tel+nome" no rodapé
   do funil e no console.
+  Build 2026-08-07 (discadora): (1) subtítulo do KPI "Vendas atribuídas" agora é reescrito em todo
+  render — antes, sem else, o texto "janela ainda no futuro" grudava até o refresh (bastava o filtro
+  "Hoje" passar por zero) e a tela mostrava o número junto com a legenda de zero;
+  (2) curva horária passa a plotar só as horas com atividade (discado+atendido > 0), porque
+  callix_resumo_hora grava 24 linhas por dia quase todas zeradas e a madrugada achatava o gráfico.
+  Nenhuma regra de cálculo mudou aqui — o resto do pacote da discadora (tolerância de 2h, crédito
+  por utm, só comercial, 1x1, timeout fora de "atendidas") é SQL, nas views vw_callix_*.
   Fonte canônica: repositório GitHub werev01/cic-g2. Sempre editar a partir da versão do repo.
   ============================================================================
 -->
@@ -7675,7 +7682,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-03c — Supabase + filtro universal + atribuição unificada (lead e origem por telefone->email->índice, sem exigir e-mail) + Reembolsos por período','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-07 — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI e curva horária sem horas mortas)','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -7758,7 +7765,10 @@ document.addEventListener('visibilitychange', () => {
     set('dc-k-disc',fmt(discado)); set('dc-k-atend',fmt(atend)); set('dc-k-tma',tmaDen?mmss(tmaNum/tmaDen):'–');
     set('dc-k-vend',fmt(vendas)); set('dc-k-rec','R$'+fmt(receita)); set('dc-k-ag',fmt(Object.keys(agSet).length));
     set('dc-taxa-big',taxa.toFixed(1).replace('.',',')+'%');
-    if(vendas===0) set('dc-k-vendsub','janela ainda no futuro');
+    // Sempre reescreve o subtítulo: sem o else, o texto de "zero" grudava até o refresh
+    // (bastava um render com 0, ex.: filtro "Hoje") e a tela mostrava "5" + "janela ainda no futuro".
+    set('dc-k-vendsub', vendas===0 ? 'janela ainda no futuro'
+                                   : 'Hubla + TMB · comercial · até 5d após ligação (tol. 2h)');
 
     /* ---- Volume por dia ---- */
     var vs=vol.slice().sort(function(a,b){return (a.data<b.data?-1:1)});
@@ -7822,7 +7832,11 @@ document.addEventListener('visibilitychange', () => {
 
     /* ---- Curva horária ---- */
     var hg=groupSum(hr,function(r){return r.hora},['discado','completado']);
-    var horas=Object.keys(hg).map(function(h){return +h}).sort(function(a,b){return a-b});
+    // Só horas com atividade: callix_resumo_hora grava 24 linhas por dia, quase todas zeradas,
+    // e a madrugada inteira reta no zero achatava a curva.
+    var horas=Object.keys(hg).map(function(h){return +h})
+      .filter(function(h){ return (N(hg[h].discado)+N(hg[h].completado)) > 0; })
+      .sort(function(a,b){return a-b});
     chart('dcHora',{type:'line',data:{labels:horas.map(function(h){return String(h).padStart(2,'0')+'h'}),datasets:[
       {label:'Discado',data:horas.map(function(h){return hg[h].discado}),borderColor:DCP.accent,tension:.35,borderWidth:2,pointRadius:0},
       {label:'Atendido',data:horas.map(function(h){return hg[h].completado}),borderColor:DCP.green,tension:.35,borderWidth:2,pointRadius:0}]},
