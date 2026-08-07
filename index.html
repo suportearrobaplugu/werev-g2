@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-07
+  CIC-G2 · BUILD 2026-08-07c
   Base: migração Supabase (views vw_dash_vendas/tmb/reembolso) + meses dinâmicos + banner de fontes.
   Build 2026-08-03: (1) filtro universal de período, (2) Em Contato por NOME de etapa,
   (3) mapeamento de vendedor por token único + guard 100%, (4) MVP Nirla removido.
@@ -24,6 +24,17 @@
   callix_resumo_hora grava 24 linhas por dia quase todas zeradas e a madrugada achatava o gráfico.
   Nenhuma regra de cálculo mudou aqui — o resto do pacote da discadora (tolerância de 2h, crédito
   por utm, só comercial, 1x1, timeout fora de "atendidas") é SQL, nas views vw_callix_*.
+  Build 2026-08-07b (funil + perdas): (3) etapaOrdinal passa a casar "Forecast" junto com "Link" —
+  o CRM renomeou "4. Link Pgto Enviado" -> "4. Forecast" em 08/07/2026 e o card ficou zerado um mês;
+  rótulo dos cards virou "Link Pgto / Forecast"; (4) NOVA ABA "Motivos de Perda" no menu, lendo
+  vw_dash_perda_etapa: perda por etapa (reconstruída pelo histórico, porque o Unnichat manda a perda
+  sem etapa), por origem, matriz motivo x etapa, matriz motivo x origem, top motivos e por vendedor.
+  A pizza de motivos saiu da Taxa de Passagem (lá ficou só a Conversão Real).
+  Build 2026-08-07c: (5) a jornada de webinar (Acessou a Live / Assistiu 30-60min / Estava no Pitch /
+  Clicou na Oferta) ganhou bloco PRÓPRIO na aba de perdas, detalhada pelo nome real da etapa e na
+  ordem do pipeline, separada do funil de Disparos — antes caía num balde "Outras etapas" e as duas
+  primeiras ainda inflavam "Entrada de leads"; (6) menu "Funil & Taxa de Passagem" REMOVIDO (em
+  desuso). renderFunil() continua no arquivo, mas sai cedo porque o container não existe mais.
   Fonte canônica: repositório GitHub werev01/cic-g2. Sempre editar a partir da versão do repo.
   ============================================================================
 -->
@@ -694,8 +705,8 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <button class="sb-item" data-tab="faturamento" onclick="setTab('faturamento')"><span class="sb-ic">📈</span><span class="sb-txt">Faturamento Diário</span></button>
       <button class="sb-item" data-tab="evolucao" onclick="setTab('evolucao')"><span class="sb-ic">📊</span><span class="sb-txt">Evolução Mensal</span></button>
       <button class="sb-item" data-tab="relatorios" onclick="setTab('relatorios')"><span class="sb-ic">📑</span><span class="sb-txt">Relatórios</span></button>
-      <button class="sb-item" data-tab="funil" onclick="setTab('funil')"><span class="sb-ic">🚦</span><span class="sb-txt">Funil &amp; Taxa de Passagem</span></button>
       <button class="sb-item" data-tab="taxapassagem" onclick="setTab('taxapassagem')"><span class="sb-ic">📉</span><span class="sb-txt">Taxa de Passagem</span></button>
+      <button class="sb-item" data-tab="motivosperda" onclick="setTab('motivosperda')"><span class="sb-ic">❌</span><span class="sb-txt">Motivos de Perda</span></button>
       <button class="sb-item" data-tab="reembolsos" onclick="setTab('reembolsos')"><span class="sb-ic">💸</span><span class="sb-txt">Reembolsos</span></button>
       <button class="sb-item" data-tab="discadora" onclick="setTab('discadora')"><span class="sb-ic">📞</span><span class="sb-txt">Discadora</span></button>
       <div class="sb-grp">Cultura &amp; Operação</div>
@@ -999,20 +1010,22 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     </div>
   </div>
 
-  <div id="tab-funil" class="tab-content">
-    <div class="recordes-hero">
-      <h2>🚦 Funil &amp; Taxa de Passagem</h2>
-      <div class="subtitle">Quantos leads cada vendedor precisa receber por hora pra fazer 2 vendas/hora</div>
-    </div>
-    <div id="funilContent" style="padding:4px 0"></div>
-  </div>
-
   <div id="tab-taxapassagem" class="tab-content">
     <div class="recordes-hero">
       <h2>📉 Taxa de Passagem</h2>
       <div class="subtitle">O que fica e o que sai em cada etapa · por vendedor e ao longo do tempo</div>
     </div>
     <div id="taxaPassagemContent" style="padding:4px 0"></div>
+  </div>
+
+  <div id="tab-motivosperda" class="tab-content">
+    <div class="recordes-hero">
+      <h2>❌ Motivos de Perda</h2>
+      <div class="subtitle">Por que o lead sai — e <b>em qual etapa</b> ele estava quando saiu</div>
+    </div>
+    <div id="mp-err" style="color:var(--red,#ef4444);font-size:12px;margin-bottom:8px"></div>
+    <div id="mp-loading" style="color:var(--muted);font-size:13px;margin-bottom:8px">Carregando motivos de perda…</div>
+    <div id="motivosPerdaContent" style="padding:4px 0"></div>
   </div>
 
   <div id="tab-reembolsos" class="tab-content">
@@ -1640,7 +1653,7 @@ const FUNIL_ETAPAS = [
   { key: '1', label: '1. Entrada de leads' },
   { key: '2', label: '2. Em Contato' },
   { key: '3', label: '3. Negociação' },
-  { key: '4', label: '4. Link Pgto Enviado' }
+  { key: '4', label: '4. Link Pgto / Forecast' }
 ];
 const META_VENDAS_HORA = 2; // pergunta-mãe: 2 vendas/hora por vendedor
 const HORAS_POR_DIA = 10;    // jornada considerada por vendedor (fixo)
@@ -1670,13 +1683,17 @@ function etapaNum(txt){
 // Casa primeiro pelo NOME da etapa e só depois pelo número — assim pipelines com
 // etapas nomeadas (Webinar: "Acessou a Live", "Estava no Pitch") também entram.
 // 1 = Entrada de leads (etapa 0 Base; no Webinar, "Acessou a Live"/"Estava no Pitch")
-// 2 = Em Contato · 3 = Negociação · 4 = Link Pgto enviado · 0 = não reconhecida
+// 2 = Em Contato · 3 = Negociação · 0 = não reconhecida
+// 4 = Link Pgto enviado / Forecast (mesma etapa: o CRM renomeou em 08/07/2026)
 function etapaOrdinal(etapaRaw, origemRaw){
   const e = String(etapaRaw || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
   if(!e) return 0;
   if(e.includes('em contato')) return 2;
   if(e.includes('negocia')) return 3;
-  if(e.includes('link')) return 4;
+  // "Forecast" é o mesmo passo que "Link Pgto Enviado": o CRM renomeou a etapa em 08/07/2026
+  // no Pipeline Disparos (último "Link" em 07/07, primeiro "Forecast" em 08/07). Sem isso a
+  // etapa 4 caía no return 0 e o lead sumia do funil inteiro, zerando o card desde julho.
+  if(e.includes('link') || e.includes('forecast')) return 4;
   const o = String(origemRaw || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   if(o.includes('webinar') && (e.includes('acessou') || e.includes('pitch'))) return 1;
   const n = parseInt((e.match(/^(\d+)/) || [])[1], 10);
@@ -1896,6 +1913,7 @@ function setPeriodo(tipo, custDe, custAte){
   currentMonth = mesAncora(PERIODO.ate || PERIODO.de);
   if(typeof renderAll === 'function') renderAll();
   if(typeof dcOnPeriodo === 'function') dcOnPeriodo();
+  if(typeof mpOnPeriodo === 'function') mpOnPeriodo();
 }
 function escolherPeriodoInicial(){
   const r = rangeDoPeriodo('mesAtual'); PERIODO = { tipo:'mesAtual', de:r.de, ate:r.ate };
@@ -4770,7 +4788,7 @@ function renderTaxaPassagem(){
     { key:'pitch', nome:'Viu o Pitch',       cor:'#8b7ffe', soPitch:true },
     { key:'2',     nome:'Em Contato',        cor:'#1baf7a' },
     { key:'3',     nome:'Negociação',        cor:'#eda100' },
-    { key:'4',     nome:'Link Pgto enviado', cor:'#eb6834' },
+    { key:'4',     nome:'Link Pgto / Forecast', cor:'#eb6834' },
     { key:'venda', nome:'Venda',             cor:'#4a3aa7' }
   ];
 
@@ -5248,13 +5266,9 @@ function renderTaxaPassagem(){
     }).join('');
 
     bMotivos = `<div class="card" style="padding:20px;margin-bottom:16px">
-      <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">Motivos de perda</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${totalPerdas} perdas no recorte · <span style="color:#9ca3af">operacionais (${opTotal})</span> não contam contra o vendedor · do vendedor (${vendTotal})</div>
-      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center">
-        <svg viewBox="0 0 180 180" style="width:180px;height:180px;flex-shrink:0">${fatias}</svg>
-        <div style="flex:1;min-width:240px">${legenda}</div>
-      </div>
-      <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:24px;flex-wrap:wrap">
+      <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">Conversão real do recorte</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${totalPerdas} perdas no recorte · <span style="color:#9ca3af">operacionais (${opTotal})</span> não contam contra o vendedor · do vendedor (${vendTotal}) · a quebra por motivo, <b>etapa</b> e origem saiu daqui e virou a aba <b>❌ Motivos de Perda</b> no menu</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
         <div>
           <div style="font-size:12px;color:var(--muted)">Taxa bruta (todas as perdas)</div>
           <div style="font-size:22px;font-weight:800;color:var(--text)">${pct(taxaEquipe)}</div>
@@ -6240,6 +6254,7 @@ function setTab(tab){
   if(tab==='relatorios'){ renderRelEventos(); }
   if(tab==='rotina' && !window._rotinaCarregada){ carregarRotina(); }
   if(tab==='reembolsos'){ carregarReembolsos(); }
+  if(tab==='motivosperda'){ (function _mpTry(){ if(typeof window.carregarMotivosPerda==='function'){ window.carregarMotivosPerda(); } else { setTimeout(_mpTry,50); } })(); }
   if(tab==='discadora'){ (function _dcTry(){ if(typeof window.carregarDiscadora==='function'){ window.carregarDiscadora(); } else { setTimeout(_dcTry,50); } })(); }
   // expande/recolhe submenu de Processos
   const subProc = document.getElementById('sbSubProcessos');
@@ -7682,7 +7697,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-07 — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI e curva horária sem horas mortas)','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-07c — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado) · menu Funil & Taxa de Passagem removido','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -7886,6 +7901,252 @@ document.addEventListener('visibilitychange', () => {
     html+='</div>';el.innerHTML=html;
   };
 })();
+
+/* ===== Aba "Motivos de Perda" — lê vw_dash_perda_etapa =====
+   A etapa da perda NÃO vem do CRM: o Unnichat trata "perdido" como etapa própria e manda
+   etapa_crm vazia. A view reconstrói, por telefone, a última etapa registrada antes do evento
+   de perda (cobertura conferida em 07/08/2026: 99,5%). Aqui só lemos pronto. */
+(function(){
+  var MP = { raw:null, carregando:false, carregado:false };
+  var COR_ET = { '1':'#2a78d6', '2':'#1baf7a', '3':'#eda100', '4':'#eb6834', '0':'#6b7280' };
+  var ORD_LAB = { '1':'1. Entrada de leads', '2':'2. Em Contato', '3':'3. Negociação', '4':'4. Link Pgto / Forecast', '0':'Outras etapas' };
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function pct(n, d){ return d>0 ? (100*n/d).toFixed(1).replace('.',',')+'%' : '—'; }
+
+  function mpFiltra(rows){
+    if(typeof periodoContem !== 'function') return rows;
+    return rows.filter(function(r){ return r.data && periodoContem(r.data); });
+  }
+
+  // Agrupa contando LEADS ÚNICOS (mesmo critério do funil por segmento).
+  function contaLeads(rows, keyFn){
+    var m = {};
+    rows.forEach(function(r){
+      var k = keyFn(r); if(k==null) return;
+      if(!m[k]) m[k] = { k:k, set:{}, n:0 };
+      var t = r.telefone || ('_'+r.data+'_'+r.motivo);
+      if(!m[k].set[t]){ m[k].set[t]=1; m[k].n++; }
+    });
+    return m;
+  }
+
+  function barras(titulo, sub, itens, total){
+    if(!itens.length) return '';
+    var max = Math.max.apply(null, itens.map(function(i){ return i.n; }));
+    var linhas = itens.map(function(i){
+      var w = max>0 ? Math.max(2, 100*i.n/max) : 0;
+      return '<div style="margin-bottom:9px">'
+        + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
+        + '<span style="color:var(--text)">'+esc(i.rot)+'</span>'
+        + '<span style="color:var(--text-strong);font-weight:700">'+i.n+' <span style="color:var(--muted);font-weight:400">'+pct(i.n,total)+'</span></span></div>'
+        + '<div style="height:9px;background:rgba(255,255,255,.05);border-radius:4px;overflow:hidden">'
+        + '<div style="height:100%;width:'+w.toFixed(1)+'%;background:'+(i.cor||'#3b82f6')+';border-radius:4px"></div></div></div>';
+    }).join('');
+    return '<div class="card" style="padding:20px;margin-bottom:16px">'
+      + '<div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">'+titulo+'</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">'+sub+'</div>'+linhas+'</div>';
+  }
+
+  // Matriz motivo x (coluna). Colunas vêm prontas como [{k,rot,cor}].
+  function matriz(titulo, sub, rows, colKeyFn, cols, linhaKeyFn){
+    var lin = {}, tot = {}, geral = 0;
+    cols.forEach(function(c){ tot[c.k]=0; });
+    rows.forEach(function(r){
+      var lk = linhaKeyFn(r), ck = String(colKeyFn(r));
+      if(lk==null) return;
+      if(!lin[lk]) { lin[lk] = { rot:lk, n:0 }; cols.forEach(function(c){ lin[lk][c.k]=0; }); }
+      if(lin[lk][ck]===undefined) return;
+      lin[lk][ck]++; lin[lk].n++; tot[ck]++; geral++;
+    });
+    var arr = Object.keys(lin).map(function(k){ return lin[k]; }).sort(function(a,b){ return b.n-a.n; });
+    if(!arr.length) return '';
+    var th = cols.map(function(c){ return '<th style="text-align:right;padding:8px 10px;white-space:nowrap;color:'+c.cor+'">'+esc(c.rot)+'</th>'; }).join('');
+    var tr = arr.map(function(l){
+      var tds = cols.map(function(c){
+        var v = l[c.k];
+        var forte = l.n>0 && v/l.n >= 0.5 && v>0;
+        return '<td style="text-align:right;padding:7px 10px;'+(forte?'color:var(--text-strong);font-weight:700;background:rgba(255,255,255,.04)':(v?'color:var(--text)':'color:#3a4a63'))+'">'+(v||'·')+'</td>';
+      }).join('');
+      return '<tr><td style="padding:7px 10px;color:var(--text)">'+esc(l.rot)+'</td>'+tds
+        + '<td style="text-align:right;padding:7px 10px;font-weight:800;color:var(--text-strong)">'+l.n+'</td></tr>';
+    }).join('');
+    var tf = cols.map(function(c){ return '<td style="text-align:right;padding:8px 10px;font-weight:700;color:var(--muted)">'+(tot[c.k]||0)+'</td>'; }).join('');
+    return '<div class="card" style="padding:20px;margin-bottom:16px">'
+      + '<div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">'+titulo+'</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">'+sub+'</div>'
+      + '<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+      + '<thead><tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:8px 10px">Motivo</th>'+th
+      + '<th style="text-align:right;padding:8px 10px">Total</th></tr></thead><tbody>'+tr+'</tbody>'
+      + '<tfoot><tr style="border-top:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--muted)">Total</td>'+tf
+      + '<td style="text-align:right;padding:8px 10px;font-weight:800;color:var(--text-strong)">'+geral+'</td></tr></tfoot>'
+      + '</table></div></div>';
+  }
+
+  function mpRender(){
+    var el = document.getElementById('motivosPerdaContent');
+    if(!el || !MP.raw) return;
+    // Um lead pode ser fechado como perdido em dias diferentes dentro do mesmo recorte.
+    // Contamos LEADS ÚNICOS (igual ao funil por segmento), mantendo a perda mais recente —
+    // senão o KPI do topo e a soma das barras divergem.
+    var vistos = {}, rows = [];
+    mpFiltra(MP.raw)
+      .slice()
+      .sort(function(a,b){ return (b.data+' '+(b.hora||'')).localeCompare(a.data+' '+(a.hora||'')); })
+      .forEach(function(r){
+        var t = r.telefone || ('_'+r.data+'_'+r.motivo);
+        if(vistos[t]) return;
+        vistos[t] = 1; rows.push(r);
+      });
+    if(!rows.length){
+      el.innerHTML = '<div class="card" style="padding:20px;color:var(--muted);font-size:13px">Sem perdas registradas no período selecionado.</div>';
+      return;
+    }
+    var total = rows.length;
+    var op = rows.filter(function(r){ return r.tipo==='operacional'; }).length;
+    var vend = total - op;
+
+    // A jornada de webinar (Acessou a Live / Assistiu / Estava no Pitch / Clicou na Oferta) tem
+    // etapas próprias, que não são passos do funil comercial. Separadas pra não inflar Disparos.
+    var ehWeb = function(r){ return r.etapa_grupo === 'webinar'; };
+    var rowsCom = rows.filter(function(r){ return !ehWeb(r); });
+    var rowsWeb = rows.filter(ehWeb);
+
+    // ---- etapas do funil comercial ----
+    var porEt = contaLeads(rowsCom, function(r){ return String(r.etapa_ord||'0'); });
+    var etItens = ['1','2','3','4','0'].filter(function(k){ return porEt[k]; }).map(function(k){
+      return { rot: k==='0' ? 'Sem histórico de etapa' : ORD_LAB[k], n: porEt[k].n, cor: COR_ET[k] };
+    });
+
+    // ---- etapas da jornada de webinar, pelo nome real, na ordem do pipeline ----
+    var webMap = {};
+    rowsWeb.forEach(function(r){
+      var k = r.etapa_nome || '(sem etapa)';
+      if(!webMap[k]) webMap[k] = { rot:k, n:0, num: parseInt(r.etapa_num,10) || 99 };
+      webMap[k].n++;
+    });
+    var webItens = Object.keys(webMap).map(function(k){ return webMap[k]; })
+      .sort(function(a,b){ return a.num - b.num; })
+      .map(function(i){ return { rot:i.rot, n:i.n, cor:'#8b7ffe' }; });
+
+    var topEt = etItens.concat(webItens).slice().sort(function(a,b){ return b.n-a.n; })[0];
+
+    // ---- KPIs ----
+    var kpi = '<div class="dc-grid dc-g6" style="margin-bottom:16px">'
+      + '<div class="dc-card dc-kpi"><div class="dc-lab">Perdas no período</div><div class="dc-val">'+total+'</div><div class="dc-sub">leads únicos</div></div>'
+      + '<div class="dc-card dc-kpi"><div class="dc-lab">Do vendedor</div><div class="dc-val">'+vend+'</div><div class="dc-sub">'+pct(vend,total)+' do total</div></div>'
+      + '<div class="dc-card dc-kpi"><div class="dc-lab">Operacionais</div><div class="dc-val">'+op+'</div><div class="dc-sub">'+pct(op,total)+' · não contam contra o vendedor</div></div>'
+      + '<div class="dc-card dc-kpi"><div class="dc-lab">Etapa que mais perde</div><div class="dc-val" style="font-size:19px">'+(topEt?esc(topEt.rot.replace(/^\d+\.\s*/,'')):'—')+'</div><div class="dc-sub">'+(topEt?topEt.n+' leads · '+pct(topEt.n,total):'')+'</div></div>'
+      + '</div>';
+
+    // ---- por origem: barras do funil comercial + bloco separado da jornada de webinar ----
+    var porOr = contaLeads(rows, function(r){ return r.origem || 'Sem origem'; });
+    var orKeys = Object.keys(porOr).sort(function(a,b){ return porOr[b].n - porOr[a].n; });
+    var linhaMini = function(rot, n, base, cor){
+      var w = base>0 ? Math.max(2, 100*n/base) : 0;
+      return '<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'
+        + '<span style="color:var(--text)">'+esc(rot)+'</span><span style="color:var(--text-strong);font-weight:700">'+n+'</span></div>'
+        + '<div style="height:7px;background:rgba(255,255,255,.05);border-radius:4px;overflow:hidden">'
+        + '<div style="height:100%;width:'+w.toFixed(1)+'%;background:'+cor+';border-radius:4px"></div></div></div>';
+    };
+    var cardsOr = orKeys.map(function(o){
+      var sub  = rows.filter(function(r){ return (r.origem||'Sem origem')===o; });
+      var subC = sub.filter(function(r){ return !ehWeb(r); });
+      var subW = sub.filter(ehWeb);
+      var n = porOr[o].n;
+      var pe = contaLeads(subC, function(r){ return String(r.etapa_ord||'0'); });
+      var linhas = ['1','2','3','4','0'].filter(function(k){ return pe[k]; }).map(function(k){
+        return linhaMini(k==='0' ? 'Sem histórico de etapa' : ORD_LAB[k], pe[k].n, n, COR_ET[k]);
+      }).join('');
+      var blocoW = '';
+      if(subW.length){
+        var wm = {};
+        subW.forEach(function(r){
+          var k = r.etapa_nome || '(sem etapa)';
+          if(!wm[k]) wm[k] = { rot:k, n:0, num: parseInt(r.etapa_num,10) || 99 };
+          wm[k].n++;
+        });
+        blocoW = '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)">'
+          + '<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8b7ffe;font-weight:700;margin-bottom:7px">Jornada webinar · '+subW.length+'</div>'
+          + Object.keys(wm).map(function(k){ return wm[k]; }).sort(function(a,b){ return a.num-b.num; })
+              .map(function(i){ return linhaMini(i.rot, i.n, n, '#8b7ffe'); }).join('')
+          + '</div>';
+      }
+      var opO = sub.filter(function(r){ return r.tipo==='operacional'; }).length;
+      return '<div class="card" style="padding:16px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">'
+        + '<span style="font-weight:800;color:var(--text-strong);font-size:14px">'+esc(o)+'</span>'
+        + '<span style="font-weight:800;color:var(--text-strong)">'+n+'</span></div>'
+        + '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+pct(n,total)+' das perdas · '+opO+' operacionais</div>'
+        + linhas + blocoW + '</div>';
+    }).join('');
+
+    var blocoOr = '<div style="font-weight:800;color:var(--text-strong);font-size:15px;margin:22px 0 4px">Perda por origem</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Mesma quebra do funil por segmento, agora do lado da perda. Onde houver jornada de webinar, ela aparece destacada no rodapé do card.</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:16px">'+cardsOr+'</div>';
+
+    // ---- colunas das matrizes (webinar entra como UMA coluna, pra tabela não explodir) ----
+    var colsEt = ['1','2','3','4','0'].filter(function(k){ return porEt[k]; })
+      .map(function(k){ return { k:k, rot: k==='0' ? 'Sem hist.' : ORD_LAB[k].replace(/^\d+\.\s*/,''), cor: COR_ET[k] }; });
+    if(rowsWeb.length) colsEt.push({ k:'W', rot:'Webinar', cor:'#8b7ffe' });
+    var colsOr = orKeys.map(function(o){ return { k:o, rot:o, cor:'var(--muted)' }; });
+
+    var rotulo = function(r){ return (r.motivo_rotulo || r.motivo || '(sem motivo)') + (r.tipo==='operacional' ? ' ·op' : ''); };
+    var topMot = contaLeads(rows, rotulo);
+
+    el.innerHTML =
+        kpi
+      + barras('Perda por etapa · funil comercial',
+               'Etapa em que o lead estava quando foi fechado como perdido — reconstruída pelo histórico de eventos, porque o CRM manda a perda sem etapa.',
+               etItens, total)
+      + (webItens.length ? barras('Perda por etapa · jornada webinar',
+               'Etapas exclusivas do webinar (engajamento na live). Ficam fora do funil comercial pra não inflar Disparos — um lead que saiu em "Assistiu 60min" nunca chegou a ser abordado.',
+               webItens, total) : '')
+      + blocoOr
+      + matriz('Motivo × etapa', 'Onde cada motivo realmente acontece. Célula destacada = mais da metade daquele motivo se concentra ali. "·op" marca motivo operacional.',
+               rows, function(r){ return ehWeb(r) ? 'W' : String(r.etapa_ord||'0'); }, colsEt, rotulo)
+      + matriz('Motivo × origem', 'O mesmo motivo pode pesar muito diferente entre os segmentos.',
+               rows, function(r){ return r.origem || 'Sem origem'; }, colsOr, rotulo)
+      + barras('Top motivos', 'Todos os motivos do recorte, do maior pro menor.',
+               Object.keys(topMot).map(function(k){ return { rot:k, n:topMot[k].n, cor:'#3b82f6' }; })
+                 .sort(function(a,b){ return b.n-a.n; }), total)
+      + (function(){
+          var pv = contaLeads(rows.filter(function(r){ return r.vendedor && r.vendedor!=='__OUTROS__'; }), function(r){ return r.vendedor; });
+          var it = Object.keys(pv).map(function(k){ return { rot: (typeof displayName==='function'?displayName(k):k), n:pv[k].n, cor:'#a855f7' }; })
+                    .sort(function(a,b){ return b.n-a.n; });
+          return barras('Perda por vendedor', 'Só perdas com proprietário identificado no CRM. Volume alto aqui não é ruim por si: acompanha quem atende mais.', it, total);
+        })();
+  }
+
+  window.mpOnPeriodo = function(){ if(MP.carregado) mpRender(); };
+
+  window.carregarMotivosPerda = function(){
+    if(MP.carregado){ mpRender(); return; }
+    if(MP.carregando) return;
+    MP.carregando = true;
+    var ld = document.getElementById('mp-loading'), er = document.getElementById('mp-err');
+    if(er) er.textContent = '';
+    if(ld) ld.style.display = '';
+    fetchViewCsvSupabase('vw_dash_perda_etapa').then(function(csv){
+      var linhas = parseCSV(csv);
+      if(!linhas.length){ throw new Error('view vazia'); }
+      var head = linhas[0].map(function(h){ return String(h).trim(); });
+      MP.raw = linhas.slice(1).filter(function(l){ return l && l.length; }).map(function(l){
+        var o = {}; head.forEach(function(h,i){ o[h] = l[i]; });
+        o.etapa_ord = parseInt(o.etapa_ord,10) || 0;
+        return o;
+      });
+      MP.carregado = true; MP.carregando = false;
+      if(ld) ld.style.display = 'none';
+      mpRender();
+    }).catch(function(e){
+      MP.carregando = false;
+      if(ld) ld.style.display = 'none';
+      if(er) er.textContent = 'Erro ao carregar motivos de perda: ' + e.message;
+    });
+  };
+})();
+
 </script>
 
 </body>
