@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-07e
+  CIC-G2 · BUILD 2026-08-10
   Base: migração Supabase (views vw_dash_vendas/tmb/reembolso) + meses dinâmicos + banner de fontes.
   Build 2026-08-03: (1) filtro universal de período, (2) Em Contato por NOME de etapa,
   (3) mapeamento de vendedor por token único + guard 100%, (4) MVP Nirla removido.
@@ -46,6 +46,11 @@
   "Outros motivos"), (5) matriz motivo x etapa, (6) matriz motivo x origem, (7) top motivos,
   (8) perda por vendedor. Paleta FIXA por motivo (CORM): o mesmo motivo tem a mesma cor em todas as
   pizzas; operacional em tons de cinza, igual à convenção antiga da Taxa de Passagem.
+  Build 2026-08-10 (fix do Forecast, parte 2): o funil POR SEGMENTO continuava zerado na etapa 4
+  porque existem DUAS réguas independentes de etapa no arquivo — etapaOrdinal() alimenta o funil
+  POR VENDEDOR, e nrIsContato/nrIsNegociacao/nrIsLink alimentam o funil POR SEGMENTO via
+  EVENTOS.flat. Em 07/08 só a primeira foi corrigida; o rótulo mudou e deu a impressão de que
+  tinha funcionado. Agora nrIsLink() casa 'link' OU 'forecast'. MEXEU NUMA RÉGUA, CONFIRA A OUTRA.
   Fonte canônica: repositório GitHub werev01/cic-g2. Sempre editar a partir da versão do repo.
   ============================================================================
 -->
@@ -1540,7 +1545,10 @@ function nrIsPitch(et){ return nrNorm(et).indexOf('pitch') >= 0; }
 // Extensões: o resumo do Nirla não tem estas duas barras, mas a visualização do
 // CIC tem. Seguem o mesmo padrão (casamento pelo nome da etapa).
 function nrIsNegociacao(et){ return nrNorm(et).indexOf('negocia') >= 0; }
-function nrIsLink(et){ return nrNorm(et).indexOf('link') >= 0; }
+// "Forecast" é o mesmo passo que "Link Pgto Enviado" — o CRM renomeou a etapa em 08/07/2026.
+// ATENÇÃO: esta é a régua do FUNIL POR SEGMENTO (EVENTOS.flat). O funil POR VENDEDOR usa
+// etapaOrdinal(). São dois casamentos independentes — mexeu num, confira o outro.
+function nrIsLink(et){ const s = nrNorm(et); return s.indexOf('link') >= 0 || s.indexOf('forecast') >= 0; }
 
 const nrOrigemLabel = o => (!o || nrNorm(o) === '') ? SEGMENTO_SEM : String(o).trim();
 
@@ -7708,7 +7716,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-07e — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-10 — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
