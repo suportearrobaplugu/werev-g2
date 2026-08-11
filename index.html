@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-11
+  CIC-G2 · BUILD 2026-08-11b
   Base: migração Supabase (views vw_dash_vendas/tmb/reembolso) + meses dinâmicos + banner de fontes.
   Build 2026-08-03: (1) filtro universal de período, (2) Em Contato por NOME de etapa,
   (3) mapeamento de vendedor por token único + guard 100%, (4) MVP Nirla removido.
@@ -58,6 +58,12 @@
   no fim da vw_callix_dash_volume_dia) e o card "Agentes ativos" saiu — o ranking já mostra isso;
   (3) eixo de data dos gráficos Volume por dia e Taxa de atendimento passou de MM-DD / dia solto
   para DD/MM, via helper ddmm().
+  Build 2026-08-11b (ranking): o Ranking operacional virou card de largura cheia, sem o
+  max-height:300px que cortava a lista, e trocou de lugar com a Composição do tempo logado (que
+  desceu). Colunas novas: % Camp., % 1×1, Atend. (efetivas ÷ ligações do agente) e Conv.
+  (vendas ÷ efetivas). ATENÇÃO: %Camp. e %1×1 são o mix do PRÓPRIO agente e somam 100% — não dá
+  pra usar o discado global como base porque as ~9,3 mil tentativas de campanha são da discadora
+  e não têm quebra por agente (callix_resumo_hora não guarda agente).
   Fonte canônica: repositório GitHub werev01/cic-g2. Sempre editar a partir da versão do repo.
   ============================================================================
 -->
@@ -1165,9 +1171,18 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     </div>
 
     <div class="dc-sec"><span class="bar" style="background:var(--gold,#fbbf24)"></span><h2>Produtividade do agente</h2><small>— uso do tempo logado</small></div>
-    <div class="dc-grid dc-g23">
-      <div class="dc-card"><h3>Composição do tempo logado</h3><div class="dc-cap">Jornada por estado. Expõe quem fica parado em modo manual sem falar.</div><div class="dc-box tall"><canvas id="dcTempo"></canvas></div></div>
-      <div class="dc-card"><h3>Ranking operacional</h3><div class="dc-cap">Por agente no período. <b>Camp.</b> = chamadas de campanha que a discadora entregou pra ele · <b>1×1</b> = discagens manuais que ele mesmo fez · <b>Efetivas</b> = as que viraram contato real (fora caixa postal, número inexistente e timeout).</div><div style="max-height:300px;overflow:auto"><table class="dc-t"><thead><tr><th>Agente</th><th>Camp.</th><th>1×1</th><th>Efetivas</th><th>TMA</th><th>Falado</th><th>Vendas</th></tr></thead><tbody id="dc-rank"></tbody></table></div></div>
+    <div class="dc-card">
+      <h3>Ranking operacional</h3>
+      <div class="dc-cap">Todos os agentes do período, sem corte. <b>Camp.</b> = chamadas de campanha que a discadora entregou pra ele · <b>1×1</b> = discagens manuais que ele mesmo fez · <b>%&nbsp;Camp.</b> e <b>%&nbsp;1×1</b> = o mix do próprio agente (somam 100%) · <b>Efetivas</b> = viraram contato real (fora caixa postal, número inexistente e timeout) · <b>Atend.</b> = efetivas ÷ ligações do agente · <b>Conv.</b> = vendas ÷ efetivas.</div>
+      <div style="overflow-x:auto"><table class="dc-t">
+        <thead><tr><th>Agente</th><th>Camp.</th><th>% Camp.</th><th>1×1</th><th>% 1×1</th><th>Efetivas</th><th>Atend.</th><th>TMA</th><th>Falado</th><th>Vendas</th><th>Conv.</th></tr></thead>
+        <tbody id="dc-rank"></tbody>
+      </table></div>
+    </div>
+    <div class="dc-card" style="margin-top:16px">
+      <h3>Composição do tempo logado</h3>
+      <div class="dc-cap">Jornada por estado. Expõe quem fica parado em modo manual sem falar.</div>
+      <div class="dc-box tall"><canvas id="dcTempo"></canvas></div>
     </div>
     <div class="dc-grid dc-g2" style="margin-top:16px">
       <div class="dc-card"><h3>Tentativas no 1×1 (discagem manual)</h3><div class="dc-cap">Ligações manuais por agente.</div><div class="dc-box"><canvas id="dc1x1"></canvas></div></div>
@@ -7725,7 +7740,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-11 — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking com Camp./1x1, discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-11b — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com %Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -7856,7 +7871,19 @@ document.addEventListener('visibilitychange', () => {
 
     /* ---- Ranking ---- */
     var tb=document.getElementById('dc-rank');
-    if(tb) tb.innerHTML=agentes.map(function(a){return '<tr><td>'+ini(a.nome)+' '+a.nome+'</td><td>'+fmt(a.ligCamp)+'</td><td>'+fmt(a.t1)+'</td><td>'+fmt(a.lig)+'</td><td>'+mmss(a.tma)+'</td><td>'+Math.round(m(a.falado))+'m</td><td>'+fmt(a.vendas)+'</td></tr>'}).join('');
+    // %Camp. e %1x1 = mix do PRÓPRIO agente (somam 100%). Não dá pra usar o discado global
+    // como base: as ~9,3 mil tentativas de campanha são da discadora e não têm quebra por agente
+    // (callix_resumo_hora não guarda agente) — o agente só recebe a chamada depois que atendem.
+    var pc=function(n,d){ return d>0 ? (100*n/d).toFixed(1).replace('.',',')+'%' : '–'; };
+    if(tb) tb.innerHTML=agentes.map(function(a){
+      var base = N(a.ligCamp)+N(a.t1);            // ligações que passaram pelo agente
+      return '<tr><td>'+ini(a.nome)+' '+a.nome+'</td>'
+        + '<td>'+fmt(a.ligCamp)+'</td><td style="color:var(--muted)">'+pc(a.ligCamp,base)+'</td>'
+        + '<td>'+fmt(a.t1)+'</td><td style="color:var(--muted)">'+pc(a.t1,base)+'</td>'
+        + '<td>'+fmt(a.lig)+'</td><td style="color:var(--muted)">'+pc(a.lig,base)+'</td>'
+        + '<td>'+mmss(a.tma)+'</td><td>'+Math.round(m(a.falado))+'m</td>'
+        + '<td>'+fmt(a.vendas)+'</td><td style="color:var(--muted)">'+pc(a.vendas,a.lig)+'</td></tr>';
+    }).join('');
 
     /* ---- 1x1 ---- */
     chart('dc1x1',{type:'bar',data:{labels:nomes.map(function(n){return n.split(' ')[0]}),datasets:[{data:agentes.map(function(a){return a.t1}),backgroundColor:DCP.accent,borderRadius:4,borderSkipped:false}]},
