@@ -1,16 +1,18 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-11f
-  Build 2026-08-11f (Home): CONVERSÃO passa a ser "Em Contato -> Venda", régua idêntica à
-  linha MÉDIA EQUIPE da aba Taxa de Passagem (`taxaEquipe` = totV/totC):
-  - denominador = soma, por vendedor, dos e-mails únicos na etapa "Em Contato" (EVENTOS.porDia),
-    igual a `etapasNoFiltro`. NÃO é o Em Contato do funil por segmento (uniqBy) — a TP tem as duas
-    contagens e o número em destaque é esta.
-  - numerador = vendas dos VENDEDORES do time. Exclui utm `comercial_mitsuo` (canal automático,
-    mapeado como __OUTROS__): 10 das 103 vendas de 01-11/08. Por isso o card "Vendas" (total) e o
-    numerador da conversão são diferentes de propósito — os dois componentes ficam visíveis no card.
-  - a conversão ponta a ponta (venda ÷ leads de entrada) saiu; "Leads" continua na matriz.
+  CIC-G2 · BUILD 2026-08-11g
+  Build 2026-08-11g (Home): "Em Contato" trocado para a régua do CARD DO FUNIL da Taxa de
+  Passagem (`uniqBy`: pessoa única no período, chave telefone->email->índice) = 2.855 em 01-11/08.
+  A build 08-11f usava a régua da TABELA DE VENDEDORES (`etapasNoFiltro`: único POR VENDEDOR,
+  somado) = 3.320 — os 465 a mais são leads atendidos por 2+ vendedores. A TP tem as duas
+  contagens; a que o Nirla lê é a do card do funil.
+  Efeito colateral bom: o funil usa TODAS as vendas no numerador, então a conversão volta a bater
+  com o card "Vendas" — sumiu a distorção do canal automático `comercial_mitsuo`/__OUTROS__ que a
+  régua por vendedor tirava do numerador (10 de 103 vendas).
+  `leadsCalc` e `contatoCalc` agora chamam o mesmo motor `uniqPorEtapa(dks, pred)`.
+  Build 2026-08-11f (Home): CONVERSÃO passou a ser "Em Contato -> Venda" (régua depois corrigida
+  pela 08-11g). A conversão ponta a ponta (venda ÷ leads de entrada) saiu.
   Build 2026-08-11e (Home, ajustes do Nirla):
   (1) LEADS/CONVERSÃO agora usam a MESMA régua da Taxa de Passagem: só a etapa de ENTRADA
       ("0. ..." ou "Acessou a Live" no Webinar) e chave única NO PERÍODO — antes contava
@@ -868,7 +870,6 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
         <div class="hm-val" id="hmConv">–</div>
         <div class="hm-split">
           <div>Em Contato<b id="hmEmContato">–</b></div>
-          <div>Vendas do time<b id="hmVendasTime">–</b></div>
           <div>Leads<b id="hmLeads">–</b></div>
         </div>
       </div>
@@ -903,7 +904,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       A coluna <b>TOTAL</b> soma o mês; nas linhas de ticket, conversão e taxa de atendimento ela é a <b>média do mês</b> (razão dos totais, não média das colunas).
       Faturamento aqui é <b>líquido</b> (reembolso abatido no dia da venda original, mesma régua do card acima e da aba Dashboard) — por isso um dia pode ficar negativo se o estorno for de venda anterior.
       Em <b>Leads</b> e <b>Em Contato</b>, somar as colunas dá mais que o TOTAL: o total conta cada pessoa <b>uma vez no mês</b>, igual à aba Taxa de Passagem.
-      <b>Conversão</b> = Em Contato → Venda (mesma régua da MÉDIA EQUIPE da Taxa de Passagem): o numerador são as vendas <b>do time</b>, sem o canal automático — por isso é menor que a linha Vendas.
+      <b>Conversão</b> = Em Contato → Venda, mesma régua do <b>card do funil</b> da Taxa de Passagem (pessoa única no período). Cuidado: a tabela de vendedores da TP usa outra contagem de Em Contato — conta o lead uma vez por vendedor que o atendeu, e por isso dá um número maior.
     </div>
   </div>
   <!-- ==================== FIM ABA HOME ==================== -->
@@ -7911,7 +7912,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-11f — Home: CONVERSÃO agora é Em Contato -> Venda, régua idêntica à MÉDIA EQUIPE da Taxa de Passagem (denominador = e-mails únicos por vendedor na etapa Em Contato; numerador = vendas do TIME, sem o canal automático mitsuo/__OUTROS__). Nova linha "Em Contato" na matriz. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-11g — Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -8477,16 +8478,16 @@ document.addEventListener('visibilitychange', () => {
      2) chave única no PERÍODO INTEIRO, não por dia.
      Efeito medido em 01-11/08: 5.009 -> 3.281 leads (-34%); conversão 2,0% -> 3,1%.
      Chave: telefone -> e-mail -> índice (mesma do funil, inclusive o 'x'+i). */
-  function leadsCalc(dks){
+  // Motor único: replica o uniqBy do funil por segmento (calcularFunilSegmentos).
+  // Chave telefone -> e-mail -> índice; devolve únicos POR DIA e únicos NO PERÍODO.
+  function uniqPorEtapa(dks, pred){
     var dentro = {}; (dks||[]).forEach(function(d){ dentro[d] = 1; });
     var porDia = {}, geral = {};
     var FLAT = (typeof EVENTOS !== 'undefined' && EVENTOS && EVENTOS.flat) ? EVENTOS.flat : [];
     for(var i=0;i<FLAT.length;i++){
       var e = FLAT[i];
       if(e.cls !== 'entrada' || !e.dayKey || !dentro[e.dayKey]) continue;
-      var ehWeb = (typeof nrNorm==='function') && nrNorm(e.pipeline).indexOf('webinar') >= 0;
-      var ok = ehWeb ? nrIsAcessouLive(e.etapa) : nrIsBaseStage(e.etapa);
-      if(!ok) continue;
+      if(!pred(e)) continue;
       var k = e.tel || e.email || ('x'+i);
       geral[k] = 1;
       if(!porDia[e.dayKey]) porDia[e.dayKey] = {};
@@ -8496,47 +8497,22 @@ document.addEventListener('visibilitychange', () => {
     Object.keys(porDia).forEach(function(d){ pd[d] = Object.keys(porDia[d]).length; });
     return { porDia: pd, total: Object.keys(geral).length };
   }
-  /* ---- EM CONTATO: régua IDÊNTICA à MÉDIA EQUIPE da Taxa de Passagem ----
-     A TP tem DUAS contagens de "Em Contato": a do funil por segmento (uniqBy, chave
-     telefone->email->índice) e a de `etapasNoFiltro` (e-mails únicos POR VENDEDOR, somados
-     entre vendedores). O número em destaque — linha MÉDIA EQUIPE, `taxaEquipe = totV/totC` —
-     usa a segunda. É essa que replicamos aqui, lendo EVENTOS.porDia direto.
-     Consequência herdada da TP: lead atendido por 2 vendedores conta 2x, e lead só-telefone
-     (sem e-mail) não entra. Mexer nisso é mexer na TP também. */
-  function contatoCalc(dks){
-    var porDia = {}, porVend = {};
-    var pd = (typeof EVENTOS !== 'undefined' && EVENTOS && EVENTOS.porDia) ? EVENTOS.porDia : null;
-    var VS = (typeof VENDEDORES !== 'undefined') ? VENDEDORES : [];
-    if(!pd) return { porDia:{}, total:0 };
-    (dks||[]).forEach(function(dk){
-      var dia = pd[dk];
-      if(!dia) return;
-      var n = 0;
-      VS.forEach(function(v){
-        var s = dia[v] && dia[v]['2'];
-        if(!s) return;
-        n += s.size;
-        if(!porVend[v]) porVend[v] = {};
-        s.forEach(function(em){ porVend[v][em] = 1; });
-      });
-      porDia[dk] = n;
+  function leadsCalc(dks){
+    return uniqPorEtapa(dks, function(e){
+      var ehWeb = (typeof nrNorm==='function') && nrNorm(e.pipeline).indexOf('webinar') >= 0;
+      return ehWeb ? nrIsAcessouLive(e.etapa) : nrIsBaseStage(e.etapa);
     });
-    var total = 0;
-    Object.keys(porVend).forEach(function(v){ total += Object.keys(porVend[v]).length; });
-    return { porDia: porDia, total: total };
   }
-  // Vendas dos VENDEDORES do time (numerador da TP). Exclui canal automático (__OUTROS__).
-  function vendasTimeDia(dk){
-    var VS = (typeof VENDEDORES !== 'undefined') ? VENDEDORES : [];
-    var n = 0;
-    Object.keys(DADOS||{}).forEach(function(m){
-      var mes = DADOS[m];
-      if(!mes || !mes.porDia || !mes.porDia[dk]) return;
-      var pv = mes.porDia[dk].porVendedor || {};
-      VS.forEach(function(v){ if(pv[v]) n += pv[v].qtd; });
-    });
-    return n;
-  }
+  /* ---- EM CONTATO: régua do CARD DO FUNIL da Taxa de Passagem (uniqBy) ----
+     A TP tem DUAS contagens de "Em Contato" e elas divergem:
+       - card do funil (`uniqBy`): pessoa única no período, chave telefone->email->índice.
+         Ago/01-11 = 2.855.
+       - tabela de vendedores (`etapasNoFiltro`): único POR VENDEDOR, somado entre vendedores.
+         Ago/01-11 = 3.320 — os 465 a mais são leads que passaram por 2+ vendedores.
+     Usamos a do CARD DO FUNIL: é a que o Nirla lê, e o numerador dela são TODAS as vendas
+     (o funil usa `vendasPorSeg`), então bate com o card "Vendas" ao lado — sem o problema do
+     canal automático `comercial_mitsuo`/__OUTROS__, que a régua por vendedor tirava do numerador. */
+  function contatoCalc(dks){ return uniqPorEtapa(dks, function(e){ return nrIsContato(e.etapa); }); }
   function vendasPorDia(){
     var out = {};
     Object.keys(DADOS||{}).forEach(function(m){
@@ -8600,11 +8576,9 @@ document.addEventListener('visibilitychange', () => {
     // diasFiltrados() é a MESMA fonte de dias que a TP usa — por isso os números batem.
     var dias = (typeof diasFiltrados === 'function') ? diasFiltrados() : [];
     var emCont = contatoCalc(dias).total;
-    var vTime = 0; dias.forEach(function(dk){ vTime += vendasTimeDia(dk); });
     set('hmLeads', I(leadsCalc(dias).total));
     set('hmEmContato', I(emCont));
-    set('hmVendasTime', I(vTime));
-    set('hmConv', emCont ? pct(100*Math.min(vTime/emCont,1)) : '–');
+    set('hmConv', emCont ? pct(100*Math.min(vend/emCont,1)) : '–');
 
     // discadora
     var cpd = callixPorDia();
@@ -8651,7 +8625,6 @@ document.addEventListener('visibilitychange', () => {
     var LC = leadsCalc(dks), lpd = LC.porDia, leadsMes = LC.total;
     // Em Contato (régua da TP) para a linha de conversão da matriz
     var CC = contatoCalc(dks), cpdia = CC.porDia, contatoMes = CC.total;
-    var somaVTime = 0; dks.forEach(function(dk){ somaVTime += vendasTimeDia(dk); });
     // faturamento da matriz = LÍQUIDO (abate o reembolso no dia da venda original),
     // pra coluna TOTAL bater com o card do cabeçalho e com a aba Dashboard.
     var fatLiq  = function(dk){ return ((vpd[dk]&&vpd[dk].total)||0) - ((rpd[dk]&&rpd[dk].total)||0); };
@@ -8684,9 +8657,9 @@ document.addEventListener('visibilitychange', () => {
       { lab:'Leads',             val:function(dk){ return lpd[dk]||0; }, fmt:I, tot:I(leadsMes) },
       { lab:'Em Contato',        val:function(dk){ return cpdia[dk]||0; }, fmt:I, tot:I(contatoMes) },
       { lab:'Conversão',         forte:true,
-        val:function(dk){ var c=cpdia[dk]||0; return c ? 100*Math.min(vendasTimeDia(dk)/c,1) : 0; },
+        val:function(dk){ var c=cpdia[dk]||0; return c ? 100*Math.min(g(vpd,dk,'qtd')/c,1) : 0; },
         fmt:function(v){ return v ? pct(v) : '0%'; },
-        tot: contatoMes ? pct(100*Math.min(somaVTime/contatoMes,1)) : '–' },
+        tot: contatoMes ? pct(100*Math.min(somaVend/contatoMes,1)) : '–' },
       { lab:'Vendas',            val:function(dk){ return g(vpd,dk,'qtd');   }, fmt:I,    tot:I(somaVend) },
       { lab:'Ticket médio',      val:function(dk){ var q=g(vpd,dk,'qtd'); return q ? fatLiq(dk)/q : 0; },
         fmt:kBRL, tot: somaVend ? kBRL(somaFat/somaVend) : '–' },
