@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-10
+  CIC-G2 · BUILD 2026-08-11
   Base: migração Supabase (views vw_dash_vendas/tmb/reembolso) + meses dinâmicos + banner de fontes.
   Build 2026-08-03: (1) filtro universal de período, (2) Em Contato por NOME de etapa,
   (3) mapeamento de vendedor por token único + guard 100%, (4) MVP Nirla removido.
@@ -51,6 +51,13 @@
   POR VENDEDOR, e nrIsContato/nrIsNegociacao/nrIsLink alimentam o funil POR SEGMENTO via
   EVENTOS.flat. Em 07/08 só a primeira foi corrigida; o rótulo mudou e deu a impressão de que
   tinha funcionado. Agora nrIsLink() casa 'link' OU 'forecast'. MEXEU NUMA RÉGUA, CONFIRA A OUTRA.
+  Build 2026-08-11 (Discadora): (1) ranking operacional ganhou as colunas Camp. e 1×1 antes de
+  Efetivas — Camp. = chamadas de campanha entregues ao agente (quem disca é a discadora),
+  1×1 = discagens manuais que ele mesmo fez, Efetivas = as que viraram contato real;
+  (2) visão geral quebra o discado em Campanha e 1×1 (colunas discado_campanha/discado_1x1, novas
+  no fim da vw_callix_dash_volume_dia) e o card "Agentes ativos" saiu — o ranking já mostra isso;
+  (3) eixo de data dos gráficos Volume por dia e Taxa de atendimento passou de MM-DD / dia solto
+  para DD/MM, via helper ddmm().
   Fonte canônica: repositório GitHub werev01/cic-g2. Sempre editar a partir da versão do repo.
   ============================================================================
 -->
@@ -1099,6 +1106,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     #tab-discadora .dc-sec small{color:var(--muted);font-size:12px}
     #tab-discadora .dc-grid{display:grid;gap:16px}
     #tab-discadora .dc-g6{grid-template-columns:repeat(6,1fr)}
+    #tab-discadora .dc-g7{grid-template-columns:repeat(7,1fr)}
     #tab-discadora .dc-g2{grid-template-columns:1fr 1fr}
     #tab-discadora .dc-g23{grid-template-columns:1.45fr 1fr}
     #tab-discadora .dc-card{background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:16px}
@@ -1126,7 +1134,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     #tab-discadora .dc-note{color:var(--muted);font-size:11.5px;line-height:1.5}
     #tab-discadora .dc-flag{border:1px dashed rgba(245,158,11,.4);background:rgba(245,158,11,.05)}
     #tab-discadora .dc-flag .tg{display:inline-block;background:rgba(245,158,11,.16);color:var(--gold,#fbbf24);font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;margin-bottom:8px}
-    @media(max-width:900px){#tab-discadora .dc-g6{grid-template-columns:repeat(3,1fr)}#tab-discadora .dc-g2,#tab-discadora .dc-g23{grid-template-columns:1fr}}
+    @media(max-width:900px){#tab-discadora .dc-g6,#tab-discadora .dc-g7{grid-template-columns:repeat(3,1fr)}#tab-discadora .dc-g2,#tab-discadora .dc-g23{grid-template-columns:1fr}}
     </style>
 
     <div class="section-title">📞 Discadora · Operação de Ligações (Callix)</div>
@@ -1134,13 +1142,14 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <div id="dc-loading" class="dc-note" style="margin-bottom:8px">Carregando dados da discadora…</div>
 
     <div class="dc-sec"><span class="bar"></span><h2>Visão geral</h2><small>— período disponível (agregado)</small></div>
-    <div class="dc-grid dc-g6">
-      <div class="dc-card dc-kpi"><div class="dc-lab">Discado</div><div class="dc-val" id="dc-k-disc">–</div><div class="dc-sub">tentativas</div></div>
+    <div class="dc-grid dc-g7">
+      <div class="dc-card dc-kpi"><div class="dc-lab">Discado</div><div class="dc-val" id="dc-k-disc">–</div><div class="dc-sub">tentativas · campanha + 1×1</div></div>
+      <div class="dc-card dc-kpi"><div class="dc-lab">Campanha</div><div class="dc-val" id="dc-k-disccamp">–</div><div class="dc-sub" id="dc-k-disccampsub">discado pela campanha</div></div>
+      <div class="dc-card dc-kpi"><div class="dc-lab">1×1</div><div class="dc-val" id="dc-k-disc1x1">–</div><div class="dc-sub" id="dc-k-disc1x1sub">discagem manual do agente</div></div>
       <div class="dc-card dc-kpi"><div class="dc-lab">Atendidas</div><div class="dc-val" id="dc-k-atend">–</div><div class="dc-sub">completadas</div></div>
       <div class="dc-card dc-kpi"><div class="dc-lab">TMA médio</div><div class="dc-val" id="dc-k-tma">–</div><div class="dc-sub">tempo de fala</div></div>
       <div class="dc-card dc-kpi"><div class="dc-lab">Vendas atribuídas</div><div class="dc-val" id="dc-k-vend">–</div><div class="dc-sub" id="dc-k-vendsub">Hubla + TMB · até 5d após ligação</div></div>
       <div class="dc-card dc-kpi"><div class="dc-lab">Receita</div><div class="dc-val" id="dc-k-rec">–</div><div class="dc-sub">de ligações</div></div>
-      <div class="dc-card dc-kpi"><div class="dc-lab">Agentes ativos</div><div class="dc-val" id="dc-k-ag">–</div><div class="dc-sub">no período</div></div>
     </div>
 
     <div class="dc-grid dc-g23" style="margin-top:16px">
@@ -1158,7 +1167,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <div class="dc-sec"><span class="bar" style="background:var(--gold,#fbbf24)"></span><h2>Produtividade do agente</h2><small>— uso do tempo logado</small></div>
     <div class="dc-grid dc-g23">
       <div class="dc-card"><h3>Composição do tempo logado</h3><div class="dc-cap">Jornada por estado. Expõe quem fica parado em modo manual sem falar.</div><div class="dc-box tall"><canvas id="dcTempo"></canvas></div></div>
-      <div class="dc-card"><h3>Ranking operacional</h3><div class="dc-cap">Por agente no período.</div><div style="max-height:300px;overflow:auto"><table class="dc-t"><thead><tr><th>Agente</th><th>Lig.</th><th>TMA</th><th>Falado</th><th>Vendas</th></tr></thead><tbody id="dc-rank"></tbody></table></div></div>
+      <div class="dc-card"><h3>Ranking operacional</h3><div class="dc-cap">Por agente no período. <b>Camp.</b> = chamadas de campanha que a discadora entregou pra ele · <b>1×1</b> = discagens manuais que ele mesmo fez · <b>Efetivas</b> = as que viraram contato real (fora caixa postal, número inexistente e timeout).</div><div style="max-height:300px;overflow:auto"><table class="dc-t"><thead><tr><th>Agente</th><th>Camp.</th><th>1×1</th><th>Efetivas</th><th>TMA</th><th>Falado</th><th>Vendas</th></tr></thead><tbody id="dc-rank"></tbody></table></div></div>
     </div>
     <div class="dc-grid dc-g2" style="margin-top:16px">
       <div class="dc-card"><h3>Tentativas no 1×1 (discagem manual)</h3><div class="dc-cap">Ligações manuais por agente.</div><div class="dc-box"><canvas id="dc1x1"></canvas></div></div>
@@ -7716,7 +7725,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-10 — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-11 — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking com Camp./1x1, discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -7758,6 +7767,8 @@ document.addEventListener('visibilitychange', () => {
     return rows;
   }
   function N(v){ if(v===undefined||v===null||v==='')return 0; var n=parseFloat(v); return isNaN(n)?0:n; }
+  // 'YYYY-MM-DD' -> 'DD/MM' (os eixos mostravam MM-DD e dia solto, formatos diferentes lado a lado)
+  function ddmm(d){ var p=String(d||'').split('-'); return p.length>=3 ? p[2]+'/'+p[1] : String(d||''); }
   function fmt(n){ return Math.round(n).toLocaleString('pt-BR'); }
   function mmss(s){ s=Math.round(N(s)); return Math.floor(s/60)+'m'+String(s%60).padStart(2,'0'); }
   function ini(s){ s=(s||'?').trim(); var p=s.split(/\s+/); return ((p[0]||'')[0]||'')+((p[1]||'')[0]||''); }
@@ -7790,14 +7801,17 @@ document.addEventListener('visibilitychange', () => {
 
   function dcRender(ag,vol,hr,hm,sp){
     /* ---- KPIs ---- */
-    var discado=0,atend=0,vendas=0,receita=0;
-    vol.forEach(function(r){discado+=N(r.discado);atend+=N(r.completado);vendas+=N(r.vendas);receita+=N(r.receita_brl);});
+    var discado=0,atend=0,vendas=0,receita=0,discCamp=0,disc1x1=0;
+    vol.forEach(function(r){discado+=N(r.discado);atend+=N(r.completado);vendas+=N(r.vendas);receita+=N(r.receita_brl);discCamp+=N(r.discado_campanha);disc1x1+=N(r.discado_1x1);});
     var tmaNum=0,tmaDen=0,agSet={};
     ag.forEach(function(r){var l=N(r.ligacoes_completadas)||N(r.total_ligacoes);tmaNum+=N(r.tma_s)*l;tmaDen+=l;if((N(r.total_ligacoes)||N(r.ligacoes_completadas))>0)agSet[r.callix_user_id]=1;});
     var taxa=discado?(100*atend/discado):0;
     function set(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}
     set('dc-k-disc',fmt(discado)); set('dc-k-atend',fmt(atend)); set('dc-k-tma',tmaDen?mmss(tmaNum/tmaDen):'–');
-    set('dc-k-vend',fmt(vendas)); set('dc-k-rec','R$'+fmt(receita)); set('dc-k-ag',fmt(Object.keys(agSet).length));
+    set('dc-k-vend',fmt(vendas)); set('dc-k-rec','R$'+fmt(receita));
+    var pctD=function(v){ return discado ? (100*v/discado).toFixed(1).replace('.',',')+'% do discado' : '—'; };
+    set('dc-k-disccamp',fmt(discCamp)); set('dc-k-disccampsub',pctD(discCamp));
+    set('dc-k-disc1x1',fmt(disc1x1));   set('dc-k-disc1x1sub',pctD(disc1x1));
     set('dc-taxa-big',taxa.toFixed(1).replace('.',',')+'%');
     // Sempre reescreve o subtítulo: sem o else, o texto de "zero" grudava até o refresh
     // (bastava um render com 0, ex.: filtro "Hoje") e a tela mostrava "5" + "janela ainda no futuro".
@@ -7806,13 +7820,13 @@ document.addEventListener('visibilitychange', () => {
 
     /* ---- Volume por dia ---- */
     var vs=vol.slice().sort(function(a,b){return (a.data<b.data?-1:1)});
-    chart('dcVolume',{type:'bar',data:{labels:vs.map(function(r){return r.data.slice(5)}),datasets:[
+    chart('dcVolume',{type:'bar',data:{labels:vs.map(function(r){return ddmm(r.data)}),datasets:[
       {label:'Atendidas',data:vs.map(function(r){return N(r.completado)}),backgroundColor:DCP.green,stack:'v',borderRadius:4,borderSkipped:false},
       {label:'Perdidas',data:vs.map(function(r){return N(r.perdido)}),backgroundColor:DCP.red,stack:'v',borderRadius:4,borderSkipped:false}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:DCP.muted}}},scales:{x:{stacked:true,grid:{display:false},ticks:{color:DCP.muted}},y:{stacked:true,grid:{color:DCP.grid},ticks:{color:DCP.muted}}}}});
 
     /* ---- Taxa por dia ---- */
-    chart('dcTaxa',{type:'line',data:{labels:vs.map(function(r){return r.data.slice(8)}),datasets:[
+    chart('dcTaxa',{type:'line',data:{labels:vs.map(function(r){return ddmm(r.data)}),datasets:[
       {data:vs.map(function(r){return N(r.taxa_atendimento_pct)}),borderColor:DCP.green,backgroundColor:'rgba(34,197,94,.15)',fill:true,tension:.35,borderWidth:2,pointRadius:0}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:DCP.muted}},y:{grid:{color:DCP.grid},ticks:{color:DCP.muted,callback:function(v){return v+'%'}}}}}});
 
@@ -7823,10 +7837,10 @@ document.addEventListener('visibilitychange', () => {
       options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:DCP.grid},ticks:{color:DCP.muted}},y:{grid:{display:false},ticks:{color:DCP.muted}}}}});
 
     /* ---- Agregado por agente ---- */
-    var gm=groupSum(ag,function(r){return r.callix_user_id},['tempo_logado_s','tempo_falado_s','tempo_modo_manual_s','in_break_time_s','idle_time_s','tempo_online_campanha_s','tentativas_1x1','vendas','ligacoes_completadas','total_ligacoes']);
+    var gm=groupSum(ag,function(r){return r.callix_user_id},['tempo_logado_s','tempo_falado_s','tempo_modo_manual_s','in_break_time_s','idle_time_s','tempo_online_campanha_s','tentativas_1x1','campaign_calls','vendas','ligacoes_completadas','total_ligacoes']);
     var nmeMap={};ag.forEach(function(r){nmeMap[r.callix_user_id]=r.agente_nome||r.callix_user_id});
     var tmaMap={};(function(){var num={},den={};ag.forEach(function(r){var l=N(r.ligacoes_completadas)||N(r.total_ligacoes);num[r.callix_user_id]=(num[r.callix_user_id]||0)+N(r.tma_s)*l;den[r.callix_user_id]=(den[r.callix_user_id]||0)+l});Object.keys(num).forEach(function(k){tmaMap[k]=den[k]?num[k]/den[k]:0})})();
-    var agentes=Object.keys(gm).map(function(k){var g=gm[k];return {id:k,nome:nmeMap[k],logado:g.tempo_logado_s,falado:g.tempo_falado_s,manual:g.tempo_modo_manual_s,pausa:g.in_break_time_s,ocioso:g.idle_time_s,camp:g.tempo_online_campanha_s,t1:g.tentativas_1x1,vendas:g.vendas,lig:g.ligacoes_completadas||g.total_ligacoes,tma:tmaMap[k]}});
+    var agentes=Object.keys(gm).map(function(k){var g=gm[k];return {id:k,nome:nmeMap[k],logado:g.tempo_logado_s,falado:g.tempo_falado_s,manual:g.tempo_modo_manual_s,pausa:g.in_break_time_s,ocioso:g.idle_time_s,camp:g.tempo_online_campanha_s,t1:g.tentativas_1x1,ligCamp:g.campaign_calls,vendas:g.vendas,lig:g.ligacoes_completadas||g.total_ligacoes,tma:tmaMap[k]}});
     agentes.sort(function(a,b){return b.lig-a.lig});
     var nomes=agentes.map(function(a){return a.nome});
     var m=function(s){return N(s)/60;};
@@ -7842,7 +7856,7 @@ document.addEventListener('visibilitychange', () => {
 
     /* ---- Ranking ---- */
     var tb=document.getElementById('dc-rank');
-    if(tb) tb.innerHTML=agentes.map(function(a){return '<tr><td>'+ini(a.nome)+' '+a.nome+'</td><td>'+fmt(a.lig)+'</td><td>'+mmss(a.tma)+'</td><td>'+Math.round(m(a.falado))+'m</td><td>'+fmt(a.vendas)+'</td></tr>'}).join('');
+    if(tb) tb.innerHTML=agentes.map(function(a){return '<tr><td>'+ini(a.nome)+' '+a.nome+'</td><td>'+fmt(a.ligCamp)+'</td><td>'+fmt(a.t1)+'</td><td>'+fmt(a.lig)+'</td><td>'+mmss(a.tma)+'</td><td>'+Math.round(m(a.falado))+'m</td><td>'+fmt(a.vendas)+'</td></tr>'}).join('');
 
     /* ---- 1x1 ---- */
     chart('dc1x1',{type:'bar',data:{labels:nomes.map(function(n){return n.split(' ')[0]}),datasets:[{data:agentes.map(function(a){return a.t1}),backgroundColor:DCP.accent,borderRadius:4,borderSkipped:false}]},
