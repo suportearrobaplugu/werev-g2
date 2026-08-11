@@ -1,7 +1,20 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-11c
+  CIC-G2 · BUILD 2026-08-11d
+  Build 2026-08-11d (Home): NOVA ABA "Home" (primeira do menu, vira a tela de abertura).
+  (1) Faixa 1 — Faturamento total com split Hubla/TMB, Vendas + ticket médio, Reembolso com
+      qtd/valor/% do faturamento, Conversão geral (vendas ÷ leads únicos do período).
+  (2) Faixa 2 — Campanha e 1×1 com a TAXA DE ATENDIMENTO PRÓPRIA em destaque (número grande),
+      + Atendidas total. A taxa única antiga misturava as duas operações (campanha ~1,8% x 1×1 ~28%).
+  (3) Matriz KPI × dia do mês (11 linhas), ancorada no mês da data final do período; 1ª coluna
+      sticky, coluna TOTAL/MÉDIA fixa no fim, fim de semana sombreado, coluna de hoje marcada
+      como parcial (carga TMB do dia só fecha na manhã seguinte). Sem linha de reembolso.
+  (4) Aba Discadora: taxa de atendimento quebrada em campanha x 1×1 (KPIs + 2 séries no gráfico).
+  (5) Reembolsos passam a contar QUANTIDADE por dia (porDia[dk].qtd) — antes qtd contava dias.
+  SQL desta build: vw_callix_dash_volume_dia +4 colunas (atendido_campanha, atendido_1x1,
+  taxa_atend_campanha_pct, taxa_atend_1x1_pct); vw_dash_tmb passa a filtrar utm_source
+  ilike 'comercial%' (mesma régua da Hubla; impacto medido R$ 0,00).
   Base: migração Supabase (views vw_dash_vendas/tmb/reembolso) + meses dinâmicos + banner de fontes.
   Build 2026-08-03: (1) filtro universal de período, (2) Em Contato por NOME de etapa,
   (3) mapeamento de vendedor por token único + guard 100%, (4) MVP Nirla removido.
@@ -730,7 +743,8 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <aside class="sidebar" id="sidebar">
       <button class="sb-collapse" onclick="toggleSidebarCollapse()" title="Recolher menu">‹</button>
       <div class="sb-grp">Análise</div>
-      <button class="sb-item active" data-tab="dashboard" onclick="setTab('dashboard')"><span class="sb-ic">📊</span><span class="sb-txt">Dashboard</span></button>
+      <button class="sb-item active" data-tab="home" onclick="setTab('home')"><span class="sb-ic">🏠</span><span class="sb-txt">Home</span></button>
+      <button class="sb-item" data-tab="dashboard" onclick="setTab('dashboard')"><span class="sb-ic">📊</span><span class="sb-txt">Dashboard</span></button>
       <button class="sb-item" data-tab="recordes" onclick="setTab('recordes')"><span class="sb-ic">🏆</span><span class="sb-txt">Quadro dos Recordes</span></button>
       <button class="sb-item" data-tab="times" onclick="setTab('times')"><span class="sb-ic">⚔️</span><span class="sb-txt">Competição de Times</span></button>
       <button class="sb-item" data-tab="faturamento" onclick="setTab('faturamento')"><span class="sb-ic">📈</span><span class="sb-txt">Faturamento Diário</span></button>
@@ -756,7 +770,124 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 
     <div class="content-area">
 
-  <div id="tab-dashboard" class="tab-content active">
+  <!-- ====================== ABA HOME ====================== -->
+  <div id="tab-home" class="tab-content active">
+    <style>
+    #tab-home .hm-sec{margin:22px 0 12px;display:flex;align-items:center;gap:10px}
+    #tab-home .hm-sec h2{font-family:'Sora','Space Grotesk',sans-serif;font-size:15px;color:var(--text-strong);margin:0}
+    #tab-home .hm-sec .bar{width:4px;height:18px;border-radius:3px;background:var(--accent)}
+    #tab-home .hm-sec small{color:var(--muted);font-size:12px}
+    #tab-home .hm-grid{display:grid;gap:16px}
+    #tab-home .hm-g4{grid-template-columns:repeat(4,1fr)}
+    #tab-home .hm-g3{grid-template-columns:repeat(3,1fr)}
+    #tab-home .hm-card{background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:16px}
+    #tab-home .hm-lab{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+    #tab-home .hm-val{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;color:var(--text-strong);margin-top:6px;line-height:1}
+    #tab-home .hm-sub{font-size:11.5px;margin-top:7px;color:var(--muted);line-height:1.5}
+    #tab-home .hm-split{display:flex;gap:14px;margin-top:8px;font-size:11.5px;color:var(--muted)}
+    #tab-home .hm-split b{display:block;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);font-weight:700}
+    /* taxa de atendimento em destaque (faixa 2) */
+    #tab-home .hm-taxa{font-family:'JetBrains Mono',monospace;font-size:40px;font-weight:800;line-height:1;color:var(--green,#22c55e)}
+    #tab-home .hm-taxa.low{color:var(--red,#ef4444)}
+    #tab-home .hm-taxa-lab{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+    #tab-home .hm-vol{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--text-strong)}
+    /* matriz */
+    #tab-home .hm-wrap{overflow-x:auto;border:1px solid var(--line,var(--border));border-radius:14px;background:var(--card)}
+    #tab-home table.hm-t{border-collapse:separate;border-spacing:0;font-size:12px;width:max-content;min-width:100%}
+    #tab-home table.hm-t th,#tab-home table.hm-t td{padding:7px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line,var(--border))}
+    #tab-home table.hm-t thead th{position:sticky;top:0;background:var(--card);color:var(--muted);font-size:10.5px;font-weight:700;text-transform:uppercase;z-index:2}
+    #tab-home table.hm-t th.hm-fix,#tab-home table.hm-t td.hm-fix{position:sticky;left:0;background:var(--card);text-align:left;z-index:3;min-width:160px;
+      box-shadow:1px 0 0 var(--line,var(--border));font-weight:600;color:var(--text-strong)}
+    #tab-home table.hm-t thead th.hm-fix{z-index:4}
+    #tab-home table.hm-t th.hm-tot,#tab-home table.hm-t td.hm-tot{background:rgba(51,95,235,.07);font-weight:700;color:var(--text-strong);
+      border-left:2px solid var(--accent);min-width:82px}
+    #tab-home table.hm-t td.fds{background:rgba(148,163,184,.10)}
+    #tab-home table.hm-t th.fds{background:rgba(148,163,184,.14)}
+    #tab-home table.hm-t th.hoje,#tab-home table.hm-t td.hoje{background:rgba(245,158,11,.10)}
+    #tab-home table.hm-t tr.grp td,#tab-home table.hm-t tr.grp th{background:rgba(148,163,184,.08);font-size:10.5px;text-transform:uppercase;
+      letter-spacing:.06em;color:var(--muted);font-weight:700}
+    #tab-home .hm-note{color:var(--muted);font-size:11.5px;line-height:1.6;margin-top:10px}
+    #tab-home .hm-cell{font-family:'JetBrains Mono',monospace}
+    #tab-home .zero{opacity:.32}
+    @media(max-width:900px){#tab-home .hm-g4,#tab-home .hm-g3{grid-template-columns:1fr 1fr}}
+    </style>
+
+    <div class="section-title">🏠 Home — visão geral do período</div>
+    <div id="hmErr" style="color:var(--red,#ef4444);font-size:12px;margin-bottom:8px"></div>
+
+    <div class="hm-sec"><span class="bar"></span><h2>Resultado</h2><small id="hmPeriodoLab">— período selecionado</small></div>
+    <div class="hm-grid hm-g4">
+      <div class="hm-card">
+        <div class="hm-lab">💰 Faturamento total</div>
+        <div class="hm-val" id="hmFat">–</div>
+        <div class="hm-split">
+          <div>Hubla<b id="hmFatHubla">–</b></div>
+          <div>TMB <span style="font-size:10px">(50%)</span><b id="hmFatTmb">–</b></div>
+        </div>
+        <div class="hm-sub" id="hmFatSub">bruto, antes do reembolso</div>
+        <div class="hm-sub" style="margin-top:4px;opacity:.8">TMB entra pelo líquido (50% do valor principal) — mesma regra do Dashboard</div>
+      </div>
+      <div class="hm-card">
+        <div class="hm-lab">📊 Vendas</div>
+        <div class="hm-val" id="hmVendas">–</div>
+        <div class="hm-split">
+          <div>Ticket médio<b id="hmTicket">–</b></div>
+        </div>
+        <div class="hm-sub">parcela 1 · utm comercial · Hubla + TMB</div>
+      </div>
+      <div class="hm-card">
+        <div class="hm-lab">💸 Reembolso</div>
+        <div class="hm-val" id="hmRefVal">–</div>
+        <div class="hm-split">
+          <div>Quantidade<b id="hmRefQtd">–</b></div>
+          <div>% do fat. bruto<b id="hmRefPct">–</b></div>
+        </div>
+        <div class="hm-sub">atribuído ao dia da venda original</div>
+      </div>
+      <div class="hm-card">
+        <div class="hm-lab">🎯 Conversão geral</div>
+        <div class="hm-val" id="hmConv">–</div>
+        <div class="hm-split">
+          <div>Leads únicos<b id="hmLeads">–</b></div>
+        </div>
+        <div class="hm-sub">vendas ÷ leads que entraram no período</div>
+      </div>
+    </div>
+
+    <div class="hm-sec"><span class="bar" style="background:var(--gold,#fbbf24)"></span><h2>Discadora</h2><small>— campanha e 1×1 são operações diferentes: taxa separada</small></div>
+    <div class="hm-grid hm-g3">
+      <div class="hm-card">
+        <div class="hm-taxa-lab">📣 Campanha · taxa de atendimento</div>
+        <div class="hm-taxa" id="hmCampTaxa">–</div>
+        <div class="hm-sub"><span class="hm-vol" id="hmCampDisc">–</span> discadas · <span id="hmCampAtend">–</span> atendidas</div>
+      </div>
+      <div class="hm-card">
+        <div class="hm-taxa-lab">☎️ 1×1 manual · taxa de atendimento</div>
+        <div class="hm-taxa" id="hm1x1Taxa">–</div>
+        <div class="hm-sub"><span class="hm-vol" id="hm1x1Disc">–</span> discadas · <span id="hm1x1Atend">–</span> atendidas</div>
+      </div>
+      <div class="hm-card">
+        <div class="hm-lab">📞 Total de ligações</div>
+        <div class="hm-val" id="hmLigTotal">–</div>
+        <div class="hm-split">
+          <div>Atendidas<b id="hmAtendTotal">–</b></div>
+          <div>Taxa geral<b id="hmTaxaGeral">–</b></div>
+        </div>
+        <div class="hm-sub">a taxa geral é média ponderada — use as duas ao lado</div>
+      </div>
+    </div>
+
+    <div class="hm-sec"><span class="bar" style="background:var(--green,#22c55e)"></span><h2>Dia a dia — <span id="hmMesLab">–</span></h2><small id="hmMesSmall">— ancorado no mês da data final do período</small></div>
+    <div class="hm-wrap"><table class="hm-t"><thead id="hmMatrizHead"></thead><tbody id="hmMatrizBody"></tbody></table></div>
+    <div class="hm-note">
+      Fim de semana sombreado em cinza · coluna de <b>hoje</b> em laranja é <b>parcial</b>: os pedidos TMB do dia só entram na carga da manhã seguinte (~09:20).
+      A coluna <b>TOTAL</b> soma o mês; nas linhas de ticket, conversão e taxa de atendimento ela é a <b>média do mês</b> (razão dos totais, não média das colunas).
+      Faturamento aqui é <b>líquido</b> (reembolso abatido no dia da venda original, mesma régua do card acima e da aba Dashboard) — por isso um dia pode ficar negativo se o estorno for de venda anterior.
+    </div>
+  </div>
+  <!-- ==================== FIM ABA HOME ==================== -->
+
+  <div id="tab-dashboard" class="tab-content">
 
   <div class="section-title">Variação de Vendas por Hora</div>
   <div class="rondas-card">
@@ -1162,9 +1293,20 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 
     <div class="dc-grid dc-g23" style="margin-top:16px">
       <div class="dc-card"><h3>Volume por dia — discado vs. atendido</h3><div class="dc-cap">Atendidas + perdidas = total discado.</div><div class="dc-box"><canvas id="dcVolume"></canvas></div></div>
-      <div class="dc-card"><h3>Taxa de atendimento</h3><div class="dc-cap">answered ÷ discado.</div>
-        <div style="display:flex;align-items:baseline;gap:10px"><div class="dc-bignum" id="dc-taxa-big">–</div><div class="dc-note" id="dc-taxa-sub" style="margin:0">no período</div></div>
-        <div class="dc-box sm" style="margin-top:8px"><canvas id="dcTaxa"></canvas></div></div>
+      <div class="dc-card"><h3>Taxa de atendimento — campanha × 1×1</h3>
+        <div class="dc-cap">Atendidas ÷ discadas, <b>separado por origem</b>. São duas operações diferentes: a taxa única é média ponderada e sobe/desce só por mudança de mix.</div>
+        <div style="display:flex;gap:26px;flex-wrap:wrap">
+          <div><div class="dc-lab" style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em">📣 Campanha</div>
+            <div class="dc-bignum" id="dc-taxa-camp" style="font-size:34px">–</div>
+            <div class="dc-note" id="dc-taxa-campsub" style="margin:2px 0 0">–</div></div>
+          <div><div class="dc-lab" style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em">☎️ 1×1 manual</div>
+            <div class="dc-bignum" id="dc-taxa-1x1" style="font-size:34px">–</div>
+            <div class="dc-note" id="dc-taxa-1x1sub" style="margin:2px 0 0">–</div></div>
+          <div><div class="dc-lab" style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em">Geral</div>
+            <div class="dc-bignum" id="dc-taxa-big" style="font-size:22px;color:var(--muted)">–</div>
+            <div class="dc-note" id="dc-taxa-sub" style="margin:2px 0 0">ponderada</div></div>
+        </div>
+        <div class="dc-box sm" style="margin-top:10px"><canvas id="dcTaxa"></canvas></div></div>
     </div>
 
     <div class="dc-grid dc-g23" style="margin-top:16px">
@@ -1908,7 +2050,7 @@ function agregarIntervalo(de, ate){
   if(rpd){
     Object.keys(rpd).forEach(dk => {
       if(!dentro(dk)) return;
-      reembTotal += rpd[dk].total; reembQtd++;
+      reembTotal += rpd[dk].total; reembQtd += (rpd[dk].qtd || 1);
       Object.keys(rpd[dk].porVendedor||{}).forEach(v => {
         const rv = rpd[dk].porVendedor[v];
         out.reembolsos.porVendedor[v] = (out.reembolsos.porVendedor[v]||0) + rv;
@@ -3428,6 +3570,8 @@ function renderAll(){
   renderFunil();
   renderTaxaPassagem();
   renderEvolucao();
+  // Home (build 08-11d) — definida num <script> mais abaixo; guarda evita erro no boot.
+  if(typeof window.renderHome === 'function') window.renderHome();
 }
 
 // ========== EVOLUÇÃO MENSAL (mês atual vs mês anterior) ==========
@@ -5932,8 +6076,11 @@ function processarReembolsos(csvText){
     if(vend && porVendedor[vend]){ porVendedor[vend].qtd++; porVendedor[vend].valor += valor; }
     else { semVendedor.qtd++; semVendedor.valor += valor; }
     const dk = `${dataVenda.ano}-${String(dataVenda.mes).padStart(2,'0')}-${String(dataVenda.dia).padStart(2,'0')}`;
-    if(!porDia[dk]) porDia[dk] = { total:0, porVendedor:{} };
+    // qtd (08-11d): quantidade de reembolsos no dia. Antes só existia o valor, e
+    // agregarIntervalo contava DIAS com reembolso achando que contava reembolsos.
+    if(!porDia[dk]) porDia[dk] = { total:0, qtd:0, porVendedor:{} };
     porDia[dk].total += valor;
+    porDia[dk].qtd++;
     if(vend){ porDia[dk].porVendedor[vend] = (porDia[dk].porVendedor[vend]||0) + valor; }
   }
   MESES_KEYS.forEach(m => {
@@ -6301,6 +6448,7 @@ function setTab(tab){
   if(tab==='reembolsos'){ carregarReembolsos(); }
   if(tab==='motivosperda'){ (function _mpTry(){ if(typeof window.carregarMotivosPerda==='function'){ window.carregarMotivosPerda(); } else { setTimeout(_mpTry,50); } })(); }
   if(tab==='discadora'){ (function _dcTry(){ if(typeof window.carregarDiscadora==='function'){ window.carregarDiscadora(); } else { setTimeout(_dcTry,50); } })(); }
+  if(tab==='home'){ (function _hmTry(){ if(typeof window.renderHome==='function'){ window.renderHome(); } else { setTimeout(_hmTry,50); } })(); }
   // expande/recolhe submenu de Processos
   const subProc = document.getElementById('sbSubProcessos');
   const parentProc = document.querySelector('.sb-parent');
@@ -7742,7 +7890,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-11c — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-11d — NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -7818,8 +7966,8 @@ document.addEventListener('visibilitychange', () => {
 
   function dcRender(ag,vol,hr,hm,sp){
     /* ---- KPIs ---- */
-    var discado=0,atend=0,vendas=0,receita=0,discCamp=0,disc1x1=0;
-    vol.forEach(function(r){discado+=N(r.discado);atend+=N(r.completado);vendas+=N(r.vendas);receita+=N(r.receita_brl);discCamp+=N(r.discado_campanha);disc1x1+=N(r.discado_1x1);});
+    var discado=0,atend=0,vendas=0,receita=0,discCamp=0,disc1x1=0,atendCamp=0,atend1x1=0;
+    vol.forEach(function(r){discado+=N(r.discado);atend+=N(r.completado);vendas+=N(r.vendas);receita+=N(r.receita_brl);discCamp+=N(r.discado_campanha);disc1x1+=N(r.discado_1x1);atendCamp+=N(r.atendido_campanha);atend1x1+=N(r.atendido_1x1);});
     var tmaNum=0,tmaDen=0,agSet={};
     ag.forEach(function(r){var l=N(r.ligacoes_completadas)||N(r.total_ligacoes);tmaNum+=N(r.tma_s)*l;tmaDen+=l;if((N(r.total_ligacoes)||N(r.ligacoes_completadas))>0)agSet[r.callix_user_id]=1;});
     var taxa=discado?(100*atend/discado):0;
@@ -7827,8 +7975,17 @@ document.addEventListener('visibilitychange', () => {
     set('dc-k-disc',fmt(discado)); set('dc-k-atend',fmt(atend)); set('dc-k-tma',tmaDen?mmss(tmaNum/tmaDen):'–');
     set('dc-k-vend',fmt(vendas)); set('dc-k-rec','R$'+fmt(receita));
     var pctD=function(v){ return discado ? (100*v/discado).toFixed(1).replace('.',',')+'% do discado' : '—'; };
-    set('dc-k-disccamp',fmt(discCamp)); set('dc-k-disccampsub',pctD(discCamp));
-    set('dc-k-disc1x1',fmt(disc1x1));   set('dc-k-disc1x1sub',pctD(disc1x1));
+    // Taxa de atendimento SEPARADA (08-11d): campanha e 1×1 são operações distintas.
+    var tCamp = discCamp ? (100*atendCamp/discCamp) : null;
+    var t1x1  = disc1x1  ? (100*atend1x1/disc1x1)   : null;
+    var p1 = function(v){ return v===null ? '–' : v.toFixed(1).replace('.',',')+'%'; };
+    set('dc-k-disccamp',fmt(discCamp)); set('dc-k-disccampsub',pctD(discCamp)+' · atend. '+p1(tCamp));
+    set('dc-k-disc1x1',fmt(disc1x1));   set('dc-k-disc1x1sub',pctD(disc1x1)+' · atend. '+p1(t1x1));
+    set('dc-taxa-camp',p1(tCamp)); set('dc-taxa-campsub',fmt(atendCamp)+' de '+fmt(discCamp));
+    set('dc-taxa-1x1',p1(t1x1));   set('dc-taxa-1x1sub',fmt(atend1x1)+' de '+fmt(disc1x1));
+    (function(){ var e1=document.getElementById('dc-taxa-camp'), e2=document.getElementById('dc-taxa-1x1');
+      if(e1) e1.style.color = (tCamp!==null && tCamp<10) ? DCP.red : DCP.green;
+      if(e2) e2.style.color = (t1x1!==null && t1x1<10)  ? DCP.red : DCP.green; })();
     set('dc-taxa-big',taxa.toFixed(1).replace('.',',')+'%');
     // Sempre reescreve o subtítulo: sem o else, o texto de "zero" grudava até o refresh
     // (bastava um render com 0, ex.: filtro "Hoje") e a tela mostrava "5" + "janela ainda no futuro".
@@ -7843,9 +8000,13 @@ document.addEventListener('visibilitychange', () => {
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:DCP.muted}}},scales:{x:{stacked:true,grid:{display:false},ticks:{color:DCP.muted}},y:{stacked:true,grid:{color:DCP.grid},ticks:{color:DCP.muted}}}}});
 
     /* ---- Taxa por dia ---- */
+    // 2 séries (08-11d): dia sem discagem daquela origem vira null (buraco), não zero —
+    // senão a linha da campanha despenca a zero desde 06/08 e parece performance ruim.
+    var serie=function(campo,base){ return vs.map(function(r){ return N(r[base]) ? N(r[campo]) : null; }); };
     chart('dcTaxa',{type:'line',data:{labels:vs.map(function(r){return ddmm(r.data)}),datasets:[
-      {data:vs.map(function(r){return N(r.taxa_atendimento_pct)}),borderColor:DCP.green,backgroundColor:'rgba(34,197,94,.15)',fill:true,tension:.35,borderWidth:2,pointRadius:0}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:DCP.muted}},y:{grid:{color:DCP.grid},ticks:{color:DCP.muted,callback:function(v){return v+'%'}}}}}});
+      {label:'Campanha',data:serie('taxa_atend_campanha_pct','discado_campanha'),borderColor:DCP.orange,backgroundColor:'rgba(245,158,11,.12)',fill:true,tension:.35,borderWidth:2,pointRadius:0,spanGaps:true},
+      {label:'1×1',data:serie('taxa_atend_1x1_pct','discado_1x1'),borderColor:DCP.green,backgroundColor:'rgba(34,197,94,.15)',fill:true,tension:.35,borderWidth:2,pointRadius:0,spanGaps:true}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{color:DCP.muted,boxWidth:10,font:{size:10}}}},scales:{x:{grid:{display:false},ticks:{color:DCP.muted}},y:{grid:{color:DCP.grid},ticks:{color:DCP.muted,callback:function(v){return v+'%'}}}}}});
 
     /* ---- Perda decomposta ---- */
     var pl=[['Caixa postal','perdido_caixa_postal',DCP.orange],['Não atende','perdido_nao_atende',DCP.gold],['Outro','perdido_outro',DCP.silver],['Falta agente','perdido_falta_agente',DCP.red],['Nº inexistente','perdido_num_inexistente',DCP.purple],['Abandono','perdido_abandono',DCP.blue2],['URA','perdido_ura','#334155']];
@@ -8230,6 +8391,269 @@ document.addEventListener('visibilitychange', () => {
   };
 })();
 
+</script>
+
+<script>
+/* ===========================================================================
+   ABA HOME (build 2026-08-11d)
+   Cabeçalho = período do filtro universal. Matriz = mês da data final do período.
+   Regra: a Home NÃO recalcula nada por conta própria — lê DADOS/EVENTOS/REEMBOLSOS_DADOS
+   pelas mesmas estruturas das outras abas, e a Callix pela vw_callix_dash_volume_dia.
+   =========================================================================== */
+(function(){
+  function N(v){ if(v===undefined||v===null||v==='')return 0; var n=parseFloat(v); return isNaN(n)?0:n; }
+  function I(n){ return Math.round(n).toLocaleString('pt-BR'); }
+  function pct(n){ return (Math.round(n*10)/10).toFixed(1).replace('.',',')+'%'; }
+  function set(id,v){ var e=document.getElementById(id); if(e) e.textContent=v; }
+  // R$ compacto p/ caber na célula da matriz (31 colunas)
+  function kBRL(v){
+    if(!v) return '0';
+    if(Math.abs(v) >= 1000) return (v/1000).toFixed(1).replace('.',',')+'k';
+    return String(Math.round(v));
+  }
+  function csvObj(txt){
+    if(!txt) return [];
+    var lines = txt.split(/\r?\n/).filter(function(l){ return l.length; });
+    if(!lines.length) return [];
+    function split(line){ var out=[],cur='',q=false;
+      for(var i=0;i<line.length;i++){ var c=line[i];
+        if(q){ if(c=='"'){ if(line[i+1]=='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+        else { if(c=='"') q=true; else if(c==','){ out.push(cur); cur=''; } else cur+=c; } }
+      out.push(cur); return out; }
+    var head = split(lines[0]), rows=[];
+    for(var r=1;r<lines.length;r++){ var v=split(lines[r]), o={};
+      for(var k=0;k<head.length;k++) o[head[k]] = v[k];
+      rows.push(o); }
+    return rows;
+  }
+
+  /* ---- Callix: mesma view da aba Discadora, carregada uma vez ---- */
+  window._hmVol = null; window._hmLoading = false;
+  function hmCallix(){
+    if(window._dcRaw && window._dcRaw.vol && window._dcRaw.vol.length) return window._dcRaw.vol;
+    return window._hmVol;
+  }
+  function hmCarregarCallix(){
+    if(hmCallix() || window._hmLoading) return;
+    if(typeof fetchViewCsvSupabase !== 'function') return;
+    window._hmLoading = true;
+    fetchViewCsvSupabase('vw_callix_dash_volume_dia').then(function(csv){
+      window._hmVol = csvObj(csv);
+      window._hmLoading = false;
+      window.renderHome();
+    }).catch(function(e){
+      window._hmLoading = false;
+      var er = document.getElementById('hmErr');
+      if(er) er.textContent = 'Discadora indisponível: ' + e.message;
+    });
+  }
+
+  /* ---- leads únicos POR DIA (mesma chave do funil: telefone -> e-mail -> índice) ----
+     Único por DIA (não por período): assim a coluna TOTAL da matriz bate com o
+     denominador do cabeçalho. Lead que reentra em outro dia conta nos dois dias. */
+  function leadsPorDia(){
+    var out = {};
+    if(typeof EVENTOS === 'undefined' || !EVENTOS || !EVENTOS.flat) return out;
+    var vistos = {};
+    for(var i=0;i<EVENTOS.flat.length;i++){
+      var e = EVENTOS.flat[i];
+      if(e.cls !== 'entrada' || !e.dayKey) continue;
+      var k = e.dayKey + '|' + (e.tel || e.email || ('x'+i));
+      if(vistos[k]) continue;
+      vistos[k] = 1;
+      out[e.dayKey] = (out[e.dayKey]||0) + 1;
+    }
+    return out;
+  }
+  function vendasPorDia(){
+    var out = {};
+    Object.keys(DADOS||{}).forEach(function(m){
+      var mes = DADOS[m];
+      if(!mes || !mes.porDia) return;
+      Object.keys(mes.porDia).forEach(function(dk){
+        var d = mes.porDia[dk];
+        out[dk] = { total:d.total||0, qtd:d.qtd||0, hubla:d.hubla||0, tmb:d.tmb||0 };
+      });
+    });
+    return out;
+  }
+  // Reembolso por dia — indexado pelo dia da VENDA original (coorte), igual ao resto do dash.
+  // Todo reembolso é Hubla (a vw_dash_reembolso lê hubla_refunds), por isso abate na Hubla.
+  function reembPorDia(){
+    var out = {};
+    var rpd = (typeof REEMBOLSOS_DADOS !== 'undefined' && REEMBOLSOS_DADOS && REEMBOLSOS_DADOS.porDia) ? REEMBOLSOS_DADOS.porDia : null;
+    if(!rpd) return out;
+    Object.keys(rpd).forEach(function(dk){ out[dk] = { total: rpd[dk].total||0, qtd: rpd[dk].qtd||0 }; });
+    return out;
+  }
+  function callixPorDia(){
+    var out = {}, rows = hmCallix() || [];
+    rows.forEach(function(r){
+      if(!r || !r.data) return;
+      out[r.data] = {
+        campDisc: N(r.discado_campanha), campAtend: N(r.atendido_campanha),
+        d1Disc: N(r.discado_1x1),        d1Atend: N(r.atendido_1x1),
+        atend: N(r.completado)
+      };
+    });
+    return out;
+  }
+
+  /* ================= CABEÇALHO (período do filtro) ================= */
+  function renderCabecalho(){
+    var d = (typeof dadosAtivos === 'function') ? dadosAtivos() : null;
+    if(!d) return;
+    var bruto = d.faturamentoBruto || 0;
+    var hub = (d.porPlataforma && d.porPlataforma.hubla) || 0;
+    var tmb = (d.porPlataforma && d.porPlataforma.tmb) || 0;
+    var vend = d.totalVendas || 0;
+    var refV = (d.reembolsos && d.reembolsos.total) || 0;
+    var refQ = (d.reembolsos && d.reembolsos.qtd) || 0;
+
+    // Faturamento LÍQUIDO (bruto - reembolso): mesma régua do card da aba Dashboard.
+    // Se a Home mostrasse bruto e o Dashboard líquido, as duas telas dariam números
+    // diferentes com o mesmo rótulo — foi o que a conferência cruzada pegou.
+    var liq = d.totalFaturamento || 0;
+    set('hmPeriodoLab', '— ' + (typeof labelPeriodo==='function' ? labelPeriodo() : ''));
+    set('hmFat', fmtMoney(liq));
+    set('hmFatHubla', fmtMoney(hub - refV));
+    set('hmFatTmb', fmtMoney(tmb));
+    set('hmFatSub', 'líquido · bruto ' + fmtMoney(bruto) + ' − reembolso ' + fmtMoney(refV));
+    set('hmVendas', I(vend));
+    set('hmTicket', vend ? fmtMoney(liq/vend) : '–');
+    set('hmRefVal', fmtMoney(refV));
+    set('hmRefQtd', I(refQ));
+    set('hmRefPct', bruto ? pct(100*refV/bruto) : '–');
+
+    // conversão: vendas ÷ leads únicos por dia, dentro do período
+    var lpd = leadsPorDia(), leads = 0;
+    Object.keys(lpd).forEach(function(dk){ if(typeof periodoContem==='function' && periodoContem(dk)) leads += lpd[dk]; });
+    set('hmLeads', I(leads));
+    set('hmConv', leads ? pct(100*vend/leads) : '–');
+
+    // discadora
+    var cpd = callixPorDia();
+    var cD=0,cA=0,mD=0,mA=0;
+    Object.keys(cpd).forEach(function(dk){
+      if(typeof periodoContem==='function' && !periodoContem(dk)) return;
+      cD+=cpd[dk].campDisc; cA+=cpd[dk].campAtend; mD+=cpd[dk].d1Disc; mA+=cpd[dk].d1Atend;
+    });
+    var tCamp = cD ? 100*cA/cD : null, t1x1 = mD ? 100*mA/mD : null;
+    set('hmCampTaxa', tCamp===null ? '–' : pct(tCamp));
+    set('hmCampDisc', I(cD)); set('hmCampAtend', I(cA));
+    set('hm1x1Taxa', t1x1===null ? '–' : pct(t1x1));
+    set('hm1x1Disc', I(mD)); set('hm1x1Atend', I(mA));
+    set('hmLigTotal', I(cD+mD));
+    set('hmAtendTotal', I(cA+mA));
+    set('hmTaxaGeral', (cD+mD) ? pct(100*(cA+mA)/(cD+mD)) : '–');
+    // pinta de vermelho a taxa ruim (< 10%) — campanha vive nessa faixa
+    var el1 = document.getElementById('hmCampTaxa'), el2 = document.getElementById('hm1x1Taxa');
+    if(el1) el1.className = 'hm-taxa' + (tCamp!==null && tCamp < 10 ? ' low' : '');
+    if(el2) el2.className = 'hm-taxa' + (t1x1!==null && t1x1 < 10 ? ' low' : '');
+  }
+
+  /* ================= MATRIZ KPI x DIA (mês da data final) ================= */
+  var MES_LAB = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  function renderMatriz(){
+    var head = document.getElementById('hmMatrizHead');
+    var body = document.getElementById('hmMatrizBody');
+    if(!head || !body) return;
+
+    var ym = String(PERIODO.ate || PERIODO.de || HOJE_SP).slice(0,7);
+    var ano = +ym.slice(0,4), mes = +ym.slice(5,7);
+    var diasNoMes = new Date(ano, mes, 0).getDate();
+    // mês corrente: corta em hoje (não enche a tela de coluna vazia do futuro)
+    var ultimo = (ym === HOJE_SP.slice(0,7)) ? Math.min(+HOJE_SP.slice(8,10), diasNoMes) : diasNoMes;
+    set('hmMesLab', MES_LAB[mes] + '/' + ano);
+
+    var dks = [];
+    for(var i=1;i<=ultimo;i++) dks.push(ym + '-' + String(i).padStart(2,'0'));
+
+    var vpd = vendasPorDia(), lpd = leadsPorDia(), cpd = callixPorDia(), rpd = reembPorDia();
+    // faturamento da matriz = LÍQUIDO (abate o reembolso no dia da venda original),
+    // pra coluna TOTAL bater com o card do cabeçalho e com a aba Dashboard.
+    var fatLiq  = function(dk){ return ((vpd[dk]&&vpd[dk].total)||0) - ((rpd[dk]&&rpd[dk].total)||0); };
+    var hubLiq  = function(dk){ return ((vpd[dk]&&vpd[dk].hubla)||0) - ((rpd[dk]&&rpd[dk].total)||0); };
+    var g = function(o,dk,f){ return (o[dk] && o[dk][f]) || 0; };
+
+    // ---- cabeçalho da tabela
+    var th = '<tr><th class="hm-fix">KPI</th>';
+    dks.forEach(function(dk){
+      var dow = new Date(dk+'T00:00:00').getDay();
+      var cls = (dow===0||dow===6) ? ' fds' : '';
+      if(dk === HOJE_SP) cls = ' hoje';
+      th += '<th class="hm-cell'+cls+'">'+dk.slice(8,10)+'</th>';
+    });
+    th += '<th class="hm-tot">TOTAL</th></tr>';
+    head.innerHTML = th;
+
+    // ---- definição das linhas
+    var somaFat=0, somaHub=0, somaTmb=0, somaVend=0, somaLeads=0,
+        somaCD=0, somaCA=0, somaMD=0, somaMA=0;
+    dks.forEach(function(dk){
+      somaFat += fatLiq(dk); somaHub += hubLiq(dk); somaTmb += g(vpd,dk,'tmb');
+      somaVend += g(vpd,dk,'qtd');  somaLeads += (lpd[dk]||0);
+      somaCD += g(cpd,dk,'campDisc'); somaCA += g(cpd,dk,'campAtend');
+      somaMD += g(cpd,dk,'d1Disc');   somaMA += g(cpd,dk,'d1Atend');
+    });
+
+    var linhas = [
+      { grp:'💰 Dinheiro' },
+      { lab:'Faturamento total', val:fatLiq, fmt:kBRL, tot:kBRL(somaFat) },
+      { lab:'· Hubla',           val:hubLiq, fmt:kBRL, tot:kBRL(somaHub) },
+      { lab:'· TMB',             val:function(dk){ return g(vpd,dk,'tmb');   }, fmt:kBRL, tot:kBRL(somaTmb) },
+      { lab:'Vendas',            val:function(dk){ return g(vpd,dk,'qtd');   }, fmt:I,    tot:I(somaVend) },
+      { lab:'Ticket médio',      val:function(dk){ var q=g(vpd,dk,'qtd'); return q ? fatLiq(dk)/q : 0; },
+        fmt:kBRL, tot: somaVend ? kBRL(somaFat/somaVend) : '–' },
+      { lab:'Conversão',         val:function(dk){ var l=lpd[dk]||0; return l ? 100*g(vpd,dk,'qtd')/l : 0; },
+        fmt:function(v){ return v ? pct(v) : '0%'; }, tot: somaLeads ? pct(100*somaVend/somaLeads) : '–' },
+      { lab:'Leads',             val:function(dk){ return lpd[dk]||0; }, fmt:I, tot:I(somaLeads) },
+      { grp:'📞 Discadora' },
+      { lab:'Discadas campanha', val:function(dk){ return g(cpd,dk,'campDisc'); }, fmt:I, tot:I(somaCD) },
+      { lab:'Discadas 1×1',      val:function(dk){ return g(cpd,dk,'d1Disc');   }, fmt:I, tot:I(somaMD) },
+      { lab:'Atendidas',         val:function(dk){ return g(cpd,dk,'campAtend')+g(cpd,dk,'d1Atend'); }, fmt:I, tot:I(somaCA+somaMA) },
+      { lab:'% atend. campanha', val:function(dk){ var d=g(cpd,dk,'campDisc'); return d ? 100*g(cpd,dk,'campAtend')/d : 0; },
+        fmt:function(v){ return v ? pct(v) : '–'; }, tot: somaCD ? pct(100*somaCA/somaCD) : '–' },
+      { lab:'% atend. 1×1',      val:function(dk){ var d=g(cpd,dk,'d1Disc'); return d ? 100*g(cpd,dk,'d1Atend')/d : 0; },
+        fmt:function(v){ return v ? pct(v) : '–'; }, tot: somaMD ? pct(100*somaMA/somaMD) : '–' }
+    ];
+
+    var html = '';
+    linhas.forEach(function(L){
+      if(L.grp){
+        html += '<tr class="grp"><td class="hm-fix">'+L.grp+'</td>'
+              + dks.map(function(){ return '<td></td>'; }).join('')
+              + '<td class="hm-tot"></td></tr>';
+        return;
+      }
+      html += '<tr><td class="hm-fix">'+L.lab+'</td>';
+      dks.forEach(function(dk){
+        var dow = new Date(dk+'T00:00:00').getDay();
+        var cls = 'hm-cell' + ((dow===0||dow===6) ? ' fds' : '');
+        if(dk === HOJE_SP) cls = 'hm-cell hoje';
+        var v = L.val(dk);
+        var txt = L.fmt(v);
+        if(!v) cls += ' zero';
+        html += '<td class="'+cls+'">'+txt+'</td>';
+      });
+      html += '<td class="hm-tot hm-cell">'+L.tot+'</td></tr>';
+    });
+    body.innerHTML = html;
+  }
+
+  window.renderHome = function(){
+    try{
+      if(!document.getElementById('hmFat')) return;
+      hmCarregarCallix();
+      renderCabecalho();
+      renderMatriz();
+    }catch(e){
+      var er = document.getElementById('hmErr');
+      if(er) er.textContent = 'Erro na Home: ' + e.message;
+      if(window.console) console.error('[Home]', e);
+    }
+  };
+})();
 </script>
 
 </body>
