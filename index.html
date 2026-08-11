@@ -1,7 +1,26 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-11d
+  CIC-G2 · BUILD 2026-08-11f
+  Build 2026-08-11f (Home): CONVERSÃO passa a ser "Em Contato -> Venda", régua idêntica à
+  linha MÉDIA EQUIPE da aba Taxa de Passagem (`taxaEquipe` = totV/totC):
+  - denominador = soma, por vendedor, dos e-mails únicos na etapa "Em Contato" (EVENTOS.porDia),
+    igual a `etapasNoFiltro`. NÃO é o Em Contato do funil por segmento (uniqBy) — a TP tem as duas
+    contagens e o número em destaque é esta.
+  - numerador = vendas dos VENDEDORES do time. Exclui utm `comercial_mitsuo` (canal automático,
+    mapeado como __OUTROS__): 10 das 103 vendas de 01-11/08. Por isso o card "Vendas" (total) e o
+    numerador da conversão são diferentes de propósito — os dois componentes ficam visíveis no card.
+  - a conversão ponta a ponta (venda ÷ leads de entrada) saiu; "Leads" continua na matriz.
+  Build 2026-08-11e (Home, ajustes do Nirla):
+  (1) LEADS/CONVERSÃO agora usam a MESMA régua da Taxa de Passagem: só a etapa de ENTRADA
+      ("0. ..." ou "Acessou a Live" no Webinar) e chave única NO PERÍODO — antes contava
+      "Entrou na etapa" de QUALQUER etapa e deduplicava por dia, o que inflava 3.281 -> 5.009
+      em 01-11/08 (+53%) e derrubava a conversão de 3,1% para 2,0%.
+  (2) Legendas dos cards removidas (a regra fica na doc, não na tela).
+  (3) Ticket médio promovido a número grande, ao lado de Vendas.
+  (4) Matriz reordenada (Leads -> Conversão -> Vendas -> Ticket -> Faturamento), linhas de
+      Faturamento e Conversão em negrito, Hubla/TMB colapsadas sob Faturamento (clique expande),
+      grupo "💰 Dinheiro" virou "🧮 Funil".
   Build 2026-08-11d (Home): NOVA ABA "Home" (primeira do menu, vira a tela de abertura).
   (1) Faixa 1 — Faturamento total com split Hubla/TMB, Vendas + ticket médio, Reembolso com
       qtd/valor/% do faturamento, Conversão geral (vendas ÷ leads únicos do período).
@@ -809,6 +828,11 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     #tab-home .hm-note{color:var(--muted);font-size:11.5px;line-height:1.6;margin-top:10px}
     #tab-home .hm-cell{font-family:'JetBrains Mono',monospace}
     #tab-home .zero{opacity:.32}
+    #tab-home table.hm-t td.forte,#tab-home table.hm-t td.hm-fix.forte{font-weight:800;color:var(--text-strong)}
+    #tab-home table.hm-t td.forte.zero{opacity:.45}
+    #tab-home .hm-tg{cursor:pointer;user-select:none;color:var(--accent);font-weight:800;padding:0 3px}
+    #tab-home .hm-tg:hover{opacity:.75}
+    #tab-home tr.hm-filho td{font-size:11.5px;opacity:.9}
     @media(max-width:900px){#tab-home .hm-g4,#tab-home .hm-g3{grid-template-columns:1fr 1fr}}
     </style>
 
@@ -824,16 +848,12 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
           <div>Hubla<b id="hmFatHubla">–</b></div>
           <div>TMB <span style="font-size:10px">(50%)</span><b id="hmFatTmb">–</b></div>
         </div>
-        <div class="hm-sub" id="hmFatSub">bruto, antes do reembolso</div>
-        <div class="hm-sub" style="margin-top:4px;opacity:.8">TMB entra pelo líquido (50% do valor principal) — mesma regra do Dashboard</div>
       </div>
       <div class="hm-card">
-        <div class="hm-lab">📊 Vendas</div>
-        <div class="hm-val" id="hmVendas">–</div>
-        <div class="hm-split">
-          <div>Ticket médio<b id="hmTicket">–</b></div>
+        <div style="display:flex;gap:22px;flex-wrap:wrap">
+          <div><div class="hm-lab">📊 Vendas</div><div class="hm-val" id="hmVendas">–</div></div>
+          <div><div class="hm-lab">🏷️ Ticket médio</div><div class="hm-val" id="hmTicket" style="color:var(--gold,#fbbf24)">–</div></div>
         </div>
-        <div class="hm-sub">parcela 1 · utm comercial · Hubla + TMB</div>
       </div>
       <div class="hm-card">
         <div class="hm-lab">💸 Reembolso</div>
@@ -842,15 +862,15 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
           <div>Quantidade<b id="hmRefQtd">–</b></div>
           <div>% do fat. bruto<b id="hmRefPct">–</b></div>
         </div>
-        <div class="hm-sub">atribuído ao dia da venda original</div>
       </div>
       <div class="hm-card">
-        <div class="hm-lab">🎯 Conversão geral</div>
+        <div class="hm-lab">🎯 Conversão · Em Contato → Venda</div>
         <div class="hm-val" id="hmConv">–</div>
         <div class="hm-split">
-          <div>Leads únicos<b id="hmLeads">–</b></div>
+          <div>Em Contato<b id="hmEmContato">–</b></div>
+          <div>Vendas do time<b id="hmVendasTime">–</b></div>
+          <div>Leads<b id="hmLeads">–</b></div>
         </div>
-        <div class="hm-sub">vendas ÷ leads que entraram no período</div>
       </div>
     </div>
 
@@ -873,7 +893,6 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
           <div>Atendidas<b id="hmAtendTotal">–</b></div>
           <div>Taxa geral<b id="hmTaxaGeral">–</b></div>
         </div>
-        <div class="hm-sub">a taxa geral é média ponderada — use as duas ao lado</div>
       </div>
     </div>
 
@@ -883,6 +902,8 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       Fim de semana sombreado em cinza · coluna de <b>hoje</b> em laranja é <b>parcial</b>: os pedidos TMB do dia só entram na carga da manhã seguinte (~09:20).
       A coluna <b>TOTAL</b> soma o mês; nas linhas de ticket, conversão e taxa de atendimento ela é a <b>média do mês</b> (razão dos totais, não média das colunas).
       Faturamento aqui é <b>líquido</b> (reembolso abatido no dia da venda original, mesma régua do card acima e da aba Dashboard) — por isso um dia pode ficar negativo se o estorno for de venda anterior.
+      Em <b>Leads</b> e <b>Em Contato</b>, somar as colunas dá mais que o TOTAL: o total conta cada pessoa <b>uma vez no mês</b>, igual à aba Taxa de Passagem.
+      <b>Conversão</b> = Em Contato → Venda (mesma régua da MÉDIA EQUIPE da Taxa de Passagem): o numerador são as vendas <b>do time</b>, sem o canal automático — por isso é menor que a linha Vendas.
     </div>
   </div>
   <!-- ==================== FIM ABA HOME ==================== -->
@@ -7890,7 +7911,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-11d — NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-11f — Home: CONVERSÃO agora é Em Contato -> Venda, régua idêntica à MÉDIA EQUIPE da Taxa de Passagem (denominador = e-mails únicos por vendedor na etapa Em Contato; numerador = vendas do TIME, sem o canal automático mitsuo/__OUTROS__). Nova linha "Em Contato" na matriz. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -8448,22 +8469,73 @@ document.addEventListener('visibilitychange', () => {
     });
   }
 
-  /* ---- leads únicos POR DIA (mesma chave do funil: telefone -> e-mail -> índice) ----
-     Único por DIA (não por período): assim a coluna TOTAL da matriz bate com o
-     denominador do cabeçalho. Lead que reentra em outro dia conta nos dois dias. */
-  function leadsPorDia(){
-    var out = {};
-    if(typeof EVENTOS === 'undefined' || !EVENTOS || !EVENTOS.flat) return out;
-    var vistos = {};
-    for(var i=0;i<EVENTOS.flat.length;i++){
-      var e = EVENTOS.flat[i];
-      if(e.cls !== 'entrada' || !e.dayKey) continue;
-      var k = e.dayKey + '|' + (e.tel || e.email || ('x'+i));
-      if(vistos[k]) continue;
-      vistos[k] = 1;
-      out[e.dayKey] = (out[e.dayKey]||0) + 1;
+  /* ---- LEADS: régua IDÊNTICA à aba Taxa de Passagem (calcularFunilSegmentos/uniqBy) ----
+     Duas regras que a build 08-11d errava e infl(av)am o número:
+     1) só conta a etapa de ENTRADA — "0. ..." nos pipelines normais, "Acessou a Live" no
+        Webinar. O CRM emite "Entrou na etapa" a CADA etapa, então contar todas fazia o
+        mesmo lead virar 3 (0. Base -> 2. Em Contato -> 3. Negociação).
+     2) chave única no PERÍODO INTEIRO, não por dia.
+     Efeito medido em 01-11/08: 5.009 -> 3.281 leads (-34%); conversão 2,0% -> 3,1%.
+     Chave: telefone -> e-mail -> índice (mesma do funil, inclusive o 'x'+i). */
+  function leadsCalc(dks){
+    var dentro = {}; (dks||[]).forEach(function(d){ dentro[d] = 1; });
+    var porDia = {}, geral = {};
+    var FLAT = (typeof EVENTOS !== 'undefined' && EVENTOS && EVENTOS.flat) ? EVENTOS.flat : [];
+    for(var i=0;i<FLAT.length;i++){
+      var e = FLAT[i];
+      if(e.cls !== 'entrada' || !e.dayKey || !dentro[e.dayKey]) continue;
+      var ehWeb = (typeof nrNorm==='function') && nrNorm(e.pipeline).indexOf('webinar') >= 0;
+      var ok = ehWeb ? nrIsAcessouLive(e.etapa) : nrIsBaseStage(e.etapa);
+      if(!ok) continue;
+      var k = e.tel || e.email || ('x'+i);
+      geral[k] = 1;
+      if(!porDia[e.dayKey]) porDia[e.dayKey] = {};
+      porDia[e.dayKey][k] = 1;
     }
-    return out;
+    var pd = {};
+    Object.keys(porDia).forEach(function(d){ pd[d] = Object.keys(porDia[d]).length; });
+    return { porDia: pd, total: Object.keys(geral).length };
+  }
+  /* ---- EM CONTATO: régua IDÊNTICA à MÉDIA EQUIPE da Taxa de Passagem ----
+     A TP tem DUAS contagens de "Em Contato": a do funil por segmento (uniqBy, chave
+     telefone->email->índice) e a de `etapasNoFiltro` (e-mails únicos POR VENDEDOR, somados
+     entre vendedores). O número em destaque — linha MÉDIA EQUIPE, `taxaEquipe = totV/totC` —
+     usa a segunda. É essa que replicamos aqui, lendo EVENTOS.porDia direto.
+     Consequência herdada da TP: lead atendido por 2 vendedores conta 2x, e lead só-telefone
+     (sem e-mail) não entra. Mexer nisso é mexer na TP também. */
+  function contatoCalc(dks){
+    var porDia = {}, porVend = {};
+    var pd = (typeof EVENTOS !== 'undefined' && EVENTOS && EVENTOS.porDia) ? EVENTOS.porDia : null;
+    var VS = (typeof VENDEDORES !== 'undefined') ? VENDEDORES : [];
+    if(!pd) return { porDia:{}, total:0 };
+    (dks||[]).forEach(function(dk){
+      var dia = pd[dk];
+      if(!dia) return;
+      var n = 0;
+      VS.forEach(function(v){
+        var s = dia[v] && dia[v]['2'];
+        if(!s) return;
+        n += s.size;
+        if(!porVend[v]) porVend[v] = {};
+        s.forEach(function(em){ porVend[v][em] = 1; });
+      });
+      porDia[dk] = n;
+    });
+    var total = 0;
+    Object.keys(porVend).forEach(function(v){ total += Object.keys(porVend[v]).length; });
+    return { porDia: porDia, total: total };
+  }
+  // Vendas dos VENDEDORES do time (numerador da TP). Exclui canal automático (__OUTROS__).
+  function vendasTimeDia(dk){
+    var VS = (typeof VENDEDORES !== 'undefined') ? VENDEDORES : [];
+    var n = 0;
+    Object.keys(DADOS||{}).forEach(function(m){
+      var mes = DADOS[m];
+      if(!mes || !mes.porDia || !mes.porDia[dk]) return;
+      var pv = mes.porDia[dk].porVendedor || {};
+      VS.forEach(function(v){ if(pv[v]) n += pv[v].qtd; });
+    });
+    return n;
   }
   function vendasPorDia(){
     var out = {};
@@ -8518,18 +8590,21 @@ document.addEventListener('visibilitychange', () => {
     set('hmFat', fmtMoney(liq));
     set('hmFatHubla', fmtMoney(hub - refV));
     set('hmFatTmb', fmtMoney(tmb));
-    set('hmFatSub', 'líquido · bruto ' + fmtMoney(bruto) + ' − reembolso ' + fmtMoney(refV));
     set('hmVendas', I(vend));
     set('hmTicket', vend ? fmtMoney(liq/vend) : '–');
     set('hmRefVal', fmtMoney(refV));
     set('hmRefQtd', I(refQ));
     set('hmRefPct', bruto ? pct(100*refV/bruto) : '–');
 
-    // conversão: vendas ÷ leads únicos por dia, dentro do período
-    var lpd = leadsPorDia(), leads = 0;
-    Object.keys(lpd).forEach(function(dk){ if(typeof periodoContem==='function' && periodoContem(dk)) leads += lpd[dk]; });
-    set('hmLeads', I(leads));
-    set('hmConv', leads ? pct(100*vend/leads) : '–');
+    // Conversão = Em Contato -> Venda, régua da MÉDIA EQUIPE da Taxa de Passagem.
+    // diasFiltrados() é a MESMA fonte de dias que a TP usa — por isso os números batem.
+    var dias = (typeof diasFiltrados === 'function') ? diasFiltrados() : [];
+    var emCont = contatoCalc(dias).total;
+    var vTime = 0; dias.forEach(function(dk){ vTime += vendasTimeDia(dk); });
+    set('hmLeads', I(leadsCalc(dias).total));
+    set('hmEmContato', I(emCont));
+    set('hmVendasTime', I(vTime));
+    set('hmConv', emCont ? pct(100*Math.min(vTime/emCont,1)) : '–');
 
     // discadora
     var cpd = callixPorDia();
@@ -8569,7 +8644,14 @@ document.addEventListener('visibilitychange', () => {
     var dks = [];
     for(var i=1;i<=ultimo;i++) dks.push(ym + '-' + String(i).padStart(2,'0'));
 
-    var vpd = vendasPorDia(), lpd = leadsPorDia(), cpd = callixPorDia(), rpd = reembPorDia();
+    var vpd = vendasPorDia(), cpd = callixPorDia(), rpd = reembPorDia();
+    // leads: mesma régua da Taxa de Passagem. Coluna do dia = únicos do dia;
+    // coluna TOTAL = únicos do MÊS (lead que reentra em outro dia conta 1 vez só no total,
+    // por isso a soma horizontal é maior que o TOTAL — é o mesmo comportamento do funil).
+    var LC = leadsCalc(dks), lpd = LC.porDia, leadsMes = LC.total;
+    // Em Contato (régua da TP) para a linha de conversão da matriz
+    var CC = contatoCalc(dks), cpdia = CC.porDia, contatoMes = CC.total;
+    var somaVTime = 0; dks.forEach(function(dk){ somaVTime += vendasTimeDia(dk); });
     // faturamento da matriz = LÍQUIDO (abate o reembolso no dia da venda original),
     // pra coluna TOTAL bater com o card do cabeçalho e com a aba Dashboard.
     var fatLiq  = function(dk){ return ((vpd[dk]&&vpd[dk].total)||0) - ((rpd[dk]&&rpd[dk].total)||0); };
@@ -8588,26 +8670,29 @@ document.addEventListener('visibilitychange', () => {
     head.innerHTML = th;
 
     // ---- definição das linhas
-    var somaFat=0, somaHub=0, somaTmb=0, somaVend=0, somaLeads=0,
+    var somaFat=0, somaHub=0, somaTmb=0, somaVend=0,
         somaCD=0, somaCA=0, somaMD=0, somaMA=0;
     dks.forEach(function(dk){
       somaFat += fatLiq(dk); somaHub += hubLiq(dk); somaTmb += g(vpd,dk,'tmb');
-      somaVend += g(vpd,dk,'qtd');  somaLeads += (lpd[dk]||0);
+      somaVend += g(vpd,dk,'qtd');
       somaCD += g(cpd,dk,'campDisc'); somaCA += g(cpd,dk,'campAtend');
       somaMD += g(cpd,dk,'d1Disc');   somaMA += g(cpd,dk,'d1Atend');
     });
 
     var linhas = [
-      { grp:'💰 Dinheiro' },
-      { lab:'Faturamento total', val:fatLiq, fmt:kBRL, tot:kBRL(somaFat) },
-      { lab:'· Hubla',           val:hubLiq, fmt:kBRL, tot:kBRL(somaHub) },
-      { lab:'· TMB',             val:function(dk){ return g(vpd,dk,'tmb');   }, fmt:kBRL, tot:kBRL(somaTmb) },
+      { grp:'🧮 Funil' },
+      { lab:'Leads',             val:function(dk){ return lpd[dk]||0; }, fmt:I, tot:I(leadsMes) },
+      { lab:'Em Contato',        val:function(dk){ return cpdia[dk]||0; }, fmt:I, tot:I(contatoMes) },
+      { lab:'Conversão',         forte:true,
+        val:function(dk){ var c=cpdia[dk]||0; return c ? 100*Math.min(vendasTimeDia(dk)/c,1) : 0; },
+        fmt:function(v){ return v ? pct(v) : '0%'; },
+        tot: contatoMes ? pct(100*Math.min(somaVTime/contatoMes,1)) : '–' },
       { lab:'Vendas',            val:function(dk){ return g(vpd,dk,'qtd');   }, fmt:I,    tot:I(somaVend) },
       { lab:'Ticket médio',      val:function(dk){ var q=g(vpd,dk,'qtd'); return q ? fatLiq(dk)/q : 0; },
         fmt:kBRL, tot: somaVend ? kBRL(somaFat/somaVend) : '–' },
-      { lab:'Conversão',         val:function(dk){ var l=lpd[dk]||0; return l ? 100*g(vpd,dk,'qtd')/l : 0; },
-        fmt:function(v){ return v ? pct(v) : '0%'; }, tot: somaLeads ? pct(100*somaVend/somaLeads) : '–' },
-      { lab:'Leads',             val:function(dk){ return lpd[dk]||0; }, fmt:I, tot:I(somaLeads) },
+      { lab:'Faturamento total', forte:true, toggle:true, val:fatLiq, fmt:kBRL, tot:kBRL(somaFat) },
+      { lab:'· Hubla', filho:true, val:hubLiq, fmt:kBRL, tot:kBRL(somaHub) },
+      { lab:'· TMB',   filho:true, val:function(dk){ return g(vpd,dk,'tmb'); }, fmt:kBRL, tot:kBRL(somaTmb) },
       { grp:'📞 Discadora' },
       { lab:'Discadas campanha', val:function(dk){ return g(cpd,dk,'campDisc'); }, fmt:I, tot:I(somaCD) },
       { lab:'Discadas 1×1',      val:function(dk){ return g(cpd,dk,'d1Disc');   }, fmt:I, tot:I(somaMD) },
@@ -8626,7 +8711,12 @@ document.addEventListener('visibilitychange', () => {
               + '<td class="hm-tot"></td></tr>';
         return;
       }
-      html += '<tr><td class="hm-fix">'+L.lab+'</td>';
+      // Hubla/TMB nascem colapsadas sob "Faturamento total" (clique no ▸ expande).
+      var trAttr = L.filho ? ' class="hm-filho"' + (window._hmAberto ? '' : ' style="display:none"') : '';
+      var rotulo = L.toggle
+        ? '<span class="hm-tg" onclick="hmToggleFat()">' + (window._hmAberto ? '▾' : '▸') + '</span> ' + L.lab
+        : L.lab;
+      html += '<tr'+trAttr+'><td class="hm-fix'+(L.forte?' forte':'')+'">'+rotulo+'</td>';
       dks.forEach(function(dk){
         var dow = new Date(dk+'T00:00:00').getDay();
         var cls = 'hm-cell' + ((dow===0||dow===6) ? ' fds' : '');
@@ -8634,12 +8724,16 @@ document.addEventListener('visibilitychange', () => {
         var v = L.val(dk);
         var txt = L.fmt(v);
         if(!v) cls += ' zero';
+        if(L.forte) cls += ' forte';
         html += '<td class="'+cls+'">'+txt+'</td>';
       });
-      html += '<td class="hm-tot hm-cell">'+L.tot+'</td></tr>';
+      html += '<td class="hm-tot hm-cell'+(L.forte?' forte':'')+'">'+L.tot+'</td></tr>';
     });
     body.innerHTML = html;
   }
+
+  window._hmAberto = false;
+  window.hmToggleFat = function(){ window._hmAberto = !window._hmAberto; window.renderHome(); };
 
   window.renderHome = function(){
     try{
