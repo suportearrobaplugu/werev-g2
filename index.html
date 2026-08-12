@@ -1,7 +1,16 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-11g
+  CIC-G2 · BUILD 2026-08-12
+  Build 2026-08-12 (cache das abas): a aba Discadora congelava no primeiro carregamento. As abas
+  com cache PRÓPRIO — Discadora (_dcRaw), Motivos de Perda (MP.raw) e a parte Callix da Home
+  (_hmVol) — gravavam o cache UMA vez e nunca mais buscavam, enquanto o carimbo "Atualizado às
+  HH:MM" seguia subindo (o carregarDados de 5 em 5 min não toca nesses caches). Quem abria o dash
+  cedo ficava com a Callix presa perto de zero o dia inteiro. Correção: TTL de 5 min pra todo
+  cache (window.cicCacheFresco + carimbos _dcRawAt/_hmVolAt/MP.at), o auto-refresh passa a
+  reativar o loader da aba visível (window.cicRecarregarAbaAtiva, aba lida do DOM porque não
+  existe variável global de aba corrente) e o mesmo agora vale no visibilitychange. A Home só
+  herda o cache da Discadora enquanto ele estiver fresco, senão buscaria o retrato velho dela.
   Build 2026-08-11g (Home): "Em Contato" trocado para a régua do CARD DO FUNIL da Taxa de
   Passagem (`uniqBy`: pessoa única no período, chave telefone->email->índice) = 2.855 em 01-11/08.
   A build 08-11f usava a régua da TABELA DE VENDEDORES (`etapasNoFiltro`: único POR VENDEDOR,
@@ -7912,7 +7921,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-11g — Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-12 — cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -7924,15 +7933,39 @@ if(tabInicial && document.getElementById('tab-' + tabInicial)){
 carregarDados();
 
 // ===== Auto-refresh a cada 5 min, pausando em aba de segundo plano =====
+// As abas que têm cache PRÓPRIO (Discadora, Motivos de Perda e a parte Callix da Home) usavam
+// cache sem validade: buscavam uma vez e nunca mais. Quem abria o dash cedo ficava com a Callix
+// congelada perto de zero o dia inteiro, enquanto o carimbo "Atualizado às HH:MM" seguia subindo
+// por causa do carregarDados. Agora todo cache tem prazo e o auto-refresh reativa a aba visível.
+window.CIC_CACHE_MS = 300000;                          // 5 min, mesmo ritmo do auto-refresh
+window.cicCacheFresco = function(ts){ return !!ts && (Date.now() - ts) < window.CIC_CACHE_MS; };
+window.cicAbaAtiva = function(){
+  var el = document.querySelector('.tab-content.active');
+  return el ? el.id.replace(/^tab-/, '') : null;
+};
+// Reativa o loader da aba visível. Como cada loader agora respeita o TTL, chamar é barato:
+// se o cache ainda está fresco ele só re-renderiza; se venceu, busca de novo.
+window.cicRecarregarAbaAtiva = function(){
+  var t = window.cicAbaAtiva();
+  if(t === 'discadora'    && typeof window.carregarDiscadora    === 'function') window.carregarDiscadora();
+  if(t === 'motivosperda' && typeof window.carregarMotivosPerda === 'function') window.carregarMotivosPerda();
+  // A Home não precisa de gatilho aqui: carregarDados() já chama renderHome(), e o
+  // hmCarregarCallix() agora refaz o fetch sozinho quando o cache vence.
+};
 let __ultimoLoad = Date.now();
 const __origCarregar = carregarDados;
 carregarDados = function(f){ __ultimoLoad = Date.now(); return __origCarregar(f); };
 setInterval(() => {
-  if(!document.hidden) carregarDados(true);           // só atualiza aba visível
+  if(document.hidden) return;                          // só atualiza aba visível
+  carregarDados(true);
+  window.cicRecarregarAbaAtiva();
 }, 300000);                                            // 5 minutos
 document.addEventListener('visibilitychange', () => {
   // Ao voltar a ficar visível, atualiza (se passou >60s desde o último load).
-  if(!document.hidden && (Date.now() - __ultimoLoad) > 60000) carregarDados(true);
+  if(!document.hidden && (Date.now() - __ultimoLoad) > 60000){
+    carregarDados(true);
+    window.cicRecarregarAbaAtiva();
+  }
 });
 </script>
 <script>
@@ -7974,12 +8007,15 @@ document.addEventListener('visibilitychange', () => {
   }
   window.dcOnPeriodo=function(){ if(window._dcRaw){ dcAplicarRender(); } };
   window.carregarDiscadora=function(){
-    if(window._dcRaw){ dcAplicarRender(); return; }
+    // Cache com validade: sem isto o _dcRaw era gravado UMA vez e nunca mais — a aba ficava
+    // congelada no retrato do primeiro acesso pelo resto da sessão do navegador.
+    if(window._dcRaw && window.cicCacheFresco && window.cicCacheFresco(window._dcRawAt)){ dcAplicarRender(); return; }
     if(window._dcLoading) return; window._dcLoading=true;
     var views=['vw_callix_dash_agente_dia','vw_callix_dash_volume_dia','vw_callix_dash_hora','vw_callix_dash_heatmap','vw_callix_dash_speed'];
     Promise.all(views.map(function(v){return fetchViewCsvSupabase(v).catch(function(){return ''})})).then(function(res){
       try{
         window._dcRaw={ag:dcCSV(res[0]),vol:dcCSV(res[1]),hr:dcCSV(res[2]),hm:dcCSV(res[3]),sp:dcCSV(res[4])};
+        window._dcRawAt=Date.now();
         dcAplicarRender();
       }catch(e){ var er=document.getElementById('dc-err'); if(er)er.textContent='Erro ao renderizar: '+e.message; }
       window._dcLoading=false;
@@ -8153,7 +8189,7 @@ document.addEventListener('visibilitychange', () => {
    etapa_crm vazia. A view reconstrói, por telefone, a última etapa registrada antes do evento
    de perda (cobertura conferida em 07/08/2026: 99,5%). Aqui só lemos pronto. */
 (function(){
-  var MP = { raw:null, carregando:false, carregado:false };
+  var MP = { raw:null, carregando:false, carregado:false, at:0 };
   var COR_ET = { '1':'#2a78d6', '2':'#1baf7a', '3':'#eda100', '4':'#eb6834', '0':'#6b7280' };
   var ORD_LAB = { '1':'1. Entrada de leads', '2':'2. Em Contato', '3':'3. Negociação', '4':'4. Link Pgto / Forecast', '0':'Outras etapas' };
   var COR_WEB = ['#8b7ffe','#a78bfa','#c4b5fd','#7c3aed','#5b21b6'];
@@ -8387,7 +8423,8 @@ document.addEventListener('visibilitychange', () => {
   window.mpOnPeriodo = function(){ if(MP.carregado) mpRender(); };
 
   window.carregarMotivosPerda = function(){
-    if(MP.carregado){ mpRender(); return; }
+    // Mesmo caso da Discadora: sem prazo, a aba servia o primeiro retrato pra sempre.
+    if(MP.carregado && window.cicCacheFresco && window.cicCacheFresco(MP.at)){ mpRender(); return; }
     if(MP.carregando) return;
     MP.carregando = true;
     var ld = document.getElementById('mp-loading'), er = document.getElementById('mp-err');
@@ -8402,7 +8439,7 @@ document.addEventListener('visibilitychange', () => {
         o.etapa_ord = parseInt(o.etapa_ord,10) || 0;
         return o;
       });
-      MP.carregado = true; MP.carregando = false;
+      MP.carregado = true; MP.carregando = false; MP.at = Date.now();
       if(ld) ld.style.display = 'none';
       mpRender();
     }).catch(function(e){
@@ -8450,17 +8487,27 @@ document.addEventListener('visibilitychange', () => {
   }
 
   /* ---- Callix: mesma view da aba Discadora, carregada uma vez ---- */
-  window._hmVol = null; window._hmLoading = false;
+  window._hmVol = null; window._hmLoading = false; window._hmVolAt = 0;
+  // Só aproveita o cache da aba Discadora enquanto ele estiver fresco — senão a Home herdaria
+  // o retrato velho dela e nunca buscaria o próprio.
   function hmCallix(){
-    if(window._dcRaw && window._dcRaw.vol && window._dcRaw.vol.length) return window._dcRaw.vol;
+    if(window._dcRaw && window._dcRaw.vol && window._dcRaw.vol.length
+       && window.cicCacheFresco && window.cicCacheFresco(window._dcRawAt)) return window._dcRaw.vol;
     return window._hmVol;
   }
+  function hmCallixFresco(){
+    if(window._dcRaw && window._dcRaw.vol && window._dcRaw.vol.length
+       && window.cicCacheFresco && window.cicCacheFresco(window._dcRawAt)) return true;
+    return !!(window._hmVol && window.cicCacheFresco && window.cicCacheFresco(window._hmVolAt));
+  }
   function hmCarregarCallix(){
-    if(hmCallix() || window._hmLoading) return;
+    if(window._hmLoading) return;
+    if(hmCallixFresco()) return;
     if(typeof fetchViewCsvSupabase !== 'function') return;
     window._hmLoading = true;
     fetchViewCsvSupabase('vw_callix_dash_volume_dia').then(function(csv){
       window._hmVol = csvObj(csv);
+      window._hmVolAt = Date.now();
       window._hmLoading = false;
       window.renderHome();
     }).catch(function(e){
