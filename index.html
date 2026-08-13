@@ -1,7 +1,20 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-12
+  CIC-G2 · BUILD 2026-08-13
+  Build 2026-08-13 (varredura do ciclo de atualização): o bug do 08-12 não era da aba Discadora, era
+  de CLASSE — render que fica fora do ciclo. Varridas as 42 funções render*/carregar*; o critério é
+  "depende do período E não é alcançável a partir de renderAll/carregarDados/cicRecarregarAbaAtiva".
+  (1) LISTA DE VENDAS (renderRelEventos): só era chamada pelo setTab('relatorios'), então trocar o
+  período não redesenhava; e os rótulos usavam currentMonth (= MÊS) enquanto os dados vinham de
+  dadosAtivos() (= PERÍODO) — com o filtro em "Hoje" mostrava dado de hoje escrito "Agosto". Agora
+  entra no renderAll e os 3 rótulos usam labelPeriodo().
+  (2) REEMBOLSOS: carregarReembolsos tinha cache sem prazo (fetch uma vez por sessão) e
+  renderReembolsos ficava fora do renderAll. Ganhou REEMBOLSOS_AT + cicCacheFresco, entrou no
+  cicRecarregarAbaAtiva e passa a redesenhar na troca de período.
+  (3) renderMonthTabs: LEGADO confirmado — o #monthToggle está com display:none no HTML desde que o
+  filtro universal substituiu as abas de mês. Não é bug; a limpeza (função + elemento + os 3 usos de
+  setMonth) fica pra depois.
   Build 2026-08-12 (cache das abas): a aba Discadora congelava no primeiro carregamento. As abas
   com cache PRÓPRIO — Discadora (_dcRaw), Motivos de Perda (MP.raw) e a parte Callix da Home
   (_hmVol) — gravavam o cache UMA vez e nunca mais buscavam, enquanto o carimbo "Atualizado às
@@ -3601,6 +3614,9 @@ function renderAll(){
   renderFunil();
   renderTaxaPassagem();
   renderEvolucao();
+  // Telas que dependem do período e antes só eram desenhadas ao trocar de aba.
+  renderRelEventos();                                            // lista de vendas
+  if(typeof REEMBOLSOS_DADOS !== 'undefined' && REEMBOLSOS_DADOS) renderReembolsos();
   // Home (build 08-11d) — definida num <script> mais abaixo; guarda evita erro no boot.
   if(typeof window.renderHome === 'function') window.renderHome();
 }
@@ -5809,8 +5825,10 @@ function renderFunil(){
 function renderRelEventos(){
   const tbl = document.getElementById('relEventosTabela');
   if(!tbl) return;
+  // Os dados vêm de dadosAtivos() (= PERÍODO), então o rótulo tem que ser do período também.
+  // Antes usava currentMonth (= mês) e com o filtro em "Hoje" mostrava dado de hoje escrito "Agosto".
   const mesLabel = document.getElementById('relVendMes');
-  if(mesLabel) mesLabel.textContent = currentMonth.charAt(0).toUpperCase()+currentMonth.slice(1);
+  if(mesLabel) mesLabel.textContent = labelPeriodo();
 
   const d = dadosAtivos();
   // junta todas as vendas de todos os dias
@@ -5829,7 +5847,7 @@ function renderRelEventos(){
   });
 
   const cnt = document.getElementById('relEventosCount');
-  if(cnt) cnt.textContent = `${eventos.length} vendas em ${currentMonth.charAt(0).toUpperCase()+currentMonth.slice(1)}`;
+  if(cnt) cnt.textContent = `${eventos.length} venda(s) em ${labelPeriodo()}`;
 
   function fmtData(dt){
     const [a,m,di]=dt.split('-');
@@ -5851,7 +5869,7 @@ function renderRelEventos(){
     <td>${e.produto}</td>
     <td class="num" style="font-weight:700;color:#22c55e">${fmtMoney(e.valor)}</td>
   </tr>`).join('');
-  if(!eventos.length) body = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">Nenhuma venda registrada neste mês.</td></tr>';
+  if(!eventos.length) body = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">Nenhuma venda registrada no período selecionado.</td></tr>';
 
   tbl.innerHTML = head + '<tbody>' + body + '</tbody>';
 }
@@ -5986,6 +6004,7 @@ function responderChat(q){
 // ===== Aba Reembolsos: lê a aba BD Reembolso da planilha de vendas =====
 const REEMBOLSOS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBV0F7S_7b1qi9WFTeGORVnJZ6J76tYEvPqAmWQjtwIsSv-dgbuOq_Qqef4YWNKIz0D1F8n_dqHK_F/pub?gid=595173569&single=true&output=csv';
 let REEMBOLSOS_DADOS = null;
+let REEMBOLSOS_AT = 0;          // carimbo do cache (mesmo padrão de _dcRawAt / MP.at)
 // MESES_KEYS e MES_NUM_KEY agora são dinâmicos (definidos no bloco de chaves de mês).
 
 // valor que trata tanto 1.199,88 quanto 1199.88
@@ -6011,12 +6030,15 @@ async function fetchReembolsos(){
   // mesmos cabeçalhos que processarReembolsos espera. REEMBOLSOS_CSV_URL fica como legado.
   const txt = await fetchReembolsosSupabase();
   REEMBOLSOS_DADOS = processarReembolsos(txt);
+  REEMBOLSOS_AT = Date.now();
   return REEMBOLSOS_DADOS;
 }
 
 async function carregarReembolsos(){
   const el = document.getElementById('reembolsosContent');
-  if(REEMBOLSOS_DADOS){ renderReembolsos(); return; }
+  // Cache com validade: sem isto o fetch acontecia UMA vez por sessão e reembolso novo
+  // só aparecia com F5 — mesmo bug que a Discadora tinha antes do cicCacheFresco.
+  if(REEMBOLSOS_DADOS && window.cicCacheFresco && window.cicCacheFresco(REEMBOLSOS_AT)){ renderReembolsos(); return; }
   el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Carregando reembolsos…</div>';
   try{
     await fetchReembolsos();
@@ -7921,7 +7943,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-12 — cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-13 — varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -7949,6 +7971,7 @@ window.cicRecarregarAbaAtiva = function(){
   var t = window.cicAbaAtiva();
   if(t === 'discadora'    && typeof window.carregarDiscadora    === 'function') window.carregarDiscadora();
   if(t === 'motivosperda' && typeof window.carregarMotivosPerda === 'function') window.carregarMotivosPerda();
+  if(t === 'reembolsos'   && typeof carregarReembolsos          === 'function') carregarReembolsos();
   // A Home não precisa de gatilho aqui: carregarDados() já chama renderHome(), e o
   // hmCarregarCallix() agora refaz o fetch sozinho quando o cache vence.
 };
