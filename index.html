@@ -1,7 +1,18 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-24b
+  CIC-G2 · BUILD 2026-08-24c
+  Build 2026-08-24c (heatmap por dia da semana): dois toggles no heatmap da Discadora —
+  eixo [Vendedor | Dia da semana] (abre em Dia da semana) e métrica [Atendidas | Vendas | TMA].
+  No eixo de dia da semana, Atendidas e Vendas viram MÉDIA POR DIA: em agosto a base tem 4 segundas
+  e 3 quintas, então o total bruto diria "concentra na segunda" (298) quando a média por dia diz
+  quinta (90,0 x 74,5). O denominador são os dias daquele dia da semana COM registro no período,
+  contados uma vez por DATA (não por célula: hora esparsa dividiria por 1 e brilharia). TMA nunca é
+  dividido por dias — já é razão, e não muda ao trocar de eixo. Eixo de vendedor segue no total
+  bruto e inteiro, sem normalização (todos os vendedores veem os mesmos dias).
+  ARMADILHA DE FUSO: dcDow() quebra 'YYYY-MM-DD' na mão porque new Date('2026-08-24') é meia-noite
+  UTC = 21h do dia anterior em BRT — o eixo inteiro sairia deslocado um dia com números plausíveis.
+  NÃO trocar por new Date(r.data).
   Build 2026-08-24 (heatmap por TMA + relatório sem canal automático):
   (1A) o heatmap da Discadora ganhou a métrica TMA no toggle [Atendidas | Vendas | TMA], paleta âmbar
   e tooltip com a amostra da célula. A vw_callix_dash_heatmap passou a expor tempo_falado_s
@@ -1401,8 +1412,21 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 
     <div class="dc-sec"><span class="bar" style="background:var(--purple,#a78bfa)"></span><h2>Janela de discagem</h2><small>— melhor horário</small></div>
     <div class="dc-card">
-      <div class="dc-hd"><div><h3>Heatmap hora × vendedor</h3><div class="dc-cap" style="margin:0">Cor = intensidade por hora.</div></div>
-        <div class="dc-tgl"><button class="on" id="dc-hm-vol" onclick="dcSetHeat('atendidas')">Atendidas</button><button id="dc-hm-ven" onclick="dcSetHeat('vendas')">Vendas</button><button id="dc-hm-tma" onclick="dcSetHeat('tma')">TMA</button></div></div>
+      <div class="dc-hd">
+        <div><h3 id="dc-hm-titulo">Heatmap hora × dia da semana</h3>
+             <div class="dc-cap" id="dc-hm-cap" style="margin:0">Média por dia — total dividido pelos dias daquele dia da semana com operação no período.</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div class="dc-tgl">
+            <button id="dc-hm-ex-vend" onclick="dcSetHeatEixo('vend')">Vendedor</button>
+            <button class="on" id="dc-hm-ex-dow" onclick="dcSetHeatEixo('dow')">Dia da semana</button>
+          </div>
+          <div class="dc-tgl">
+            <button class="on" id="dc-hm-vol" onclick="dcSetHeat('atendidas')">Atendidas</button>
+            <button id="dc-hm-ven" onclick="dcSetHeat('vendas')">Vendas</button>
+            <button id="dc-hm-tma" onclick="dcSetHeat('tma')">TMA</button>
+          </div>
+        </div>
+      </div>
       <div id="dc-heat"></div>
     </div>
     <div class="dc-card" style="margin-top:16px"><h3>Curva horária</h3><div class="dc-cap">Discado vs. atendido ao longo do dia.</div><div class="dc-box"><canvas id="dcHora"></canvas></div></div>
@@ -7967,7 +7991,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-24b — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-24c — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -8019,7 +8043,7 @@ document.addEventListener('visibilitychange', () => {
 /* ===== Aba Discadora (Callix) — data-driven, lê as views vw_callix_dash_* ===== */
 (function(){
   var DCP={accent:'#335FEB',green:'#22c55e',red:'#ef4444',orange:'#f59e0b',gold:'#fbbf24',silver:'#cbd5e1',purple:'#a78bfa',blue2:'#4f86f0',grid:'rgba(143,163,199,.14)',muted:'#8FA3C7'};
-  window._dcCharts={}; window._dcLoaded=false; window._dcHeat=null; window._dcHeatMetric='atendidas';
+  window._dcCharts={}; window._dcLoaded=false; window._dcHeat=null; window._dcHeatMetric='atendidas'; window._dcHeatEixo='dow';
 
   function dcCSV(txt){
     if(!txt) return [];
@@ -8187,12 +8211,40 @@ document.addEventListener('visibilitychange', () => {
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:DCP.muted}}},scales:baseScales}});
 
     /* ---- Heatmap ---- */
-    var hmg={};var agH={};var hrsH={};
-    hm.forEach(function(r){var a=r.agente_nome||r.callix_user_id,h=+r.hora;agH[a]=(agH[a]||0)+N(r.atendidas);hrsH[h]=1;var k=a+'|'+h;if(!hmg[k])hmg[k]={atendidas:0,vendas:0,tempo:0};hmg[k].atendidas+=N(r.atendidas);hmg[k].vendas+=N(r.vendas);hmg[k].tempo+=N(r.tempo_falado_s);});
-    var hmAgents=Object.keys(agH).sort(function(a,b){return agH[b]-agH[a]});
+    // Monta as DUAS grades de uma vez: alternar o eixo não refaz fetch nem reprocessa.
+    var DOW_NOME=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado']; // índice = getDay()
+    var DOW_ORDEM=[1,2,3,4,5,6,0];                                                 // Seg -> Dom
+    // Quebra 'YYYY-MM-DD' na mão de PROPÓSITO: new Date('2026-08-24') é meia-noite UTC, que em
+    // BRT cai no dia anterior — o eixo inteiro sairia deslocado um dia e os números continuariam
+    // plausíveis. NÃO trocar por new Date(r.data).
+    function dcDow(d){ var p=String(d||'').split('-'); if(p.length<3) return null;
+      return new Date(+p[0],+p[1]-1,+p[2]).getDay(); }
+    function dcAcum(g,k,r){ if(!g[k])g[k]={atendidas:0,vendas:0,tempo:0};
+      g[k].atendidas+=N(r.atendidas); g[k].vendas+=N(r.vendas); g[k].tempo+=N(r.tempo_falado_s); }
+    var gV={},gD={},agH={},hrsH={},diasDow={},vistos={};
+    hm.forEach(function(r){
+      var h=+r.hora; hrsH[h]=1;
+      var a=r.agente_nome||r.callix_user_id;
+      agH[a]=(agH[a]||0)+N(r.atendidas);
+      dcAcum(gV,a+'|'+h,r);
+      var w=dcDow(r.data); if(w===null) return;
+      var nome=DOW_NOME[w];
+      // Denominador contado UMA vez por DATA, não por célula: se fosse por célula, uma hora
+      // esparsa (só 1 quinta às 20h) dividiria por 1 e apareceria tão forte quanto o pico das 14h.
+      var vk=nome+'|'+r.data;
+      if(!vistos[vk]){ vistos[vk]=1; diasDow[nome]=(diasDow[nome]||0)+1; }
+      dcAcum(gD,nome+'|'+h,r);
+    });
     var hmHoras=Object.keys(hrsH).map(function(h){return +h}).sort(function(a,b){return a-b});
-    window._dcHeat={g:hmg,agents:hmAgents,horas:hmHoras};
-    dcSetHeat(window._dcHeatMetric);
+    window._dcHeat={
+      horas:hmHoras,
+      vend:{ g:gV, dias:null,
+             linhas:Object.keys(agH).sort(function(a,b){return agH[b]-agH[a]}) },
+      dow :{ g:gD, dias:diasDow,
+             linhas:DOW_ORDEM.map(function(i){return DOW_NOME[i]})
+                             .filter(function(n){return (diasDow[n]||0)>0}) }
+    };
+    dcSetHeat();
 
     /* ---- Speed ---- */
     var order=['1. <5min','2. 5-60min','3. 1-6h','4. 6-24h','5. 1-7d','6. +7d'];
@@ -8215,49 +8267,69 @@ document.addEventListener('visibilitychange', () => {
   }
 
   window.dcSetHeat=function(metric){
-    window._dcHeatMetric=metric;
-    var vb=document.getElementById('dc-hm-vol'),
-        vn=document.getElementById('dc-hm-ven'),
-        vt=document.getElementById('dc-hm-tma');
-    if(vb)vb.classList.toggle('on',metric==='atendidas');
-    if(vn)vn.classList.toggle('on',metric==='vendas');
-    if(vt)vt.classList.toggle('on',metric==='tma');
-    // TMA = tempo total / atendidas. A view entrega tempo SOMADO (não média por linha) de
-    // propósito: o período pode ter vários dias, e média de médias faria uma hora com 1 ligação
-    // de 20 min pesar igual a uma hora com 30 ligações de 1 min. Somando e dividindo no fim,
-    // sai a média ponderada correta.
-    var val=function(c){
+    if(metric) window._dcHeatMetric=metric;      // sem argumento = só re-renderiza
+    var M=window._dcHeatMetric||'atendidas', E=window._dcHeatEixo||'dow';
+    var tg=function(id,on){var e=document.getElementById(id); if(e)e.classList.toggle('on',on);};
+    tg('dc-hm-vol',M==='atendidas'); tg('dc-hm-ven',M==='vendas'); tg('dc-hm-tma',M==='tma');
+    tg('dc-hm-ex-vend',E==='vend');  tg('dc-hm-ex-dow',E==='dow');
+    var H=window._dcHeat, el=document.getElementById('dc-heat'); if(!H||!el)return;
+    var A = E==='dow' ? H.dow : H.vend;
+    var t=document.getElementById('dc-hm-titulo');
+    if(t) t.textContent='Heatmap hora × '+(E==='dow'?'dia da semana':'vendedor');
+    var cp=document.getElementById('dc-hm-cap');
+    if(cp) cp.textContent = E!=='dow' ? 'Cor = intensidade por hora.'
+        : (M==='tma' ? 'TMA médio da hora, ponderado pelas ligações. Cor = intensidade.'
+                     : 'Média por dia — total dividido pelos dias daquele dia da semana com operação no período.');
+    if(!A.linhas.length){el.innerHTML='<div class="dc-note">Sem dados no período.</div>';return;}
+    // TMA = tempo total / atendidas. A view entrega tempo SOMADO de propósito: média de médias
+    // faria uma hora com 1 ligação de 20 min pesar igual a uma com 30 ligações de 1 min.
+    // Atendidas e Vendas viram média por dia SÓ no eixo de dia da semana, onde cada linha tem um
+    // número diferente de dias no período (4 segundas contra 3 quintas em agosto). No eixo de
+    // vendedor todos veem os mesmos dias, então não há o que normalizar.
+    // TMA NUNCA é dividido por dias: já é razão.
+    var val=function(c,linha){
       if(!c) return 0;
-      if(metric==='tma') return c.atendidas ? Math.round(c.tempo/c.atendidas) : 0;
-      return c[metric]||0;
+      if(M==='tma') return c.atendidas ? c.tempo/c.atendidas : 0;
+      var v=c[M]||0;
+      if(E!=='dow') return v;
+      var d=(A.dias&&A.dias[linha])||0; return d ? v/d : 0;
     };
     var fmt=function(v){
       if(!v) return '';
-      if(metric!=='tma') return v;
-      var m=Math.floor(v/60), s=v%60;
-      return m ? (m+'m'+String(s).padStart(2,'0')) : (s+'s');
+      if(M==='tma'){ var s=Math.round(v),m=Math.floor(s/60);
+                     return m ? (m+'m'+String(s%60).padStart(2,'0')) : (s+'s'); }
+      if(E!=='dow') return v;                                   // eixo vendedor = inteiro cru
+      // Média por dia SEMPRE com 1 casa. O spec trazia `v>=10 ? Math.round(v)`, mas isso
+      // contradiz a própria tabela de validação dele (19,7 viraria 20; 17,3 viraria 17) e
+      // apaga justamente a distinção que a normalização existe pra mostrar.
+      return v.toFixed(1).replace('.',',');
     };
-    var H=window._dcHeat; var el=document.getElementById('dc-heat'); if(!H||!el)return;
-    if(!H.agents.length){el.innerHTML='<div class="dc-note">Sem dados no período.</div>';return;}
-    var max=0;H.agents.forEach(function(a){H.horas.forEach(function(h){var v=val(H.g[a+'|'+h]);if(v>max)max=v;})});
+    var dica=function(c,linha){
+      if(!c) return '';
+      if(M==='tma') return ' title="'+c.atendidas+' atendida(s)"';
+      if(E!=='dow') return '';
+      return ' title="'+(c[M]||0)+' no total · '+((A.dias&&A.dias[linha])||0)+' dia(s)"';
+    };
+    var max=0;
+    A.linhas.forEach(function(l){H.horas.forEach(function(h){
+      var v=val(A.g[l+'|'+h],l); if(v>max)max=v; })});
     var colsV=['#0e2a4d','#173f73','#1e4b8a','#2f6fd6','#5b9bff','#a8ccff'];
     var colsS=['#0e2a4d','#14532d','#166534','#16a34a','#22c55e','#86efac'];
     var colsT=['#0e2a4d','#4a2a08','#7c4a0f','#b8701a','#e08a2b','#fbbf24'];
-    var cols = metric==='vendas'?colsS : metric==='tma'?colsT : colsV;
+    var cols = M==='vendas'?colsS : M==='tma'?colsT : colsV;
     var gcss='grid-template-columns:120px repeat('+H.horas.length+',1fr)';
     var html='<div class="dc-hm" style="'+gcss+'"><div></div>'+H.horas.map(function(h){return '<div class="hh">'+String(h).padStart(2,'0')+'h</div>'}).join('');
-    H.agents.forEach(function(a){
-      html+='<div class="hl">'+a.split(' ')[0]+'</div>';
+    A.linhas.forEach(function(l){
+      html+='<div class="hl">'+(E==='dow'?l:l.split(' ')[0])+'</div>';
       H.horas.forEach(function(h){
-        var c=H.g[a+'|'+h], v=val(c);
+        var c=A.g[l+'|'+h], v=val(c,l);
         var idx=max?Math.min(cols.length-1,Math.round(v/max*(cols.length-1))):0;
-        html+='<div class="cell" style="background:'+(v?cols[idx]:'#0a1f38')+'"'
-            + (metric==='tma'&&c?' title="'+c.atendidas+' atendida(s)"':'')
-            + '>'+fmt(v)+'</div>';
+        html+='<div class="cell" style="background:'+(v?cols[idx]:'#0a1f38')+'"'+dica(c,l)+'>'+fmt(v)+'</div>';
       });
     });
     html+='</div>';el.innerHTML=html;
-  };;
+  };
+  window.dcSetHeatEixo=function(eixo){ window._dcHeatEixo=eixo; dcSetHeat(); };;;
 })();
 
 /* ===== Aba "Motivos de Perda" — lê vw_dash_perda_etapa =====
