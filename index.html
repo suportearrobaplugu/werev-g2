@@ -1,7 +1,23 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-13
+  CIC-G2 · BUILD 2026-08-24b
+  Build 2026-08-24 (heatmap por TMA + relatório sem canal automático):
+  (1A) o heatmap da Discadora ganhou a métrica TMA no toggle [Atendidas | Vendas | TMA], paleta âmbar
+  e tooltip com a amostra da célula. A vw_callix_dash_heatmap passou a expor tempo_falado_s
+  (soma de service_duration_s) — tempo SOMADO, não TMA pronto, de propósito: o período pode ter
+  vários dias e média de médias faria uma hora com 1 ligação de 20 min pesar igual a uma hora com
+  30 ligações de 1 min. Soma-se tempo e atendidas e divide-se no fim = média ponderada.
+  (2) a lista de vendas (Relatórios) deixou de imprimir __OUTROS__ — canal automático (mitsuo) e
+  liderança (aline) não entram na validação de pagamento do time comercial.
+  (1B) "Tempo excedido" passou a contar como ATENDIDA: são 206 ligações, todas com answered_at e
+  fala média de 128s — conversa real que o agente não qualificou a tempo. cic_callix_contato agora
+  só exclui a família 0.x. Efeito colateral tratado: o man_timeout da vw_callix_dash_volume_dia
+  ganhou "AND NOT cic_callix_contato(...)", senão a mesma ligação contaria como atendida E perdida.
+  (3) Felipe, João Paulo e Walisson saem das VISUALIZAÇÕES por período (VENDEDOR_ATE = Walisson 7,
+  JoaoP 6, Felipe 7). 35 pontos trocados de VENDEDORES para vendedoresNoPeriodo() em 14 funções de
+  tela; os 14 pontos em ACUMULADORES (processarEventos, calcStats*, calcularFunil, calcularRecordes,
+  reembolsos) ficaram INTACTOS de propósito — filtrar ali mudaria totais e perderia histórico.
   Build 2026-08-13 (varredura do ciclo de atualização): o bug do 08-12 não era da aba Discadora, era
   de CLASSE — render que fica fora do ciclo. Varridas as 42 funções render*/carregar*; o critério é
   "depende do período E não é alcançável a partir de renderAll/carregarDados/cicRecarregarAbaAtiva".
@@ -1386,7 +1402,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <div class="dc-sec"><span class="bar" style="background:var(--purple,#a78bfa)"></span><h2>Janela de discagem</h2><small>— melhor horário</small></div>
     <div class="dc-card">
       <div class="dc-hd"><div><h3>Heatmap hora × vendedor</h3><div class="dc-cap" style="margin:0">Cor = intensidade por hora.</div></div>
-        <div class="dc-tgl"><button class="on" id="dc-hm-vol" onclick="dcSetHeat('atendidas')">Atendidas</button><button id="dc-hm-ven" onclick="dcSetHeat('vendas')">Vendas</button></div></div>
+        <div class="dc-tgl"><button class="on" id="dc-hm-vol" onclick="dcSetHeat('atendidas')">Atendidas</button><button id="dc-hm-ven" onclick="dcSetHeat('vendas')">Vendas</button><button id="dc-hm-tma" onclick="dcSetHeat('tma')">TMA</button></div></div>
       <div id="dc-heat"></div>
     </div>
     <div class="dc-card" style="margin-top:16px"><h3>Curva horária</h3><div class="dc-cap">Discado vs. atendido ao longo do dia.</div><div class="dc-box"><canvas id="dcHora"></canvas></div></div>
@@ -1962,7 +1978,11 @@ function rotuloMotivo(motivoRaw){
 
 const VENDEDORES = ['Pedro','Felipe','JoaoG','JoaoP','Guilherme','Lorena','Walisson','Thalita','GabrielP','Jocinete','Vanessa','GustavoH'];
 // Vendedores que saíram do time: aparecem só até o mês indicado (inclusive). Depois disso, somem do dashboard.
-const VENDEDOR_ATE = { Walisson: 6, JoaoP: 6 }; // 6 = junho
+const VENDEDOR_ATE = { Walisson: 7, JoaoP: 6, Felipe: 7 }; // último mês em que aparecem
+// Datas confirmadas por 2 fontes: última venda REAL (parcela 1) e último evento no CRM.
+// JoaoP 16/06 · Walisson 01/07 (estava 6 e sumia em julho tendo vendido em 01/07) · Felipe 30/07.
+// As "vendas" de agosto dos três são 100% parcela 3 e 4 do Smart Installment — o dash já
+// descarta parcela > 1 desde 05/08, então não existe venda órfã.
 // Vendedores que entraram: aparecem só a partir do mês indicado (inclusive).
 const VENDEDOR_DESDE = { Jocinete: 7, Vanessa: 7, GustavoH: 7 }; // 7 = julho
 // Retorna os vendedores válidos para um mês (chave 'julho'/'junho'/...).
@@ -2812,7 +2832,7 @@ function renderRondas(){
   // Plugin: desenha foto do vendedor (circular) embaixo de cada barra
   const PHOTO_R = 14; // raio do círculo da foto
   const nomeParaChave = {};
-  VENDEDORES.forEach(v => { nomeParaChave[displayName(v)] = v; });
+  vendedoresNoPeriodo().forEach(v => { nomeParaChave[displayName(v)] = v; });
   const photoCache = {};
   function getPhotoImg(chave){
     if(photoCache[chave]) return photoCache[chave];
@@ -2976,7 +2996,7 @@ function renderTabelaRondas(dia, diaKey){
   HORARIOS.forEach(h => totaisPorHora[h] = { valor: 0, qtd: 0 });
   let totalGeralValor = 0, totalGeralQtd = 0;
   
-  VENDEDORES.forEach(v => {
+  vendedoresNoPeriodo().forEach(v => {
     const nome = displayName(v);
     const cor = VENDOR_COLORS[v];
     const tot = totalDiaVendedor(v);
@@ -3175,9 +3195,9 @@ function renderTabela(){
   
   ranking.forEach((v,i)=>{
     const ticket = v.qtd>0 ? v.valor/v.qtd : 0;
-    const pctOuro = (v.valor/(META_OURO/VENDEDORES.length)*100);
-    const pctPrata = (v.valor/(META_PRATA/VENDEDORES.length)*100);
-    const pctBronze = (v.valor/(META_BRONZE/VENDEDORES.length)*100);
+    const pctOuro = (v.valor/(META_OURO/vendedoresNoPeriodo().length)*100);
+    const pctPrata = (v.valor/(META_PRATA/vendedoresNoPeriodo().length)*100);
+    const pctBronze = (v.valor/(META_BRONZE/vendedoresNoPeriodo().length)*100);
     const isKing = i===0 && v.valor>0;
     const status = v.qtd===0 ? '<span class="badge red">Sem vendas</span>' : '<span class="badge orange">Em andamento</span>';
     const nome = displayName(v.nome);
@@ -3258,7 +3278,7 @@ function renderProjecao(){
   
   // Projeção é MENSAL: usa o bucket do mês âncora (mês da data final do período), não o intervalo.
   const fatAtual = DADOS[currentMonth] ? DADOS[currentMonth].totalFaturamento : 0;
-  const nVendedores = VENDEDORES.length;
+  const nVendedores = vendedoresNoPeriodo().length;
   const metas = [
     {nome:'Ouro', medal:'🥇', valor:META_OURO, classe:'ouro', cor:'gold'},
     {nome:'Prata', medal:'🥈', valor:META_PRATA, classe:'prata', cor:'silver'},
@@ -3848,7 +3868,7 @@ function gerarRelatorioSemana(seg, dom){
     melhorDia: { data: null, valor: 0, qtd: 0 }
   };
   
-  VENDEDORES.forEach(v => {
+  vendedoresNoPeriodo().forEach(v => {
     stats.porVendedor[v] = { valor: 0, qtd: 0, dias: new Set() };
   });
   
@@ -3957,7 +3977,7 @@ function renderRelatorios(){
 
 function renderRelatorioBody(r, isoWeek, ano, periodo, dFat, dQtd){
   // Performance por vendedor
-  const vendedoresOrdenados = VENDEDORES
+  const vendedoresOrdenados = vendedoresNoPeriodo()
     .map(v => ({ nome: v, ...r.stats.porVendedor[v] }))
     .sort((a, b) => b.valor - a.valor);
   
@@ -4341,7 +4361,7 @@ function baixarRelatorioPDF(idx){
   doc.line(margin, y + 1.5, margin + 75, y + 1.5);
   y += 7;
   
-  const vendedoresOrdenados = VENDEDORES
+  const vendedoresOrdenados = vendedoresNoPeriodo()
     .map(v => ({ nome: v, ...r.stats.porVendedor[v] }))
     .filter(v => v.valor > 0 || v.qtd > 0)
     .sort((a, b) => b.valor - a.valor);
@@ -4718,7 +4738,7 @@ function gerarInsights(atual, anterior, labelAtual, labelAnterior){
   }
   
   // 5) Vendedor com recorde pessoal (subiu >40%)
-  VENDEDORES.forEach(v => {
+  vendedoresNoPeriodo().forEach(v => {
     const a = atual.porVendedor[v] || { valor: 0, qtd: 0 };
     const b = anterior.porVendedor[v] || { valor: 0, qtd: 0 };
     if(a.valor > 0 && b.valor > 0){
@@ -4986,7 +5006,7 @@ function perdasAgregadasFiltrado(){
 
 function perdasOpPorVendedorFiltrado(){
   const out = {};
-  VENDEDORES.forEach(v => out[v] = 0);
+  vendedoresNoPeriodo().forEach(v => out[v] = 0);
   if(EVENTOS && EVENTOS.perdas && EVENTOS.perdas.porEmail){
     Object.values(EVENTOS.perdas.porEmail).forEach(p=>{
       if(p.tipo !== 'operacional') return;
@@ -5136,7 +5156,7 @@ function renderTaxaPassagem(){
 
   // Agregado equipe
   let totC = 0, totV = 0;
-  VENDEDORES.forEach(v=>{ totC += f.porVendedor[v].etapas['2']; totV += f.porVendedor[v].vendas; });
+  vendedoresNoPeriodo().forEach(v=>{ totC += f.porVendedor[v].etapas['2']; totV += f.porVendedor[v].vendas; });
   const taxaEquipe = totC > 0 ? Math.min(totV/totC, 1) : 0;
 
   // ---- BLOCO 1: O que fica e o que sai (Em Contato -> Venda) ----
@@ -5159,10 +5179,10 @@ function renderTaxaPassagem(){
 
   // ---- BLOCO 2: Comparação entre vendedores (Em Contato -> Venda) ----
   const taxas = {};
-  VENDEDORES.forEach(v=> taxas[v]=taxaC2V(v));
-  const vals = VENDEDORES.map(v=>taxas[v]).filter(x=>x>0);
+  vendedoresNoPeriodo().forEach(v=> taxas[v]=taxaC2V(v));
+  const vals = vendedoresNoPeriodo().map(v=>taxas[v]).filter(x=>x>0);
   const media = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
-  const ord = [...VENDEDORES].sort((a,b)=> taxas[b]-taxas[a]);
+  const ord = [...vendedoresNoPeriodo()].sort((a,b)=> taxas[b]-taxas[a]);
   let b2 = `<div class="card" style="padding:0;overflow-x:auto;margin-bottom:16px">
     <div style="padding:16px 16px 4px;font-weight:800;color:var(--text-strong);font-size:15px">Comparação entre vendedores</div>
     <div style="padding:0 16px 12px;font-size:12px;color:var(--muted)">Taxa de conversão <b>Em Contato → Venda</b> · verde = acima da média da equipe</div>
@@ -5208,17 +5228,17 @@ function renderTaxaPassagem(){
     // 100% falso. Fica de fora da média, é ordenado por último e a taxa vira "—".
     const semBaseV = v => f.porVendedor[v].etapas['2'] === 0;
     const taxasR = {};
-    VENDEDORES.forEach(v=> taxasR[v]=taxaRealV(v));
-    const valsR = VENDEDORES.filter(v=> !semBaseV(v)).map(v=>taxasR[v]).filter(x=>x>0);
+    vendedoresNoPeriodo().forEach(v=> taxasR[v]=taxaRealV(v));
+    const valsR = vendedoresNoPeriodo().filter(v=> !semBaseV(v)).map(v=>taxasR[v]).filter(x=>x>0);
     const mediaR = valsR.length ? valsR.reduce((a,b)=>a+b,0)/valsR.length : 0;
     const sortKeyR = v => semBaseV(v) ? -1 : taxasR[v];
-    const ordR = [...VENDEDORES].sort((a,b)=> sortKeyR(b)-sortKeyR(a));
+    const ordR = [...vendedoresNoPeriodo()].sort((a,b)=> sortKeyR(b)-sortKeyR(a));
 
-    let totOpV = 0; VENDEDORES.forEach(v=> totOpV += (opV[v]||0));
+    let totOpV = 0; vendedoresNoPeriodo().forEach(v=> totOpV += (opV[v]||0));
 
     // Totais da equipe pra linha de rodapé
     let tEmContato=0, tBase=0, tVendas=0;
-    VENDEDORES.forEach(v=>{
+    vendedoresNoPeriodo().forEach(v=>{
       const p=f.porVendedor[v];
       tEmContato += p.etapas['2'];
       tVendas += p.vendas;
@@ -5289,14 +5309,14 @@ function renderTaxaPassagem(){
       return base > 0 ? Math.min(p.vendas / base, 1) : 0;
     };
     // métricas de referência da equipe
-    const contatos = VENDEDORES.map(v=> f.porVendedor[v].etapas['2']);
-    const contatoMedio = contatos.reduce((a,b)=>a+b,0) / (VENDEDORES.length||1);
-    const taxasR = {}; VENDEDORES.forEach(v=> taxasR[v]=taxaRealV(v));
-    const valsR = VENDEDORES.map(v=>taxasR[v]).filter(x=>x>0);
+    const contatos = vendedoresNoPeriodo().map(v=> f.porVendedor[v].etapas['2']);
+    const contatoMedio = contatos.reduce((a,b)=>a+b,0) / (vendedoresNoPeriodo().length||1);
+    const taxasR = {}; vendedoresNoPeriodo().forEach(v=> taxasR[v]=taxaRealV(v));
+    const valsR = vendedoresNoPeriodo().map(v=>taxasR[v]).filter(x=>x>0);
     const taxaMediaR = valsR.length ? valsR.reduce((a,b)=>a+b,0)/valsR.length : 0;
 
     // perdas por tempo/janela do recorte (por vendedor e total)
-    const perdasTempoV = {}; VENDEDORES.forEach(v=> perdasTempoV[v]=0);
+    const perdasTempoV = {}; vendedoresNoPeriodo().forEach(v=> perdasTempoV[v]=0);
     let perdasTempoTotal = 0, perdasTotal = 0;
     if(EVENTOS.perdas && EVENTOS.perdas.porEmail){
       Object.values(EVENTOS.perdas.porEmail).forEach(p=>{
@@ -5311,7 +5331,7 @@ function renderTaxaPassagem(){
     const insights = [];
     const fmt = x => (x*100).toFixed(1).replace('.0','')+'%';
 
-    VENDEDORES.forEach(v=>{
+    vendedoresNoPeriodo().forEach(v=>{
       const p = f.porVendedor[v];
       const contato = p.etapas['2'];
       const tr = taxasR[v];
@@ -5567,7 +5587,7 @@ function renderTaxaPassagem(){
     <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">🎯 Quantos leads/hora pra fazer 2 vendas/hora?</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Base: leads em <b>Em Contato</b> · ${f.nDias} dia(s) · ${HORAS_POR_DIA}h/dia. Fórmula: leads/h = 2 ÷ (taxa Em Contato → Venda).</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">`;
-  VENDEDORES.forEach(v=>{
+  vendedoresNoPeriodo().forEach(v=>{
     const p = f.porVendedor[v];
     const cor = VENDOR_COLORS[v] || 'var(--accent)';
     const foto = (VENDOR_PHOTOS && VENDOR_PHOTOS[v]) ? VENDOR_PHOTOS[v] : '';
@@ -5682,7 +5702,7 @@ function renderTimes(){
 }
 
 function renderMetaCards(){
-  const n = VENDEDORES.length || 1;
+  const n = vendedoresNoPeriodo().length || 1;
   const cfg = [
     { val:META_OURO,   id:'metaCardOuro' },
     { val:META_PRATA,  id:'metaCardPrata' },
@@ -5723,7 +5743,7 @@ function renderFunil(){
   // Agregado da equipe (soma das etapas) pro funil visual macro
   const totEt = {'1':0,'2':0,'3':0,'4':0};
   let totVendas = 0;
-  VENDEDORES.forEach(v=>{
+  vendedoresNoPeriodo().forEach(v=>{
     const p = f.porVendedor[v];
     FUNIL_ETAPAS.forEach(e=> totEt[e.key]+= p.etapas[e.key]);
     totVendas += p.vendas;
@@ -5768,7 +5788,7 @@ function renderFunil(){
       <th style="padding:10px 8px;text-align:center">4→V</th>
       <th style="padding:10px 8px;text-align:center">Taxa global</th>
     </tr></thead><tbody>`;
-  VENDEDORES.forEach(v=>{
+  vendedoresNoPeriodo().forEach(v=>{
     const p = f.porVendedor[v];
     const cor = VENDOR_COLORS[v] || 'var(--accent)';
     tab += `<tr style="border-bottom:1px solid var(--border)">
@@ -5792,7 +5812,7 @@ function renderFunil(){
     <div style="font-weight:800;color:var(--text-strong);font-size:15px;margin-bottom:4px">🎯 Quantos leads/hora pra fazer 2 vendas/hora?</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Fórmula reversa: leads/h = 2 ÷ (taxa global do vendedor). O gap mostra quanto falta ou sobra no volume atual.</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">`;
-  VENDEDORES.forEach(v=>{
+  vendedoresNoPeriodo().forEach(v=>{
     const p = f.porVendedor[v];
     const cor = VENDOR_COLORS[v] || 'var(--accent)';
     const foto = (VENDOR_PHOTOS && VENDOR_PHOTOS[v]) ? VENDOR_PHOTOS[v] : '';
@@ -5836,6 +5856,10 @@ function renderRelEventos(){
   if(d){
     Object.entries(d.porDia).forEach(([dt, dia])=>{
       (dia.vendas||[]).forEach(v=>{
+        // O relatório serve pra validar se o lead do TIME comercial pagou. Canal automático
+        // (mitsuo) e liderança (aline) caem em __OUTROS__ e não entram nessa conta —
+        // sem isso a lista imprimia a string crua "__OUTROS__", que displayName() não trata.
+        if(v.vendedor === '__OUTROS__') return;
         eventos.push({ data: dt, hora: v.hora, vendedor: v.vendedor, produto: v.produto||'—', valor: v.valor||0, cliente: v.cliente||'', telefone: v.telefone||'' });
       });
     });
@@ -5921,7 +5945,7 @@ function chatTotalVendedor(v){
 }
 // ranking de vendedores
 function chatRanking(){
-  return VENDEDORES.map(v=>({v, ...chatTotalVendedor(v)})).sort((a,b)=>b.tot-a.tot);
+  return vendedoresNoPeriodo().map(v=>({v, ...chatTotalVendedor(v)})).sort((a,b)=>b.tot-a.tot);
 }
 // total por dia
 function chatPorDia(){
@@ -6211,11 +6235,11 @@ function renderReembolsos(){
   const mes = dadosAtivos();
   const vendasVend = {};
   // valorBruto = antes do abatimento de reembolso (evita descontar duas vezes nesta aba)
-  VENDEDORES.forEach(v => {
+  vendedoresNoPeriodo().forEach(v => {
     const pv = (mes && mes.porVendedor[v]) ? mes.porVendedor[v] : null;
     vendasVend[v] = pv ? (pv.valorBruto !== undefined ? pv.valorBruto : pv.valor) : 0;
   });
-  const totalVendasMes = VENDEDORES.reduce((a,v)=>a+vendasVend[v],0);
+  const totalVendasMes = vendedoresNoPeriodo().reduce((a,v)=>a+vendasVend[v],0);
   const totalReembMes = d.eventos.reduce((a,e)=>a+e.valor,0);
 
   // ---- KPIs topo ----
@@ -6227,7 +6251,7 @@ function renderReembolsos(){
   </div>`;
 
   // ---- Tabela por vendedor ----
-  const ordV = [...VENDEDORES].filter(v=> d.porVendedor[v].qtd>0 || vendasVend[v]>0)
+  const ordV = [...vendedoresNoPeriodo()].filter(v=> d.porVendedor[v].qtd>0 || vendasVend[v]>0)
     .sort((a,b)=> d.porVendedor[b].valor - d.porVendedor[a].valor);
   let linhas = ordV.map(v=>{
     const r = d.porVendedor[v];
@@ -7943,7 +7967,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-13 — varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-24b — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -8164,7 +8188,7 @@ document.addEventListener('visibilitychange', () => {
 
     /* ---- Heatmap ---- */
     var hmg={};var agH={};var hrsH={};
-    hm.forEach(function(r){var a=r.agente_nome||r.callix_user_id,h=+r.hora;agH[a]=(agH[a]||0)+N(r.atendidas);hrsH[h]=1;var k=a+'|'+h;if(!hmg[k])hmg[k]={atendidas:0,vendas:0};hmg[k].atendidas+=N(r.atendidas);hmg[k].vendas+=N(r.vendas);});
+    hm.forEach(function(r){var a=r.agente_nome||r.callix_user_id,h=+r.hora;agH[a]=(agH[a]||0)+N(r.atendidas);hrsH[h]=1;var k=a+'|'+h;if(!hmg[k])hmg[k]={atendidas:0,vendas:0,tempo:0};hmg[k].atendidas+=N(r.atendidas);hmg[k].vendas+=N(r.vendas);hmg[k].tempo+=N(r.tempo_falado_s);});
     var hmAgents=Object.keys(agH).sort(function(a,b){return agH[b]-agH[a]});
     var hmHoras=Object.keys(hrsH).map(function(h){return +h}).sort(function(a,b){return a-b});
     window._dcHeat={g:hmg,agents:hmAgents,horas:hmHoras};
@@ -8192,19 +8216,48 @@ document.addEventListener('visibilitychange', () => {
 
   window.dcSetHeat=function(metric){
     window._dcHeatMetric=metric;
-    var vb=document.getElementById('dc-hm-vol'),vn=document.getElementById('dc-hm-ven');
-    if(vb)vb.classList.toggle('on',metric==='atendidas'); if(vn)vn.classList.toggle('on',metric==='vendas');
+    var vb=document.getElementById('dc-hm-vol'),
+        vn=document.getElementById('dc-hm-ven'),
+        vt=document.getElementById('dc-hm-tma');
+    if(vb)vb.classList.toggle('on',metric==='atendidas');
+    if(vn)vn.classList.toggle('on',metric==='vendas');
+    if(vt)vt.classList.toggle('on',metric==='tma');
+    // TMA = tempo total / atendidas. A view entrega tempo SOMADO (não média por linha) de
+    // propósito: o período pode ter vários dias, e média de médias faria uma hora com 1 ligação
+    // de 20 min pesar igual a uma hora com 30 ligações de 1 min. Somando e dividindo no fim,
+    // sai a média ponderada correta.
+    var val=function(c){
+      if(!c) return 0;
+      if(metric==='tma') return c.atendidas ? Math.round(c.tempo/c.atendidas) : 0;
+      return c[metric]||0;
+    };
+    var fmt=function(v){
+      if(!v) return '';
+      if(metric!=='tma') return v;
+      var m=Math.floor(v/60), s=v%60;
+      return m ? (m+'m'+String(s).padStart(2,'0')) : (s+'s');
+    };
     var H=window._dcHeat; var el=document.getElementById('dc-heat'); if(!H||!el)return;
     if(!H.agents.length){el.innerHTML='<div class="dc-note">Sem dados no período.</div>';return;}
-    var max=0;H.agents.forEach(function(a){H.horas.forEach(function(h){var v=(H.g[a+'|'+h]||{})[metric]||0;if(v>max)max=v;})});
+    var max=0;H.agents.forEach(function(a){H.horas.forEach(function(h){var v=val(H.g[a+'|'+h]);if(v>max)max=v;})});
     var colsV=['#0e2a4d','#173f73','#1e4b8a','#2f6fd6','#5b9bff','#a8ccff'];
     var colsS=['#0e2a4d','#14532d','#166534','#16a34a','#22c55e','#86efac'];
-    var cols=metric==='vendas'?colsS:colsV;
+    var colsT=['#0e2a4d','#4a2a08','#7c4a0f','#b8701a','#e08a2b','#fbbf24'];
+    var cols = metric==='vendas'?colsS : metric==='tma'?colsT : colsV;
     var gcss='grid-template-columns:120px repeat('+H.horas.length+',1fr)';
     var html='<div class="dc-hm" style="'+gcss+'"><div></div>'+H.horas.map(function(h){return '<div class="hh">'+String(h).padStart(2,'0')+'h</div>'}).join('');
-    H.agents.forEach(function(a){html+='<div class="hl">'+a.split(' ')[0]+'</div>';H.horas.forEach(function(h){var v=(H.g[a+'|'+h]||{})[metric]||0;var idx=max?Math.min(cols.length-1,Math.round(v/max*(cols.length-1))):0;html+='<div class="cell" style="background:'+(v?cols[idx]:'#0a1f38')+'">'+(v||'')+'</div>'})});
+    H.agents.forEach(function(a){
+      html+='<div class="hl">'+a.split(' ')[0]+'</div>';
+      H.horas.forEach(function(h){
+        var c=H.g[a+'|'+h], v=val(c);
+        var idx=max?Math.min(cols.length-1,Math.round(v/max*(cols.length-1))):0;
+        html+='<div class="cell" style="background:'+(v?cols[idx]:'#0a1f38')+'"'
+            + (metric==='tma'&&c?' title="'+c.atendidas+' atendida(s)"':'')
+            + '>'+fmt(v)+'</div>';
+      });
+    });
     html+='</div>';el.innerHTML=html;
-  };
+  };;
 })();
 
 /* ===== Aba "Motivos de Perda" — lê vw_dash_perda_etapa =====
