@@ -1,7 +1,20 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-24c
+  CIC-G2 · BUILD 2026-08-24d
+  Build 2026-08-24d (ranking operacional, layout final): 11 colunas —
+  Agente | Tent. 1×1 | Efet. 1×1 | % Efet. 1×1 | Camp. | Atendidas | Efetivas | TMA | Falado | Vendas | Conv.
+  Saíram Total, % Camp., % 1×1 e Atend. IMPORTANTE: Tent. 1×1 é TENTATIVA (outgoing_call_summaries,
+  filter[agent]) e Camp. é ATENDIDA — a Callix não atribui tentativa de campanha a agente. Por isso
+  "Atendidas" = Camp. + manuais atendidas, e NÃO soma Tent. 1×1 (somaria tentativa com atendida).
+  BUG CORRIGIDO: `lig` era `g.ligacoes_completadas || g.total_ligacoes` — zero é falsy em JS, então
+  agente sem nenhuma conversa real caía no fallback e recebia o total de atendidas. Aconteceu de
+  verdade: 07/08, Vanessa, total 9 e completadas 0 -> a tela mostrava Efetivas 9 e Atend. 100%.
+  O groupSum sempre devolve número (inicializa em 0), nunca null, então o fallback só podia disparar
+  em zero legítimo. Era dano puro. Efeito colateral bom: Conv. para de dividir pelo número inflado.
+  DEPENDÊNCIA: Tent. 1×1 e Efet. 1×1 leem tentativas_1x1_real e efetivas_1x1 da
+  vw_callix_dash_agente_dia — colunas que AINDA NÃO EXISTEM na view. Enquanto não existirem, as três
+  primeiras colunas e o gráfico de 1×1 vêm zerados.
   Build 2026-08-24c (heatmap por dia da semana): dois toggles no heatmap da Discadora —
   eixo [Vendedor | Dia da semana] (abre em Dia da semana) e métrica [Atendidas | Vendas | TMA].
   No eixo de dia da semana, Atendidas e Vendas viram MÉDIA POR DIA: em agosto a base tem 4 segundas
@@ -1388,9 +1401,9 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <div class="dc-sec"><span class="bar" style="background:var(--gold,#fbbf24)"></span><h2>Produtividade do agente</h2><small>— uso do tempo logado</small></div>
     <div class="dc-card">
       <h3>Ranking operacional</h3>
-      <div class="dc-cap">Todos os agentes do período, sem corte. <b>Total</b> = ligações que passaram pelo agente (campanha + 1×1) e base dos percentuais · <b>Camp.</b> = chamadas de campanha que a discadora entregou pra ele · <b>1×1</b> = discagens manuais que ele mesmo fez · <b>%&nbsp;Camp.</b> e <b>%&nbsp;1×1</b> = o mix do próprio agente (somam 100%) · <b>Efetivas</b> = viraram contato real (fora caixa postal, número inexistente e timeout) · <b>Atend.</b> = efetivas ÷ ligações do agente · <b>Conv.</b> = vendas ÷ efetivas.</div>
+      <div class="dc-cap">Todos os agentes do período, sem corte. <b>Tent.&nbsp;1×1</b> = discagens manuais que ele fez, atendidas ou não · <b>Efet.&nbsp;1×1</b> = as que viraram conversa real · <b>%&nbsp;Efet.&nbsp;1×1</b> = Efet. ÷ Tent., a régua de eficiência da discagem manual · <b>Camp.</b> = chamadas de campanha que a discadora entregou pra ele — já atendidas, porque a Callix não atribui tentativa de campanha a agente · <b>Atendidas</b> = Camp. + manuais atendidas · <b>Efetivas</b> = contato real nas duas origens (fora caixa postal e número inexistente) · <b>Conv.</b> = vendas ÷ Efetivas.</div>
       <div style="overflow-x:auto"><table class="dc-t">
-        <thead><tr><th>Agente</th><th>Total</th><th>Camp.</th><th>% Camp.</th><th>1×1</th><th>% 1×1</th><th>Efetivas</th><th>Atend.</th><th>TMA</th><th>Falado</th><th>Vendas</th><th>Conv.</th></tr></thead>
+        <thead><tr><th>Agente</th><th>Tent. 1×1</th><th>Efet. 1×1</th><th>% Efet. 1×1</th><th>Camp.</th><th>Atendidas</th><th>Efetivas</th><th>TMA</th><th>Falado</th><th>Vendas</th><th>Conv.</th></tr></thead>
         <tbody id="dc-rank"></tbody>
       </table></div>
     </div>
@@ -1400,7 +1413,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <div class="dc-box tall"><canvas id="dcTempo"></canvas></div>
     </div>
     <div class="dc-grid dc-g2" style="margin-top:16px">
-      <div class="dc-card"><h3>Tentativas no 1×1 (discagem manual)</h3><div class="dc-cap">Ligações manuais por agente.</div><div class="dc-box"><canvas id="dc1x1"></canvas></div></div>
+      <div class="dc-card"><h3>Tentativas no 1×1 (discagem manual)</h3><div class="dc-cap">Discagens manuais por agente, atendidas ou não.</div><div class="dc-box"><canvas id="dc1x1"></canvas></div></div>
       <div class="dc-card"><h3>Tempo em campanha × tempo logado</h3><div class="dc-cap">Tempo falado em campanha vs. total logado.</div><div class="dc-box"><canvas id="dcCamp"></canvas></div></div>
     </div>
 
@@ -7991,7 +8004,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-24c — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-24d — ranking operacional com Tent./Efet. 1x1 + fix do fallback que inflava Efetivas — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -8144,10 +8157,10 @@ document.addEventListener('visibilitychange', () => {
       options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:DCP.grid},ticks:{color:DCP.muted}},y:{grid:{display:false},ticks:{color:DCP.muted}}}}});
 
     /* ---- Agregado por agente ---- */
-    var gm=groupSum(ag,function(r){return r.callix_user_id},['tempo_logado_s','tempo_falado_s','tempo_modo_manual_s','in_break_time_s','idle_time_s','tempo_online_campanha_s','tentativas_1x1','campaign_calls','vendas','ligacoes_completadas','total_ligacoes']);
+    var gm=groupSum(ag,function(r){return r.callix_user_id},['tempo_logado_s','tempo_falado_s','tempo_modo_manual_s','in_break_time_s','idle_time_s','tempo_online_campanha_s','tentativas_1x1','campaign_calls','vendas','ligacoes_completadas','total_ligacoes','tentativas_1x1_real','efetivas_1x1']);
     var nmeMap={};ag.forEach(function(r){nmeMap[r.callix_user_id]=r.agente_nome||r.callix_user_id});
     var tmaMap={};(function(){var num={},den={};ag.forEach(function(r){var l=N(r.ligacoes_completadas)||N(r.total_ligacoes);num[r.callix_user_id]=(num[r.callix_user_id]||0)+N(r.tma_s)*l;den[r.callix_user_id]=(den[r.callix_user_id]||0)+l});Object.keys(num).forEach(function(k){tmaMap[k]=den[k]?num[k]/den[k]:0})})();
-    var agentes=Object.keys(gm).map(function(k){var g=gm[k];return {id:k,nome:nmeMap[k],logado:g.tempo_logado_s,falado:g.tempo_falado_s,manual:g.tempo_modo_manual_s,pausa:g.in_break_time_s,ocioso:g.idle_time_s,camp:g.tempo_online_campanha_s,t1:g.tentativas_1x1,ligCamp:g.campaign_calls,vendas:g.vendas,lig:g.ligacoes_completadas||g.total_ligacoes,tma:tmaMap[k]}});
+    var agentes=Object.keys(gm).map(function(k){var g=gm[k];return {id:k,nome:nmeMap[k],logado:g.tempo_logado_s,falado:g.tempo_falado_s,manual:g.tempo_modo_manual_s,pausa:g.in_break_time_s,ocioso:g.idle_time_s,camp:g.tempo_online_campanha_s,t1:g.tentativas_1x1,tReal:g.tentativas_1x1_real,ef1:g.efetivas_1x1,ligCamp:g.campaign_calls,vendas:g.vendas,lig:g.ligacoes_completadas,tma:tmaMap[k]}});
     agentes.sort(function(a,b){return b.lig-a.lig});
     var nomes=agentes.map(function(a){return a.nome});
     var m=function(s){return N(s)/60;};
@@ -8163,23 +8176,24 @@ document.addEventListener('visibilitychange', () => {
 
     /* ---- Ranking ---- */
     var tb=document.getElementById('dc-rank');
-    // %Camp. e %1x1 = mix do PRÓPRIO agente (somam 100%). Não dá pra usar o discado global
-    // como base: as ~9,3 mil tentativas de campanha são da discadora e não têm quebra por agente
-    // (callix_resumo_hora não guarda agente) — o agente só recebe a chamada depois que atendem.
+    // Tent. 1×1 é TENTATIVA (vem de outgoing_call_summaries, filter[agent]).
+    // Camp. é ATENDIDA: a discadora só entrega a chamada pro agente depois que atendem,
+    // então tentativa de campanha não tem dono. Não somar as duas na mesma coluna.
     var pc=function(n,d){ return d>0 ? (100*n/d).toFixed(1).replace('.',',')+'%' : '–'; };
     if(tb) tb.innerHTML=agentes.map(function(a){
-      var base = N(a.ligCamp)+N(a.t1);            // ligações que passaram pelo agente
+      var atend = N(a.ligCamp)+N(a.t1);          // atendidas: campanha + manuais atendidas
       return '<tr><td>'+ini(a.nome)+' '+a.nome+'</td>'
-        + '<td style="font-weight:700;color:var(--text-strong)">'+fmt(base)+'</td>'
-        + '<td>'+fmt(a.ligCamp)+'</td><td style="color:var(--muted)">'+pc(a.ligCamp,base)+'</td>'
-        + '<td>'+fmt(a.t1)+'</td><td style="color:var(--muted)">'+pc(a.t1,base)+'</td>'
-        + '<td>'+fmt(a.lig)+'</td><td style="color:var(--muted)">'+pc(a.lig,base)+'</td>'
+        + '<td style="font-weight:700;color:var(--text-strong)">'+fmt(a.tReal)+'</td>'
+        + '<td>'+fmt(a.ef1)+'</td><td style="color:var(--muted)">'+pc(a.ef1,a.tReal)+'</td>'
+        + '<td>'+fmt(a.ligCamp)+'</td>'
+        + '<td>'+fmt(atend)+'</td>'
+        + '<td>'+fmt(a.lig)+'</td>'
         + '<td>'+mmss(a.tma)+'</td><td>'+Math.round(m(a.falado))+'m</td>'
         + '<td>'+fmt(a.vendas)+'</td><td style="color:var(--muted)">'+pc(a.vendas,a.lig)+'</td></tr>';
     }).join('');
 
     /* ---- 1x1 ---- */
-    chart('dc1x1',{type:'bar',data:{labels:nomes.map(function(n){return n.split(' ')[0]}),datasets:[{data:agentes.map(function(a){return a.t1}),backgroundColor:DCP.accent,borderRadius:4,borderSkipped:false}]},
+    chart('dc1x1',{type:'bar',data:{labels:nomes.map(function(n){return n.split(' ')[0]}),datasets:[{data:agentes.map(function(a){return a.tReal}),backgroundColor:DCP.accent,borderRadius:4,borderSkipped:false}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales}});
 
     /* ---- Campanha x logado ---- */
