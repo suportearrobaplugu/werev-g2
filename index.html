@@ -1,7 +1,19 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-26
+  CIC-G2 · BUILD 2026-08-26c
+  Build 2026-08-26c: a legenda de 6 linhas do Ranking operacional saiu da tela e virou popover no
+  "i" ao lado do titulo (hover E foco por teclado, senao quem tabula nunca alcanca o texto). Novo
+  par .dc-info/.dc-info-pop em #tab-discadora, reaproveitavel em qualquer card. A tabela sobe ~40px
+  e a legenda de VENDAS/CONV./SUP do rodape fica onde esta — e curta e fica perto do que explica.
+  ----------------------------------------------------------------------------
+  Build 2026-08-26b (acabamento visual): (a) legenda do doughnut estava em DCP.muted (#8FA3C7),
+  ilegivel sobre o card escuro — novo token DCP.text (#E2E8F0). (b) Paleta do doughnut trocada:
+  as cores vinham do `pl` antigo (orange/gold/silver...) e as duas maiores fatias eram dois
+  laranjas vizinhos. Agora hues separados por MOTIVO (identidade fixa, nao por rank), validados
+  contra o fundo #0f2744 — banda de luminosidade, chroma, separacao protan/deutan/tritan e
+  contraste: 6/6 PASS. (c) Taxa do funil (.fn-pct) sai do dourado e vai pra var(--text-strong).
+  ----------------------------------------------------------------------------
   Build 2026-08-26 (Discadora — bateria visual). Em dois itens a causa era diferente do sintoma:
   (1) SCATTER "Tempo falado x vendas" vira card de linha inteira, mas largura NAO era a causa do
       embolamento: o raio crescia linear com as ligacoes (`6+lig/6`), entao a AREA crescia ao
@@ -1411,7 +1423,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     #tab-discadora .fn-val{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;color:var(--text-strong);min-width:76px;text-align:right}
     #tab-discadora .fn-step{display:flex;align-items:baseline;gap:8px;margin:10px 0 10px 100px;color:var(--muted);font-size:12px}
     #tab-discadora .fn-step:before{content:'↓';margin-right:2px;color:var(--muted)}
-    #tab-discadora .fn-pct{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:800;color:var(--gold,#fbbf24)}
+    #tab-discadora .fn-pct{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:800;color:var(--text-strong)}
     /* Legenda de escala do heatmap */
     #tab-discadora .hm-esc{display:flex;align-items:center;gap:5px;margin-top:12px;color:var(--muted);font-size:11px;font-family:'JetBrains Mono',monospace;flex-wrap:wrap}
     #tab-discadora .hm-esc i{width:24px;height:10px;border-radius:2px;display:inline-block}
@@ -1420,6 +1432,14 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     #tab-discadora .dc-card{background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:16px}
     #tab-discadora .dc-card h3{font-family:'Sora','Space Grotesk',sans-serif;font-size:13.5px;color:var(--text-strong);margin:0 0 2px}
     #tab-discadora .dc-cap{color:var(--muted);font-size:11.5px;margin-bottom:12px;line-height:1.4}
+    /* Legenda longa sai da tela e vira popover no "i" do titulo. Fica no hover E no foco (tabindex),
+       senao quem navega por teclado nunca alcanca o texto. */
+    #tab-discadora .dc-info{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:8px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);font-size:11px;font-weight:700;font-family:'Inter',system-ui,sans-serif;font-style:italic;line-height:1;padding-right:1px;cursor:help;vertical-align:middle;transition:color .12s,border-color .12s}
+    #tab-discadora .dc-info:hover,#tab-discadora .dc-info:focus-visible{border-color:var(--text-strong);color:var(--text-strong);outline:none}
+    #tab-discadora .dc-info-pop{position:absolute;top:calc(100% + 9px);left:-10px;z-index:60;width:min(600px,80vw);padding:13px 15px;background:var(--card2);border:1px solid var(--line,var(--border));border-radius:10px;box-shadow:0 12px 34px rgba(0,0,0,.45);color:var(--muted);font-family:'Inter',system-ui,sans-serif;font-size:11.5px;font-weight:400;line-height:1.75;text-align:left;white-space:normal;opacity:0;visibility:hidden;transition:opacity .13s;pointer-events:none}
+    #tab-discadora .dc-info-pop b{color:var(--text-strong);font-weight:700}
+    #tab-discadora .dc-info:hover .dc-info-pop,#tab-discadora .dc-info:focus-visible .dc-info-pop{opacity:1;visibility:visible}
+    @media(max-width:900px){#tab-discadora .dc-info-pop{left:auto;right:-10px}}
     #tab-discadora .dc-kpi .dc-lab{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
     #tab-discadora .dc-kpi .dc-val{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:var(--text-strong);margin-top:6px;line-height:1}
     #tab-discadora .dc-kpi .dc-sub{font-size:11px;margin-top:5px;color:var(--muted)}
@@ -1489,8 +1509,17 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
 
     <div class="dc-sec"><span class="bar" style="background:var(--gold,#fbbf24)"></span><h2>Produtividade do agente</h2><small>— uso do tempo logado</small></div>
     <div class="dc-card">
-      <h3>Ranking operacional</h3>
-      <div class="dc-cap">Todos os agentes que trabalharam no período. <b>Tent.&nbsp;1×1</b> = discagens manuais que ele fez, atendidas ou não · <b>Efet.&nbsp;1×1</b> = as que viraram contato real · <b>Camp.</b> = chamadas de campanha que a discadora entregou pra ele — já atendidas, porque a Callix não atribui tentativa de campanha a agente · <b>Efet.&nbsp;Camp.</b> = as que viraram contato real · <b>Total&nbsp;Atend.</b> = Camp. + manuais atendidas · <b>Total&nbsp;Efet.</b> = Efet.&nbsp;1×1 + Efet.&nbsp;Camp. (fora caixa postal e número inexistente). Os dois <b>%</b> em cinza depois de Atend. e Efet. têm como base as <b>tentativas totais</b> (Tent.&nbsp;1×1 + Camp.).</div>
+      <h3>Ranking operacional<span class="dc-info" tabindex="0" role="button" aria-label="Como ler esta tabela">i<span class="dc-info-pop">
+        Todos os agentes que trabalharam no período.<br>
+        <b>Tent.&nbsp;1×1</b> — discagens manuais que ele fez, atendidas ou não.<br>
+        <b>Efet.&nbsp;1×1</b> — as que viraram contato real.<br>
+        <b>Camp.</b> — chamadas de campanha que a discadora entregou pra ele. Já vêm atendidas: a Callix não atribui tentativa de campanha a agente.<br>
+        <b>Efet.&nbsp;Camp.</b> — as que viraram contato real.<br>
+        <b>Total&nbsp;Atend.</b> — Camp. + manuais atendidas.<br>
+        <b>Total&nbsp;Efet.</b> — Efet.&nbsp;1×1 + Efet.&nbsp;Camp. (fora caixa postal e número inexistente).<br>
+        <b>%&nbsp;Atend.</b> e <b>%&nbsp;Efet.</b> — base = tentativas totais (Tent.&nbsp;1×1 + Camp.).<br>
+        <b>Conv.</b> — Vendas ÷ Total&nbsp;Efet. Supervisor (<b>SUP</b>) não tem: ele disca e a venda fica com o time.
+      </span></span></h3>
       <div style="overflow-x:auto"><table class="dc-t">
         <thead><tr><th>Agente</th><th>Tent. 1×1</th><th>Efet. 1×1</th><th>% Efet. 1×1</th><th>Camp.</th><th>Efet. Camp.</th><th>% Efet. Camp.</th><th>Total Atend.</th><th>% Atend.</th><th>Total Efet.</th><th>% Efet.</th><th>TMA</th><th>Falado</th><th>Vendas</th><th>Conv.</th></tr></thead>
         <tbody id="dc-rank"></tbody>
@@ -8096,7 +8125,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-26 — Discadora, bateria visual: scatter em linha inteira com raio pela RAIZ (area proporcional; era linear e a maior bolha cobria 1/3 do grafico) + funil sai do Chart.js e vira HTML SEM EIXO (escala log fazia a venda parecer metade da discada) + perdas viram doughnut com cauda <2% agrupada e URA fora (7 -> 5 fatias) + heatmap com amostra minima de 3 no TMA e teto robusto no p90 (teto 2819s -> 241s, 9 celulas fracas tracejadas) + legenda de escala no heatmap + Leitura rapida removida — build 2026-08-25: ranking da Discadora com 15 colunas (Efet. 1x1 CORRIGIDA: vinha de resumo_1x1.atendidas e mostrava atendida, nao efetiva — Vanessa 241/33,7% virou 82/11,5%) + efetivas_campanha nova (Efet.1x1 + Efet.Camp. = Total Efet.) + %Atend./%Efet. sobre TENTATIVAS TOTAIS + supervisor com traco no CONV. via callix_agente_papel (Aline/Daniel) + venda orfa resolvida NA VIEW pelo callix_agente_vendedor (Pedro Barach 6 -> 7; so fica utm: quem nao tem agente) + agente sem atividade e sem venda fora do ranking e dos graficos — build 2026-08-24e — tentativas 1x1 reais no ar (callix_resumo_1x1_hora + vw_callix_dash_agente_dia com tentativas_1x1_real/efetivas_1x1, backfill 03/08-24/08) — build 08-24d: ranking operacional com Tent./Efet. 1x1 + fix do fallback que inflava Efetivas — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-26c — legenda do Ranking operacional vira popover no \"i\" do titulo (hover + foco) — build 08-26b: legenda do doughnut legivel (DCP.text), paleta por motivo com hues separados e validados no fundo navy, taxa do funil em branco — build 08-26: Discadora, bateria visual: scatter em linha inteira com raio pela RAIZ (area proporcional; era linear e a maior bolha cobria 1/3 do grafico) + funil sai do Chart.js e vira HTML SEM EIXO (escala log fazia a venda parecer metade da discada) + perdas viram doughnut com cauda <2% agrupada e URA fora (7 -> 5 fatias) + heatmap com amostra minima de 3 no TMA e teto robusto no p90 (teto 2819s -> 241s, 9 celulas fracas tracejadas) + legenda de escala no heatmap + Leitura rapida removida — build 2026-08-25: ranking da Discadora com 15 colunas (Efet. 1x1 CORRIGIDA: vinha de resumo_1x1.atendidas e mostrava atendida, nao efetiva — Vanessa 241/33,7% virou 82/11,5%) + efetivas_campanha nova (Efet.1x1 + Efet.Camp. = Total Efet.) + %Atend./%Efet. sobre TENTATIVAS TOTAIS + supervisor com traco no CONV. via callix_agente_papel (Aline/Daniel) + venda orfa resolvida NA VIEW pelo callix_agente_vendedor (Pedro Barach 6 -> 7; so fica utm: quem nao tem agente) + agente sem atividade e sem venda fora do ranking e dos graficos — build 2026-08-24e — tentativas 1x1 reais no ar (callix_resumo_1x1_hora + vw_callix_dash_agente_dia com tentativas_1x1_real/efetivas_1x1, backfill 03/08-24/08) — build 08-24d: ranking operacional com Tent./Efet. 1x1 + fix do fallback que inflava Efetivas — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -8147,7 +8176,7 @@ document.addEventListener('visibilitychange', () => {
 <script>
 /* ===== Aba Discadora (Callix) — data-driven, lê as views vw_callix_dash_* ===== */
 (function(){
-  var DCP={accent:'#335FEB',green:'#22c55e',red:'#ef4444',orange:'#f59e0b',gold:'#fbbf24',silver:'#cbd5e1',purple:'#a78bfa',blue2:'#4f86f0',grid:'rgba(143,163,199,.14)',muted:'#8FA3C7'};
+  var DCP={accent:'#335FEB',green:'#22c55e',red:'#ef4444',orange:'#f59e0b',gold:'#fbbf24',silver:'#cbd5e1',purple:'#a78bfa',blue2:'#4f86f0',grid:'rgba(143,163,199,.14)',muted:'#8FA3C7',text:'#E2E8F0'};   // text = rotulo legivel sobre card escuro (muted e fraco demais pra legenda)
   window._dcCharts={}; window._dcLoaded=false; window._dcHeat=null; window._dcHeatMetric='atendidas'; window._dcHeatEixo='dow';
 
   function dcCSV(txt){
@@ -8243,7 +8272,12 @@ document.addEventListener('visibilitychange', () => {
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{color:DCP.muted,boxWidth:10,font:{size:10}}}},scales:{x:{grid:{display:false},ticks:{color:DCP.muted}},y:{grid:{color:DCP.grid},ticks:{color:DCP.muted,callback:function(v){return v+'%'}}}}}});
 
     /* ---- Perda decomposta ---- */
-    var pl=[['Caixa postal','perdido_caixa_postal',DCP.orange],['Não atende','perdido_nao_atende',DCP.gold],['Outro','perdido_outro',DCP.silver],['Falta agente','perdido_falta_agente',DCP.red],['Nº inexistente','perdido_num_inexistente',DCP.purple],['Abandono','perdido_abandono',DCP.blue2],['URA','perdido_ura','#334155']];
+    // Paleta categorica por MOTIVO (identidade fixa), nunca por tamanho da fatia: um filtro que
+    // muda a distribuicao nao pode repintar quem sobrou. Hues bem separados — as duas maiores
+    // (caixa postal ~65%, nao atende ~27%) ficam laranja x azul, nao dois laranjas vizinhos.
+    // Validada contra o fundo #0f2744: banda de luminosidade, chroma, separacao CVD (protan/
+    // deutan/tritan) e contraste — 6/6 PASS. Nao trocar hue no olho.
+    var pl=[['Caixa postal','perdido_caixa_postal','#d95926'],['Não atende','perdido_nao_atende','#3987e5'],['Outro','perdido_outro','#c98500'],['Falta agente','perdido_falta_agente','#199e70'],['Nº inexistente','perdido_num_inexistente','#8b5cf6'],['Abandono','perdido_abandono','#d55181'],['URA','perdido_ura','#64748b']];
     // Sete fatias com quatro invisiveis vira lixo visual: caixa postal e nao atende sozinhas sao
     // 94%. Agrupa o que esta abaixo de 2% e tira o zerado (URA). A borda de 2px na cor do fundo e o
     // que separa as duas fatias grandes — sem ela encostam e viram um bloco so.
@@ -8254,12 +8288,12 @@ document.addEventListener('visibilitychange', () => {
     var pcauda=psum.filter(function(p){return p.v/ptot<0.02});
     // 'Demais motivos', nao 'Outros': a Callix ja tem um motivo chamado 'Outro' e as duas fatias
     // ficariam lado a lado na legenda com nomes quase iguais.
-    if(pcauda.length) pbig.push({n:'Demais motivos',v:pcauda.reduce(function(s,p){return s+p.v},0),c:'#475569'});
+    if(pcauda.length) pbig.push({n:'Demais motivos',v:pcauda.reduce(function(s,p){return s+p.v},0),c:'#64748b'});
     chart('dcPerda',{type:'doughnut',
       data:{labels:pbig.map(function(p){return p.n}),datasets:[{data:pbig.map(function(p){return p.v}),backgroundColor:pbig.map(function(p){return p.c}),borderColor:'#0f2744',borderWidth:2}]},
       options:{responsive:true,maintainAspectRatio:false,cutout:'56%',
         plugins:{
-          legend:{position:'right',labels:{color:DCP.muted,boxWidth:10,padding:10,font:{size:11},
+          legend:{position:'right',labels:{color:DCP.text,boxWidth:10,padding:10,font:{size:11},
             generateLabels:function(ch){
               return ch.data.labels.map(function(l,i){
                 var v=ch.data.datasets[0].data[i];
