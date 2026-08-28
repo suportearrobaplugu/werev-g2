@@ -1,7 +1,31 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-26e
+  CIC-G2 · BUILD 2026-08-28
+  Build 2026-08-28 (Home, grupo "Resultado" — 4 cards viram 7):
+  LAYOUT: 4 em cima (Faturamento bruto · Faturamento líquido · Vendas totais · os dois tickets),
+  3 embaixo em hm-g3 (Conversão · Faturamento Hubla · Faturamento TMB 100%). O card "Reembolso"
+  deixa de existir como card: o valor vai pro subtítulo do líquido e a quantidade pro de vendas.
+  O QUE MUDA DE VALOR NA TELA (avisar o time antes de subir — são três altas aparentes, e nenhuma
+  é aumento de faturamento, é troca de régua):
+    · Ticket médio      R$ 484 -> R$ 680   (o de 484 continua, agora rotulado LÍQUIDO)
+    · Faturamento Hubla R$ 101.078 -> R$ 108.964 (passa a ser BRUTO, antes do reembolso)
+    · TMB               R$ 55.334 -> R$ 110.668  (passa a ser 100%, não a nossa metade)
+  A conta que a tela agora fecha: Hubla + TMB100 = bruto (219.632) e bruto − metade TMB (55.334)
+  − reembolso (7.886) = líquido (156.412). Eram DUAS subtrações ao mesmo tempo e ninguém
+  reconciliava de cabeça — por isso as duas parcelas estão escritas no subtítulo do card líquido.
+  ARMADILHA (o spec desta entrega errava nisto): o split de 50% da TMB NÃO vem da view. A
+  vw_dash_tmb devolve `round(valor_total,2)`, valor CHEIO. Quem aplica a metade é o JS, via a
+  constante global TMB_LIQUIDO_PCT no parsing da TMB. Por isso o tmb100 daqui reusa essa constante
+  em vez de declarar um `TMB_SPLIT` local — duas fontes pro mesmo split é como a tela começa a
+  mentir calada.
+  O Funil de passagem SEGUE em R$ 164.298 e agora não bate com nenhum card da Home de propósito:
+  ele é Hubla cheia + TMB pela metade, um terceiro corte. Se incomodar, o rótulo de lá deveria
+  virar "Faturamento (TMB 50%)".
+  DÍVIDA CONHECIDA, não mexida: "Faturamento líquido" desconta só reembolso da HUBLA. A
+  vw_dash_reembolso lê hubla_refunds e nada mais; existe uma tmb_refunds (1 registro, 18/08) que
+  só é citada por v_lista1/3/6/7 — nenhuma view do dash. Corrigir exige mexer na view, não no index.
+  ----------------------------------------------------------------------------
   Build 2026-08-26e (o fix de verdade da legenda do doughnut): mexer em `labels.color` nao adiantava
   — reproduzi o grafico isolado no chromium e li o estado do Chart: `labels.color` estava #FFFFFF e
   o texto renderizava #666. CAUSA: quando existe `generateLabels` custom, o Chart.js 4 desenha cada
@@ -994,33 +1018,58 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <div class="hm-sec"><span class="bar"></span><h2>Resultado</h2><small id="hmPeriodoLab">— período selecionado</small></div>
     <div class="hm-grid hm-g4">
       <div class="hm-card">
-        <div class="hm-lab">💰 Faturamento total</div>
+        <div class="hm-lab">💰 Faturamento bruto</div>
+        <div class="hm-val" id="hmFatBruto">–</div>
+        <div class="hm-split">
+          <div>Hubla + TMB 100%<b id="hmFatBrutoSub">–</b></div>
+        </div>
+      </div>
+      <div class="hm-card">
+        <div class="hm-lab">🏦 Faturamento líquido</div>
         <div class="hm-val" id="hmFat">–</div>
         <div class="hm-split">
-          <div>Hubla<b id="hmFatHubla">–</b></div>
-          <div>TMB <span style="font-size:10px">(50%)</span><b id="hmFatTmb">–</b></div>
+          <div>− metade TMB<b id="hmFatTmbMeio">–</b></div>
+          <div>− reembolso<b id="hmRefVal">–</b></div>
+        </div>
+      </div>
+      <div class="hm-card">
+        <div class="hm-lab">📊 Vendas totais</div>
+        <div class="hm-val" id="hmVendas">–</div>
+        <div class="hm-split">
+          <div>Reembolsos<b id="hmRefQtd">–</b></div>
         </div>
       </div>
       <div class="hm-card">
         <div style="display:flex;gap:22px;flex-wrap:wrap">
-          <div><div class="hm-lab">📊 Vendas</div><div class="hm-val" id="hmVendas">–</div></div>
-          <div><div class="hm-lab">🏷️ Ticket médio</div><div class="hm-val" id="hmTicket" style="color:var(--gold,#fbbf24)">–</div></div>
+          <div><div class="hm-lab">🏷️ Ticket médio bruto</div><div class="hm-val" id="hmTicket" style="color:var(--gold,#fbbf24)">–</div></div>
+          <div><div class="hm-lab">🏷️ Ticket médio líquido</div><div class="hm-val" id="hmTicketLiq">–</div></div>
         </div>
-      </div>
-      <div class="hm-card">
-        <div class="hm-lab">💸 Reembolso</div>
-        <div class="hm-val" id="hmRefVal">–</div>
         <div class="hm-split">
-          <div>Quantidade<b id="hmRefQtd">–</b></div>
-          <div>% do fat. bruto<b id="hmRefPct">–</b></div>
+          <div>diferença<b id="hmTicketDif">–</b></div>
         </div>
       </div>
+    </div>
+    <div class="hm-grid hm-g3" style="margin-top:12px">
       <div class="hm-card">
         <div class="hm-lab">🎯 Conversão · Em Contato → Venda</div>
         <div class="hm-val" id="hmConv">–</div>
         <div class="hm-split">
           <div>Em Contato<b id="hmEmContato">–</b></div>
           <div>Leads<b id="hmLeads">–</b></div>
+        </div>
+      </div>
+      <div class="hm-card">
+        <div class="hm-lab">🟣 Faturamento Hubla</div>
+        <div class="hm-val" id="hmFatHubla">–</div>
+        <div class="hm-split">
+          <div>bruto, antes do reembolso<b id="hmFatHublaLiq">–</b></div>
+        </div>
+      </div>
+      <div class="hm-card">
+        <div class="hm-lab">🔵 Faturamento TMB · 100%</div>
+        <div class="hm-val" id="hmFatTmb">–</div>
+        <div class="hm-split">
+          <div>nossa metade<b id="hmFatTmbNosso">–</b></div>
         </div>
       </div>
     </div>
@@ -8134,7 +8183,7 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-26e — legenda do doughnut BRANCA de verdade: generateLabels custom ignora labels.color, precisa de fontColor no item (senao cai no Chart.defaults.color #666) — build 08-26c: legenda do Ranking operacional vira popover no \"i\" do titulo (hover + foco) — build 08-26b: legenda do doughnut legivel (DCP.text), paleta por motivo com hues separados e validados no fundo navy, taxa do funil em branco — build 08-26: Discadora, bateria visual: scatter em linha inteira com raio pela RAIZ (area proporcional; era linear e a maior bolha cobria 1/3 do grafico) + funil sai do Chart.js e vira HTML SEM EIXO (escala log fazia a venda parecer metade da discada) + perdas viram doughnut com cauda <2% agrupada e URA fora (7 -> 5 fatias) + heatmap com amostra minima de 3 no TMA e teto robusto no p90 (teto 2819s -> 241s, 9 celulas fracas tracejadas) + legenda de escala no heatmap + Leitura rapida removida — build 2026-08-25: ranking da Discadora com 15 colunas (Efet. 1x1 CORRIGIDA: vinha de resumo_1x1.atendidas e mostrava atendida, nao efetiva — Vanessa 241/33,7% virou 82/11,5%) + efetivas_campanha nova (Efet.1x1 + Efet.Camp. = Total Efet.) + %Atend./%Efet. sobre TENTATIVAS TOTAIS + supervisor com traco no CONV. via callix_agente_papel (Aline/Daniel) + venda orfa resolvida NA VIEW pelo callix_agente_vendedor (Pedro Barach 6 -> 7; so fica utm: quem nao tem agente) + agente sem atividade e sem venda fora do ranking e dos graficos — build 2026-08-24e — tentativas 1x1 reais no ar (callix_resumo_1x1_hora + vw_callix_dash_agente_dia com tentativas_1x1_real/efetivas_1x1, backfill 03/08-24/08) — build 08-24d: ranking operacional com Tent./Efet. 1x1 + fix do fallback que inflava Efetivas — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-08-28 — Home: grupo Resultado com 7 cards (bruto Hubla+TMB100 = 219.632 · liquido 156.412 com as DUAS subtracoes escritas no subtitulo · ticket bruto 680 e liquido 484 na mesma base de vendas · Hubla agora BRUTA e TMB agora 100%) — o split de 50%% da TMB vem do JS (TMB_LIQUIDO_PCT), NAO da view — build 08-26e: legenda do doughnut BRANCA de verdade: generateLabels custom ignora labels.color, precisa de fontColor no item (senao cai no Chart.defaults.color #666) — build 08-26c: legenda do Ranking operacional vira popover no \"i\" do titulo (hover + foco) — build 08-26b: legenda do doughnut legivel (DCP.text), paleta por motivo com hues separados e validados no fundo navy, taxa do funil em branco — build 08-26: Discadora, bateria visual: scatter em linha inteira com raio pela RAIZ (area proporcional; era linear e a maior bolha cobria 1/3 do grafico) + funil sai do Chart.js e vira HTML SEM EIXO (escala log fazia a venda parecer metade da discada) + perdas viram doughnut com cauda <2% agrupada e URA fora (7 -> 5 fatias) + heatmap com amostra minima de 3 no TMA e teto robusto no p90 (teto 2819s -> 241s, 9 celulas fracas tracejadas) + legenda de escala no heatmap + Leitura rapida removida — build 2026-08-25: ranking da Discadora com 15 colunas (Efet. 1x1 CORRIGIDA: vinha de resumo_1x1.atendidas e mostrava atendida, nao efetiva — Vanessa 241/33,7% virou 82/11,5%) + efetivas_campanha nova (Efet.1x1 + Efet.Camp. = Total Efet.) + %Atend./%Efet. sobre TENTATIVAS TOTAIS + supervisor com traco no CONV. via callix_agente_papel (Aline/Daniel) + venda orfa resolvida NA VIEW pelo callix_agente_vendedor (Pedro Barach 6 -> 7; so fica utm: quem nao tem agente) + agente sem atividade e sem venda fora do ranking e dos graficos — build 2026-08-24e — tentativas 1x1 reais no ar (callix_resumo_1x1_hora + vw_callix_dash_agente_dia com tentativas_1x1_real/efetivas_1x1, backfill 03/08-24/08) — build 08-24d: ranking operacional com Tent./Efet. 1x1 + fix do fallback que inflava Efetivas — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -8994,19 +9043,39 @@ document.addEventListener('visibilitychange', () => {
     var refV = (d.reembolsos && d.reembolsos.total) || 0;
     var refQ = (d.reembolsos && d.reembolsos.qtd) || 0;
 
-    // Faturamento LÍQUIDO (bruto - reembolso): mesma régua do card da aba Dashboard.
-    // Se a Home mostrasse bruto e o Dashboard líquido, as duas telas dariam números
-    // diferentes com o mesmo rótulo — foi o que a conferência cruzada pegou.
+    // Faturamento LÍQUIDO: mesma régua do card da aba Dashboard. Se a Home mostrasse bruto e o
+    // Dashboard líquido, as duas telas dariam números diferentes com o mesmo rótulo — foi o que a
+    // conferência cruzada pegou.
     var liq = d.totalFaturamento || 0;
+
+    // ATENÇÃO ao que cada variável já traz:
+    //   `tmb`   -> JÁ está pela METADE. O split NÃO vem da view (a vw_dash_tmb devolve o
+    //              valor_total cheio); é o JS que aplica TMB_LIQUIDO_PCT na linha do parsing da TMB
+    //              (busque por `bruto * TMB_LIQUIDO_PCT`). Mexeu lá, mexeu aqui.
+    //   `bruto` -> hub + tmb50. É o número do Funil de passagem, NÃO o bruto de verdade.
+    //   `hub`   -> Hubla cheia, antes do reembolso.
+    var tmb100 = TMB_LIQUIDO_PCT ? tmb / TMB_LIQUIDO_PCT : tmb;
+    var brutoT = hub + tmb100;                    // Hubla cheia + TMB cheia
     set('hmPeriodoLab', '— ' + (typeof labelPeriodo==='function' ? labelPeriodo() : ''));
-    set('hmFat', fmtMoney(liq));
-    set('hmFatHubla', fmtMoney(hub - refV));
-    set('hmFatTmb', fmtMoney(tmb));
-    set('hmVendas', I(vend));
-    set('hmTicket', vend ? fmtMoney(liq/vend) : '–');
-    set('hmRefVal', fmtMoney(refV));
-    set('hmRefQtd', I(refQ));
-    set('hmRefPct', bruto ? pct(100*refV/bruto) : '–');
+    set('hmFatBruto',    fmtMoney(brutoT));
+    set('hmFatBrutoSub', fmtMoney(hub)+' + '+fmtMoney(tmb100));
+    set('hmFat',         fmtMoney(liq));
+    set('hmFatTmbMeio',  '−'+fmtMoney(tmb));
+    // % do reembolso contra o BRUTO NOVO, por decisão do Nirla em 28/08. Ressalva registrada: o
+    // reembolso é fenômeno só da Hubla (a vw_dash_reembolso lê hubla_refunds e nada mais), então
+    // dividir pela base que inclui a TMB inteira dilui o número — dá 3,6% onde contra a Hubla
+    // daria 7,2%. Se um dia quiser a régua honesta: pct(100*refV/hub).
+    set('hmRefVal',      '−'+fmtMoney(refV)+(brutoT ? ' · '+pct(100*refV/brutoT) : ''));
+    set('hmVendas',      I(vend));
+    set('hmRefQtd',      I(refQ));
+    // Os dois tickets dividem a MESMA base de vendas: só o numerador muda.
+    set('hmTicket',      vend ? fmtMoney(brutoT/vend) : '–');
+    set('hmTicketLiq',   vend ? fmtMoney(liq/vend) : '–');
+    set('hmTicketDif',   (vend && brutoT) ? '−'+pct(100*(1-liq/brutoT)) : '–');
+    set('hmFatHubla',    fmtMoney(hub));
+    set('hmFatHublaLiq', fmtMoney(hub - refV)+' líquido');
+    set('hmFatTmb',      fmtMoney(tmb100));
+    set('hmFatTmbNosso', fmtMoney(tmb));
 
     // Conversão = Em Contato -> Venda, régua da MÉDIA EQUIPE da Taxa de Passagem.
     // diasFiltrados() é a MESMA fonte de dias que a TP usa — por isso os números batem.
