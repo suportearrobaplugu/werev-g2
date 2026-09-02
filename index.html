@@ -1,7 +1,41 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-08-28
+  CIC-G2 · BUILD 2026-09-02b
+  Build 2026-09-02b — dois bugs MEUS da 09-02, achados numa varredura das dependências:
+  (1) `mtMesAncora` chamava `periodoAtual()` achando que era o getter do filtro. NÃO É: `periodoAtual`
+      é variável local do parser da aba Rotina. A chamada morria no try/catch e a aba abria sempre no
+      MÊS CORRENTE — trocar o filtro pra "Mês passado" não mudava nada. Agora usa `PERIODO.ate ||
+      PERIODO.de`, a mesma âncora que o `setPeriodo` usa pro `currentMonth`.
+  (2) `mtOnPeriodo` estava definido e NINGUÉM chamava. Faltava a linha no `setPeriodo`, ao lado de
+      `dcOnPeriodo` e `mpOnPeriodo`. Sem ela a aba só recalculava ao ser reaberta.
+  ----------------------------------------------------------------------------
+  Build 2026-09-02 (ABA NOVA: "Meta do Mês" — fase 2 do spec de 02/09; a fase 1, o SQL, já estava
+  aplicada). Traz a meta pra dentro do dash e compara contra o realizado que o dash já calcula.
+  ARQUITETURA — a regra que manda em tudo: o SQL guarda SÓ A META (meta_mensal append-only +
+  dim_calendario). Todo o realizado e toda a comparação são calculados no JS, reusando
+  uniqPorEtapa / VENDAS_LISTA / origemDaVenda / TMB_LIQUIDO_PCT. Uma view que recalculasse o
+  realizado criaria uma SEGUNDA RÉGUA e o déficit passaria a divergir do card da Home — erro que já
+  aconteceu duas vezes aqui (Em Contato com duas contagens; split da TMB duplicado view x JS).
+  8 blocos: header com atingimento · 4 cards de pacing (acumulado só até o último dia FECHADO, o dia
+  corrente é parcial e viraria déficit falso) · burn-up meta x realizado com marcador nos dias de
+  evento · matriz KPI x dia (dias em coluna, subtotal da semana logo após o último dia dela, MÊS à
+  direita; toggles Realizado/Meta/Δ e Dias+semanas/Só semanas) · funis recorrentes · eventos ·
+  leitura automática · réguas de rodapé.
+  RÉGUAS que a tela aplica e explica: lead conta em TODOS os funis por onde passou (Σ funis > total,
+  por design); venda tem dono ÚNICO (last-touch via origemDaVenda, Σ funis = total); conversão é
+  Em Contato -> Venda, a régua da Home, não lead->venda; faturamento é LÍQUIDO (o reembolso, que só
+  existe na Hubla e não tem funil possível, entra como linha própria em "Fora dos funis" e como
+  parcela negativa no TOTAL, pra bater com o card 2 da Home); meta só em dia útil, sáb/dom entram no
+  realizado com meta zero; SEM amostra mínima — nenhum KPI é suprimido por base pequena.
+  DUAS RÉGUAS NA COLUNA TOTAL, por decisão do Nirla (02/09): "Leads" é a SOMA dos funis (conta o
+  mesmo lead uma vez por funil) e "Em Contato" é o ÚNICO do período. Está rotulado célula a célula
+  e explicado na nota da matriz — em setembro, EC soma 370 e único 365.
+  CONFERIDO contra SQL de setembro/2026 (mock com a sobreposição real entre dias E entre funis):
+  leads e Em Contato por funil na coluna MÊS batem um a um (115/112, 114/82, 101/104, 9/72),
+  vendas e faturamento idem (24 vendas, R$ 14.147), Σ funis == TOTAL em vendas, e leads/EC NÃO
+  somam na horizontal enquanto faturamento soma. Em Contato TOTAL = 365, o número exato do banco.
+  ----------------------------------------------------------------------------
   Build 2026-08-28 (Home, grupo "Resultado" — 4 cards viram 7):
   LAYOUT: 4 em cima (Faturamento bruto · Faturamento líquido · Vendas totais · os dois tickets),
   3 embaixo em hm-g3 (Conversão · Faturamento Hubla · Faturamento TMB 100%). O card "Reembolso"
@@ -939,6 +973,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <button class="sb-collapse" onclick="toggleSidebarCollapse()" title="Recolher menu">‹</button>
       <div class="sb-grp">Análise</div>
       <button class="sb-item active" data-tab="home" onclick="setTab('home')"><span class="sb-ic">🏠</span><span class="sb-txt">Home</span></button>
+      <button class="sb-item" data-tab="metadomes" onclick="setTab('metadomes')"><span class="sb-ic">🎯</span><span class="sb-txt">Meta do Mês</span></button>
       <button class="sb-item" data-tab="dashboard" onclick="setTab('dashboard')"><span class="sb-ic">📊</span><span class="sb-txt">Dashboard</span></button>
       <button class="sb-item" data-tab="recordes" onclick="setTab('recordes')"><span class="sb-ic">🏆</span><span class="sb-txt">Quadro dos Recordes</span></button>
       <button class="sb-item" data-tab="times" onclick="setTab('times')"><span class="sb-ic">⚔️</span><span class="sb-txt">Competição de Times</span></button>
@@ -973,6 +1008,80 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     #tab-home .hm-sec .bar{width:4px;height:18px;border-radius:3px;background:var(--accent)}
     #tab-home .hm-sec small{color:var(--muted);font-size:12px}
     #tab-home .hm-grid{display:grid;gap:16px}
+    /* ==================== ABA META DO MÊS ==================== */
+    #tab-metadomes .mt-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:18px 20px;margin-bottom:16px}
+    #tab-metadomes .mt-hero h2{font-family:'Sora','Space Grotesk',sans-serif;font-size:20px;color:var(--text-strong);margin:0 0 4px}
+    #tab-metadomes .mt-hero-num{text-align:right}
+    #tab-metadomes .mt-lab{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.07em}
+    #tab-metadomes .mt-big{font-family:'JetBrains Mono',monospace;font-size:38px;font-weight:800;color:var(--text-strong);line-height:1.1}
+    #tab-metadomes .mt-sub{color:var(--muted);font-size:11.5px;line-height:1.5}
+    #tab-metadomes .mt-sec{display:flex;align-items:center;gap:10px;margin:22px 0 12px}
+    #tab-metadomes .mt-sec .bar{width:4px;height:18px;border-radius:2px;background:var(--accent);display:inline-block}
+    #tab-metadomes .mt-sec h2{font-family:'Sora','Space Grotesk',sans-serif;font-size:14px;color:var(--text-strong);margin:0}
+    #tab-metadomes .mt-sec small{color:var(--muted);font-size:11.5px}
+    #tab-metadomes .mt-grid{display:grid;gap:12px}
+    #tab-metadomes .mt-g4{grid-template-columns:repeat(4,1fr)}
+    #tab-metadomes .mt-g3{grid-template-columns:repeat(3,1fr)}
+    #tab-metadomes .mt-card{background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:16px}
+    #tab-metadomes .mt-card h3{font-family:'Sora','Space Grotesk',sans-serif;font-size:13.5px;color:var(--text-strong);margin:0 0 2px}
+    #tab-metadomes .mt-card h4{font-family:'Sora','Space Grotesk',sans-serif;font-size:12.5px;color:var(--text-strong);margin:0 0 6px}
+    #tab-metadomes .mt-cap{color:var(--muted);font-size:11.5px;margin-bottom:12px;line-height:1.4}
+    #tab-metadomes .mt-box{position:relative;height:280px}
+    #tab-metadomes .mt-regua p{color:var(--muted);font-size:11.5px;line-height:1.65;margin:0}
+    #tab-metadomes .mt-erro{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:#fca5a5;border-radius:10px;padding:12px 14px;font-size:12px;margin-bottom:14px}
+    /* card de pacing */
+    #tab-metadomes .mt-pc-val{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:800;color:var(--text-strong);line-height:1.2;margin:4px 0 2px}
+    #tab-metadomes .mt-pc-meta{color:var(--muted);font-size:11.5px}
+    #tab-metadomes .mt-bar{height:7px;border-radius:4px;background:rgba(255,255,255,.07);overflow:hidden;margin:10px 0 8px}
+    #tab-metadomes .mt-bar i{display:block;height:100%;border-radius:4px}
+    #tab-metadomes .mt-pc-foot{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:var(--muted)}
+    #tab-metadomes .mt-pc-pct{font-family:'JetBrains Mono',monospace;font-weight:700}
+    /* toggles */
+    #tab-metadomes .mt-ctrl{display:flex;gap:22px;flex-wrap:wrap;margin:10px 0 14px}
+    #tab-metadomes .mt-ctrl-g{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    #tab-metadomes .mt-ctrl-lab{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;margin-right:2px}
+    #tab-metadomes .mt-tg{background:transparent;border:1px solid var(--line,var(--border));color:var(--muted);border-radius:7px;padding:5px 11px;font-size:11.5px;cursor:pointer;font-family:inherit;transition:.12s}
+    #tab-metadomes .mt-tg:hover{color:var(--text-strong);border-color:var(--muted)}
+    #tab-metadomes .mt-tg.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+    /* matriz */
+    #tab-metadomes .mt-scroll{overflow-x:auto}
+    #tab-metadomes .mt-t{border-collapse:separate;border-spacing:0;font-size:11.5px;white-space:nowrap}
+    #tab-metadomes .mt-t th,#tab-metadomes .mt-t td{padding:5px 9px;text-align:right;border-bottom:1px solid rgba(143,163,199,.09)}
+    #tab-metadomes .mt-t th{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;position:sticky;top:0;background:var(--card);z-index:2}
+    #tab-metadomes .mt-t .k{text-align:left;position:sticky;left:0;background:var(--card);z-index:3;min-width:170px;font-weight:500}
+    #tab-metadomes .mt-t th.k{z-index:4}
+    #tab-metadomes .mt-t .grp .k{color:var(--text-strong);font-family:'Sora','Space Grotesk',sans-serif;font-size:12px;font-weight:700;padding-top:13px}
+    #tab-metadomes .mt-t .grp td{padding-top:13px}
+    #tab-metadomes .mt-t .fds{background:rgba(255,255,255,.028)}
+    #tab-metadomes .mt-t .sem{background:rgba(51,95,235,.10);font-weight:600}
+    #tab-metadomes .mt-t .mes{background:rgba(51,95,235,.18);font-weight:700;color:var(--text-strong)}
+    #tab-metadomes .mt-t .ev{color:var(--purple,#a78bfa)}
+    #tab-metadomes .mt-t .neg{color:#f87171}
+    #tab-metadomes .mt-t .pos{color:#4ade80}
+    #tab-metadomes .mt-t .z{color:var(--muted);opacity:.45}
+    #tab-metadomes .mt-note{color:var(--muted);font-size:11px;line-height:1.6;margin-top:10px}
+    /* funil / evento */
+    #tab-metadomes .mt-fn{background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:14px 16px;margin-bottom:10px}
+    #tab-metadomes .mt-fn-hd{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+    #tab-metadomes .mt-fn-dot{width:10px;height:10px;border-radius:3px;flex:none}
+    #tab-metadomes .mt-fn-nome{font-family:'Sora','Space Grotesk',sans-serif;font-size:13px;color:var(--text-strong);font-weight:600}
+    #tab-metadomes .mt-fn-pct{margin-left:auto;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px}
+    #tab-metadomes .mt-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+    #tab-metadomes .mt-kpi .n{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--text-strong)}
+    #tab-metadomes .mt-kpi .m{color:var(--muted);font-size:10.5px;margin-top:1px}
+    /* leitura */
+    #tab-metadomes .mt-leitura{display:flex;flex-direction:column;gap:9px}
+    #tab-metadomes .mt-li{display:flex;gap:10px;align-items:flex-start;font-size:12px;color:var(--text);line-height:1.6}
+    #tab-metadomes .mt-tag{flex:none;font-size:9.5px;font-weight:700;letter-spacing:.05em;padding:2px 7px;border-radius:5px;background:rgba(148,163,184,.16);color:var(--muted);text-transform:uppercase;margin-top:2px;min-width:96px;text-align:center}
+    /* popover "i" — mesmo par da Discadora */
+    #tab-metadomes .mt-info{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:8px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);font-size:11px;font-weight:700;font-family:'Inter',system-ui,sans-serif;font-style:italic;line-height:1;padding-right:1px;cursor:help;vertical-align:middle;transition:color .12s,border-color .12s}
+    #tab-metadomes .mt-info:hover,#tab-metadomes .mt-info:focus-visible{border-color:var(--text-strong);color:var(--text-strong);outline:none}
+    #tab-metadomes .mt-info-pop{position:absolute;top:calc(100% + 9px);left:-10px;z-index:60;width:min(620px,80vw);padding:13px 15px;background:var(--card2);border:1px solid var(--line,var(--border));border-radius:10px;box-shadow:0 12px 34px rgba(0,0,0,.45);color:var(--muted);font-family:'Inter',system-ui,sans-serif;font-size:11.5px;font-weight:400;font-style:normal;line-height:1.75;text-align:left;white-space:normal;opacity:0;visibility:hidden;transition:opacity .13s;pointer-events:none}
+    #tab-metadomes .mt-info-pop b{color:var(--text-strong);font-weight:700}
+    #tab-metadomes .mt-info-pop code{font-family:'JetBrains Mono',monospace;font-size:10.5px;background:rgba(255,255,255,.06);padding:1px 4px;border-radius:3px}
+    #tab-metadomes .mt-info:hover .mt-info-pop,#tab-metadomes .mt-info:focus-visible .mt-info-pop{opacity:1;visibility:visible}
+    @media(max-width:1100px){#tab-metadomes .mt-g4{grid-template-columns:1fr 1fr}#tab-metadomes .mt-kpis{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:900px){#tab-metadomes .mt-g3,#tab-metadomes .mt-g4{grid-template-columns:1fr}#tab-metadomes .mt-info-pop{left:auto;right:-10px}}
     #tab-home .hm-g4{grid-template-columns:repeat(4,1fr)}
     #tab-home .hm-g3{grid-template-columns:repeat(3,1fr)}
     #tab-home .hm-card{background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:16px}
@@ -1107,6 +1216,92 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     </div>
   </div>
   <!-- ==================== FIM ABA HOME ==================== -->
+
+  <!-- ==================== ABA META DO MÊS ==================== -->
+  <div id="tab-metadomes" class="tab-content">
+
+    <div class="mt-hero">
+      <div>
+        <h2>🎯 Meta do Mês <span id="mtMesLab">–</span></h2>
+        <div class="mt-sub">Ancorada no MÊS — <b>não</b> segue o filtro de período do topo, igual Projeção e Reembolsos.</div>
+      </div>
+      <div class="mt-hero-num">
+        <div class="mt-lab">Atingimento do mês</div>
+        <div class="mt-big" id="mtAting">–</div>
+        <div class="mt-sub" id="mtAtingSub">–</div>
+      </div>
+    </div>
+
+    <div id="mtErr" class="mt-erro" style="display:none"></div>
+
+    <!-- 2. cards de pacing -->
+    <div class="mt-sec"><span class="bar"></span><h2>Pacing</h2><small>— acumulado até o último dia fechado</small></div>
+    <div class="mt-grid mt-g4" id="mtPacing"></div>
+
+    <!-- 3. burn-up -->
+    <div class="mt-card" style="margin-top:16px">
+      <h3>Burn-up · faturamento acumulado<span class="mt-info" tabindex="0" role="button" aria-label="Como ler">i<span class="mt-info-pop">
+        A linha <b>tracejada</b> é a meta acumulada, distribuída pelos dias úteis com o peso de <code>dim_calendario</code>. A <b>cheia</b> é o realizado.<br>
+        Sábado e domingo <b>não recebem meta</b> — a tracejada fica plana e o realizado do fim de semana vira superávit local. É esperado: a distribuição por dia útil é só a régua de pacing, a meta é do mês.<br>
+        Dias de <b>evento</b> aparecem como marcador vertical: a meta do evento entra de uma vez nas <code>datas_evento</code>, não diluída nos dias úteis.
+      </span></span></h3>
+      <div class="mt-cap">Meta acumulada (tracejada) × realizado acumulado. A área entre as duas é o gap.</div>
+      <div class="mt-box"><canvas id="mtBurn"></canvas></div>
+    </div>
+
+    <!-- 4. matriz -->
+    <div class="mt-sec"><span class="bar" style="background:var(--gold,#fbbf24)"></span><h2>Matriz</h2><small>— a tela da daily</small></div>
+    <div class="mt-card">
+      <h3>KPI × dia<span class="mt-info" tabindex="0" role="button" aria-label="Como ler a matriz">i<span class="mt-info-pop">
+        <b>Leads e Em Contato não somam na horizontal.</b> A coluna de semana e a de MÊS contam <b>pessoa única no período</b>; o mesmo lead reaparece em dias diferentes. Somar os dias dá um número maior — é a régua, não bug.<br>
+        <b>Σ funis ≠ TOTAL</b> em leads e Em Contato pelo mesmo motivo: o lead conta em todos os funis por onde passou.<br>
+        <b>Conversão no grão dia é ruído</b> — a venda sai ~17 dias depois do lead, então a célula divide a venda de hoje pelo lead de hoje, que não é o mesmo lead. Na daily se cobra <b>lead e venda</b>; conversão e ticket se leem nas colunas de <b>semana</b> e <b>mês</b>.<br>
+        <b>Fim de semana tem meta zero</b> e entra no realizado: gera superávit local.<br>
+        A soma dos dias <b>não</b> fecha com a meta do mês quando há evento — o evento não é diluído nos dias úteis.
+      </span></span></h3>
+      <div class="mt-ctrl">
+        <div class="mt-ctrl-g">
+          <span class="mt-ctrl-lab">Célula</span>
+          <button class="mt-tg on" id="mtTgReal" onclick="mtSetModo('real')">Realizado</button>
+          <button class="mt-tg"    id="mtTgMeta" onclick="mtSetModo('meta')">Meta</button>
+          <button class="mt-tg"    id="mtTgDelta" onclick="mtSetModo('delta')">Δ (real − meta)</button>
+        </div>
+        <div class="mt-ctrl-g">
+          <span class="mt-ctrl-lab">Granularidade</span>
+          <button class="mt-tg on" id="mtTgDias" onclick="mtSetGran('dias')">Dias + semanas</button>
+          <button class="mt-tg"    id="mtTgSem"  onclick="mtSetGran('sem')">Só semanas</button>
+        </div>
+      </div>
+      <div class="mt-scroll"><table class="mt-t" id="mtMatriz"></table></div>
+      <div class="mt-note" id="mtMatrizNota"></div>
+    </div>
+
+    <!-- 5. funis recorrentes -->
+    <div class="mt-sec"><span class="bar" style="background:var(--green,#22c55e)"></span><h2>Funis recorrentes</h2><small>— meta × realizado no mês</small></div>
+    <div id="mtFunis"></div>
+
+    <!-- 6. evento -->
+    <div class="mt-sec"><span class="bar" style="background:var(--purple,#a78bfa)"></span><h2>Eventos</h2><small>— fora do pacing diário, ancorados nas datas do evento</small></div>
+    <div id="mtEventos"></div>
+
+    <!-- 7. leitura -->
+    <div class="mt-sec"><span class="bar" style="background:var(--orange,#f59e0b)"></span><h2>Leitura do mês</h2><small>— decomposição do Δ, determinística</small></div>
+    <div class="mt-card"><div id="mtLeitura" class="mt-leitura">–</div></div>
+
+    <!-- 8. réguas -->
+    <div class="mt-sec"><span class="bar" style="background:var(--silver,#cbd5e1)"></span><h2>Réguas</h2><small>— o que cada número desta tela significa</small></div>
+    <div class="mt-grid mt-g3" id="mtReguas">
+      <div class="mt-card mt-regua"><h4>Lead conta em todos os funis</h4><p>O lead que passou por Disparos e depois por Upsell conta nos <b>dois</b>. Por isso a soma dos funis é maior que o total — em agosto, 15,7% maior. É por construção, para que cada funil seja avaliado pelo que ele realmente tocou.</p></div>
+      <div class="mt-card mt-regua"><h4>Venda tem dono único</h4><p>Crédito <b>last-touch</b>: a venda vai para o último funil por onde o lead passou antes de comprar. Nunca é dividida nem duplicada, então a soma das vendas por funil fecha com o total.</p></div>
+      <div class="mt-card mt-regua"><h4>Conversão é Em Contato → Venda</h4><p>Mesma régua da Home e da Taxa de Passagem, <b>não</b> lead → venda. O denominador não é ajustado: se o lead migrou de funil e comprou em outro, a queda aparece no funil de origem — e o texto da leitura diz quantos foram.</p></div>
+      <div class="mt-card mt-regua"><h4>Faturamento é líquido</h4><p>O mesmo corte do card 2 da Home: TMB pela metade e reembolso descontado. O ticket que se digita na meta já é líquido — a cadeia %Hubla / taxa / cancelamento fica na planilha de forecast.</p></div>
+      <div class="mt-card mt-regua"><h4>Meta só em dia útil</h4><p>A meta do mês é distribuída pelos dias úteis, com peso e feriado vindos de tabela. Sábado e domingo entram no <b>realizado</b> com meta zero. A distribuição é régua de pacing; a meta é do mês.</p></div>
+      <div class="mt-card mt-regua"><h4>Sem amostra mínima</h4><p>Nenhum KPI é suprimido, arredondado para fora ou marcado como ruído por base pequena. Uma conversão de 47,4% numa semana de 19 Em Contato aparece como está. Quem julga o número é quem lê.</p></div>
+    </div>
+
+  </div>
+  <!-- ==================== FIM ABA META DO MÊS ==================== -->
+
 
   <div id="tab-dashboard" class="tab-content">
 
@@ -2381,6 +2576,7 @@ function setPeriodo(tipo, custDe, custAte){
   if(typeof renderAll === 'function') renderAll();
   if(typeof dcOnPeriodo === 'function') dcOnPeriodo();
   if(typeof mpOnPeriodo === 'function') mpOnPeriodo();
+  if(typeof mtOnPeriodo === 'function') mtOnPeriodo();
 }
 function escolherPeriodoInicial(){
   const r = rangeDoPeriodo('mesAtual'); PERIODO = { tipo:'mesAtual', de:r.de, ate:r.ate };
@@ -6742,6 +6938,7 @@ function setTab(tab){
   if(tab==='motivosperda'){ (function _mpTry(){ if(typeof window.carregarMotivosPerda==='function'){ window.carregarMotivosPerda(); } else { setTimeout(_mpTry,50); } })(); }
   if(tab==='discadora'){ (function _dcTry(){ if(typeof window.carregarDiscadora==='function'){ window.carregarDiscadora(); } else { setTimeout(_dcTry,50); } })(); }
   if(tab==='home'){ (function _hmTry(){ if(typeof window.renderHome==='function'){ window.renderHome(); } else { setTimeout(_hmTry,50); } })(); }
+  if(tab==='metadomes'){ (function _mtTry(){ if(typeof window.carregarMeta==='function'){ window.carregarMeta(); } else { setTimeout(_mtTry,50); } })(); }
   // expande/recolhe submenu de Processos
   const subProc = document.getElementById('sbSubProcessos');
   const parentProc = document.querySelector('.sb-parent');
@@ -8183,7 +8380,696 @@ async function carregarDados(forceRefresh = false){
 
 renderVendorTabs();
 renderMonthTabs();
-console.log('%c[CIC-G2] build 2026-08-28 — Home: grupo Resultado com 7 cards (bruto Hubla+TMB100 = 219.632 · liquido 156.412 com as DUAS subtracoes escritas no subtitulo · ticket bruto 680 e liquido 484 na mesma base de vendas · Hubla agora BRUTA e TMB agora 100%) — o split de 50%% da TMB vem do JS (TMB_LIQUIDO_PCT), NAO da view — build 08-26e: legenda do doughnut BRANCA de verdade: generateLabels custom ignora labels.color, precisa de fontColor no item (senao cai no Chart.defaults.color #666) — build 08-26c: legenda do Ranking operacional vira popover no \"i\" do titulo (hover + foco) — build 08-26b: legenda do doughnut legivel (DCP.text), paleta por motivo com hues separados e validados no fundo navy, taxa do funil em branco — build 08-26: Discadora, bateria visual: scatter em linha inteira com raio pela RAIZ (area proporcional; era linear e a maior bolha cobria 1/3 do grafico) + funil sai do Chart.js e vira HTML SEM EIXO (escala log fazia a venda parecer metade da discada) + perdas viram doughnut com cauda <2% agrupada e URA fora (7 -> 5 fatias) + heatmap com amostra minima de 3 no TMA e teto robusto no p90 (teto 2819s -> 241s, 9 celulas fracas tracejadas) + legenda de escala no heatmap + Leitura rapida removida — build 2026-08-25: ranking da Discadora com 15 colunas (Efet. 1x1 CORRIGIDA: vinha de resumo_1x1.atendidas e mostrava atendida, nao efetiva — Vanessa 241/33,7% virou 82/11,5%) + efetivas_campanha nova (Efet.1x1 + Efet.Camp. = Total Efet.) + %Atend./%Efet. sobre TENTATIVAS TOTAIS + supervisor com traco no CONV. via callix_agente_papel (Aline/Daniel) + venda orfa resolvida NA VIEW pelo callix_agente_vendedor (Pedro Barach 6 -> 7; so fica utm: quem nao tem agente) + agente sem atividade e sem venda fora do ranking e dos graficos — build 2026-08-24e — tentativas 1x1 reais no ar (callix_resumo_1x1_hora + vw_callix_dash_agente_dia com tentativas_1x1_real/efetivas_1x1, backfill 03/08-24/08) — build 08-24d: ranking operacional com Tent./Efet. 1x1 + fix do fallback que inflava Efetivas — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+
+/* ===================================================================
+   ABA "META DO MÊS" — build 2026-09-02
+   ARQUITETURA (a regra que manda em tudo): o SQL guarda SÓ A META. Todo o
+   realizado e toda a comparação são calculados AQUI, reusando uniqPorEtapa /
+   VENDAS_LISTA / origemDaVenda / TMB_LIQUIDO_PCT. Uma view que recalculasse o
+   realizado criaria uma SEGUNDA RÉGUA e o déficit passaria a divergir do card da
+   Home — erro que já aconteceu duas vezes neste projeto (Em Contato com duas
+   contagens; split da TMB duplicado entre view e JS).
+   =================================================================== */
+(function(){
+  var MT = { meta:null, cal:null, at:0, modo:'real', gran:'dias', charts:{} };
+  window._mt = MT;
+
+  var MTP = { accent:'#335FEB', green:'#22c55e', red:'#ef4444', gold:'#fbbf24',
+              muted:'#8FA3C7', text:'#FFFFFF', grid:'rgba(143,163,199,.14)' };
+  // Paleta dos funis validada para daltonismo em tema claro e escuro (anexo do spec).
+  var MT_CORES = { 'Disparos LE':'#C8761F', 'Recuperação MVS':'#2E9E6B',
+                   'Upsell LE':'#3B7DD8', 'Webinar CMP':'#C24C86' };
+  var MT_COR_FALLBACK = ['#8b5cf6','#0891b2','#d55181','#64748b'];
+  function mtCor(f, i){ return MT_CORES[f] || MT_COR_FALLBACK[i % MT_COR_FALLBACK.length]; }
+
+  var N  = function(v){ var n = parseFloat(String(v==null?0:v).replace(',','.')); return isFinite(n)?n:0; };
+  var $  = function(id){ return document.getElementById(id); };
+  var BRL  = function(v){ return 'R$ ' + Math.round(N(v)).toLocaleString('pt-BR'); };
+  var BRLd = function(v){ var s = v<0 ? '−' : (v>0?'+':''); return s + 'R$ ' + Math.round(Math.abs(N(v))).toLocaleString('pt-BR'); };
+  var INT  = function(v){ return Math.round(N(v)).toLocaleString('pt-BR'); };
+  var UM   = function(v){ return N(v).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}); };
+  var PCT  = function(v){ return UM(v) + '%'; };
+  var PP   = function(v){ return (v>0?'+':v<0?'−':'') + UM(Math.abs(v)) + ' p.p.'; };
+
+  /* ---------- mês âncora: MÊS DA DATA FINAL do filtro, igual Projeção e Reembolsos.
+     A aba NÃO segue o filtro universal — só usa a data final pra saber QUAL mês abrir. */
+  function mtMesAncora(){
+    // MESMA âncora que o setPeriodo usa na linha do currentMonth: mês da DATA FINAL do filtro.
+    // Cuidado: `periodoAtual` NÃO é função — é variável local do parser da aba Rotina. Quem
+    // guarda o filtro global é PERIODO {tipo, de, ate}.
+    var ref = (typeof PERIODO !== 'undefined' && PERIODO) ? (PERIODO.ate || PERIODO.de) : null;
+    var d = ref ? new Date(String(ref).slice(0,10) + 'T12:00:00') : new Date();
+    if(isNaN(d.getTime())) d = new Date();
+    return { ano:d.getFullYear(), mes:d.getMonth()+1 };
+  }
+  function mtDK(a,m,d){ return a + '-' + String(m).padStart(2,'0') + '-' + String(d).padStart(2,'0'); }
+  function mtDiasDoMes(a,m){
+    var n = new Date(a, m, 0).getDate(), out = [];
+    for(var i=1;i<=n;i++) out.push(mtDK(a,m,i));
+    return out;
+  }
+  function mtHojeDK(){
+    var d = new Date();
+    return mtDK(d.getFullYear(), d.getMonth()+1, d.getDate());
+  }
+
+  /* ---------- CSV -> objetos (mesmo parser das outras abas) ---------- */
+  function mtCSV(txt){
+    if(!txt) return [];
+    var linhas = String(txt).split(/\r?\n/).filter(function(l){ return l.trim() !== ''; });
+    if(linhas.length < 2) return [];
+    var cab = mtSplit(linhas[0]);
+    return linhas.slice(1).map(function(l){
+      var c = mtSplit(l), o = {};
+      cab.forEach(function(h,i){ o[h.trim()] = (c[i]==null?'':c[i]); });
+      return o;
+    });
+  }
+  function mtSplit(l){
+    var out=[], cur='', asp=false;
+    for(var i=0;i<l.length;i++){
+      var ch=l[i];
+      if(ch === '"'){ if(asp && l[i+1] === '"'){ cur+='"'; i++; } else asp=!asp; }
+      else if(ch === ',' && !asp){ out.push(cur); cur=''; }
+      else cur += ch;
+    }
+    out.push(cur); return out;
+  }
+
+  /* ---------- calendário: dia útil e peso ---------- */
+  function mtCalMap(){
+    var m = {};
+    (MT.cal||[]).forEach(function(r){
+      var dk = String(r.data||'').slice(0,10);
+      if(dk) m[dk] = { util: /^t|^true|^1/i.test(String(r.is_util)), peso: N(r.peso)||1, feriado: r.feriado||'' };
+    });
+    return m;
+  }
+
+  /* ---------- meta vigente: para o dia d, a linha com o MAIOR vigencia_inicio <= d.
+     É o que faz a tabela append-only funcionar: editar a meta no dia 20 não
+     reescreve o déficit da semana 1. ---------- */
+  function mtMetaVigente(mesDK, dk){
+    var por = {};
+    (MT.meta||[]).forEach(function(r){
+      if(String(r.mes||'').slice(0,10) !== mesDK) return;
+      var vi = String(r.vigencia_inicio||'').slice(0,10);
+      if(vi > dk) return;                       // ainda não vigorava neste dia
+      var f = String(r.funil||'').trim();
+      if(!por[f] || vi >= por[f]._vi){ por[f] = r; por[f]._vi = vi; }
+    });
+    return por;
+  }
+
+  /* ---------- REALIZADO — tudo daqui, nada de view ---------- */
+  function mtRealizado(dias){
+    var dentro = {}; dias.forEach(function(d){ dentro[d]=1; });
+    var FLAT = (typeof EVENTOS!=='undefined' && EVENTOS && EVENTOS.flat) ? EVENTOS.flat : [];
+
+    // leads e Em Contato: COUNT DISTINCT da pessoa NO PERÍODO e por dia, POR ORIGEM.
+    // Mesmo motor do uniqPorEtapa: cls==='entrada', chave telefone -> email -> índice.
+    // NUNCA somar os dias: o mesmo lead reaparece em dias diferentes.
+    var L = { porFunil:{}, porDia:{}, geral:{} }, C = { porFunil:{}, porDia:{}, geral:{} };
+    function acc(A, f, dk, k){
+      if(!A.porFunil[f]) A.porFunil[f] = { geral:{}, porDia:{} };
+      A.porFunil[f].geral[k] = 1;
+      if(!A.porFunil[f].porDia[dk]) A.porFunil[f].porDia[dk] = {};
+      A.porFunil[f].porDia[dk][k] = 1;
+      A.geral[k] = 1;
+      if(!A.porDia[dk]) A.porDia[dk] = {};
+      A.porDia[dk][k] = 1;
+    }
+    for(var i=0;i<FLAT.length;i++){
+      var e = FLAT[i];
+      if(e.cls !== 'entrada' || !e.dayKey || !dentro[e.dayKey]) continue;
+      var k = e.tel || e.email || ('x'+i);
+      var f = e.origemLbl || (typeof SEGMENTO_SEM!=='undefined' ? SEGMENTO_SEM : 'Sem origem');
+      var ehWeb = (typeof nrNorm==='function') && nrNorm(e.pipeline).indexOf('webinar') >= 0;
+      var ehLead = ehWeb ? (typeof nrIsAcessouLive==='function' && nrIsAcessouLive(e.etapa))
+                         : (typeof nrIsBaseStage==='function'   && nrIsBaseStage(e.etapa));
+      if(ehLead) acc(L, f, e.dayKey, k);
+      // Em Contato casa por NOME da etapa, nunca por prefixo numérico: é "2. Em Contato"
+      // nos Disparos e "6. Em Contato" no Webinar.
+      if(typeof nrIsContato==='function' && nrIsContato(e.etapa)) acc(C, f, e.dayKey, k);
+    }
+
+    // vendas e faturamento: soma simples. Crédito ÚNICO por venda (last-touch via
+    // origemDaVenda), então Σ funis === total. VENDAS_LISTA já traz a TMB a 50%.
+    var V = { porFunil:{}, porDia:{}, total:0, fat:0, semFunil:{v:0,f:0} };
+    function accV(f, dk, val){
+      if(!V.porFunil[f]) V.porFunil[f] = { v:0, f:0, porDia:{} };
+      if(!V.porFunil[f].porDia[dk]) V.porFunil[f].porDia[dk] = { v:0, f:0 };
+      V.porFunil[f].v++; V.porFunil[f].f += val;
+      V.porFunil[f].porDia[dk].v++; V.porFunil[f].porDia[dk].f += val;
+      if(!V.porDia[dk]) V.porDia[dk] = { v:0, f:0 };
+      V.porDia[dk].v++; V.porDia[dk].f += val;
+      V.total++; V.fat += val;
+    }
+    var LISTA = (typeof VENDAS_LISTA!=='undefined' && VENDAS_LISTA) ? VENDAS_LISTA : [];
+    for(var j=0;j<LISTA.length;j++){
+      var v = LISTA[j];
+      if(!dentro[v.dataKey]) continue;
+      var o = (typeof origemDaVenda==='function') ? origemDaVenda(v) : null;
+      var fn = (o && o.origem) ? String(o.origem).trim() : '(sem funil)';
+      accV(fn, v.dataKey, N(v.valor));
+      if(fn === '(sem funil)'){ V.semFunil.v++; V.semFunil.f += N(v.valor); }
+    }
+
+    // reembolso: fenômeno só da Hubla e SEM funil possível (a vw_dash_reembolso lê
+    // hubla_refunds e nada mais). Entra como parcela negativa no TOTAL, pra que o
+    // faturamento desta aba seja o MESMO do card 2 (líquido) da Home. Fica visível
+    // como linha própria em "Fora dos funis" — não é escondido dentro de um funil.
+    var R = { porDia:{}, total:0, qtd:0 };
+    var RD = (typeof REEMBOLSOS_DADOS!=='undefined' && REEMBOLSOS_DADOS && REEMBOLSOS_DADOS.porDia) ? REEMBOLSOS_DADOS.porDia : null;
+    if(RD) dias.forEach(function(dk){
+      var r = RD[dk]; if(!r) return;
+      var t = N(r.total), q = N(r.qtd);
+      if(t){ R.porDia[dk] = t; R.total += t; R.qtd += q; }
+    });
+
+    function nUniq(o){ return o ? Object.keys(o).length : 0; }
+    return {
+      dias: dias,
+      leadsFunil: L.porFunil, contatoFunil: C.porFunil,
+      leadsTotal: nUniq(L.geral), contatoTotal: nUniq(C.geral),
+      leadsDia: L.porDia, contatoDia: C.porDia,
+      vendas: V, reemb: R,
+      nUniq: nUniq,
+      fatLiq: V.fat - R.total
+    };
+  }
+
+  /* ---------- meta do dia ----------
+     metaDia = metaMes * peso[d] / Σ(peso dos dias úteis do mês), e 0 fora de dia útil.
+     Evento NÃO é diluído: entra inteiro nas datas_evento. Por isso a soma da matriz
+     diária não fecha com a meta do mês quando há evento — está na nota da tela. */
+  function mtMetaCalc(mesDK, dias, cal){
+    var pesoTot = 0;
+    dias.forEach(function(dk){ var c = cal[dk]; if(c && c.util) pesoTot += c.peso; });
+    if(!pesoTot) pesoTot = 1;
+    var diasUteis = dias.filter(function(dk){ return cal[dk] && cal[dk].util; }).length;
+
+    var vig = mtMetaVigente(mesDK, dias[dias.length-1]);
+    var recorrentes = {}, eventos = {};
+    Object.keys(vig).forEach(function(f){
+      var r = vig[f];
+      var conv = N(r.conv_pct)/100, tk = N(r.ticket_liq);
+      if(String(r.tipo_base) === 'evento'){
+        var pub = N(r.publico_evento);
+        var ds = String(r.datas_evento||'').replace(/[{}"]/g,'').split(',')
+                   .map(function(x){ return x.trim().slice(0,10); }).filter(Boolean);
+        eventos[f] = { leads:pub, vendas:pub*conv, fat:pub*conv*tk, ticket:tk, conv:conv*100, datas:ds };
+      } else {
+        var ld = N(r.leads_dia_util), pas = N(r.passagem_pct)/100;
+        recorrentes[f] = {
+          leadsDiaUtil: ld, passagem: pas*100, conv: conv*100, ticket: tk,
+          leads: ld*diasUteis, contato: ld*pas*diasUteis,
+          vendas: ld*pas*conv*diasUteis, fat: ld*pas*conv*tk*diasUteis
+        };
+      }
+    });
+
+    // meta por dia, por funil
+    var porDia = {};
+    dias.forEach(function(dk){
+      var c = cal[dk], fator = (c && c.util) ? (c.peso/pesoTot) : 0;
+      porDia[dk] = {};
+      Object.keys(recorrentes).forEach(function(f){
+        var m = recorrentes[f];
+        porDia[dk][f] = { leads:m.leads*fator, contato:m.contato*fator, vendas:m.vendas*fator, fat:m.fat*fator, ticket:m.ticket, conv:m.conv };
+      });
+      Object.keys(eventos).forEach(function(f){
+        var ev = eventos[f], on = ev.datas.indexOf(dk) >= 0 ? (1/Math.max(1,ev.datas.length)) : 0;
+        porDia[dk][f] = { leads:ev.leads*on, contato:0, vendas:ev.vendas*on, fat:ev.fat*on, ticket:ev.ticket, conv:ev.conv };
+      });
+    });
+
+    var totRec = { leads:0, contato:0, vendas:0, fat:0 };
+    Object.keys(recorrentes).forEach(function(f){
+      totRec.leads += recorrentes[f].leads; totRec.contato += recorrentes[f].contato;
+      totRec.vendas += recorrentes[f].vendas; totRec.fat += recorrentes[f].fat;
+    });
+    var totEv = { leads:0, vendas:0, fat:0 };
+    Object.keys(eventos).forEach(function(f){
+      totEv.leads += eventos[f].leads; totEv.vendas += eventos[f].vendas; totEv.fat += eventos[f].fat;
+    });
+
+    return { recorrentes:recorrentes, eventos:eventos, porDia:porDia, diasUteis:diasUteis,
+             totRec:totRec, totEv:totEv,
+             total:{ leads:totRec.leads+totEv.leads, contato:totRec.contato,
+                     vendas:totRec.vendas+totEv.vendas, fat:totRec.fat+totEv.fat } };
+  }
+
+  /* ---------- semanas: quebra por semana ISO dentro do mês ---------- */
+  function mtSemanas(dias, cal){
+    var out = [], atual = null;
+    dias.forEach(function(dk){
+      var d = new Date(dk + 'T12:00:00'), dow = (d.getDay()+6)%7;   // 0=segunda
+      if(!atual || dow === 0){ atual = { dias:[], lab:'S'+(out.length+1) }; out.push(atual); }
+      atual.dias.push(dk);
+    });
+    return out;
+  }
+
+  window.mtSetModo = function(m){ MT.modo = m;
+    ['real','meta','delta'].forEach(function(x){
+      var b = $('mtTg' + (x==='real'?'Real':x==='meta'?'Meta':'Delta')); if(b) b.classList.toggle('on', x===m);
+    });
+    mtRenderMatriz();
+  };
+  window.mtSetGran = function(g){ MT.gran = g;
+    var a=$('mtTgDias'), b=$('mtTgSem');
+    if(a) a.classList.toggle('on', g==='dias');
+    if(b) b.classList.toggle('on', g==='sem');
+    mtRenderMatriz();
+  };
+
+  /* ---------- carga ---------- */
+  window.carregarMeta = function(){
+    if(MT.meta && window.cicCacheFresco && window.cicCacheFresco(MT.at)){ mtRender(); return; }
+    if(MT._loading) return; MT._loading = true;
+    if(typeof fetchViewCsvSupabase !== 'function'){ MT._loading = false; return; }
+    Promise.all([
+      fetchViewCsvSupabase('vw_dash_meta').catch(function(){ return ''; }),
+      fetchViewCsvSupabase('vw_dash_calendario').catch(function(){ return ''; })
+    ]).then(function(res){
+      MT.meta = mtCSV(res[0]); MT.cal = mtCSV(res[1]); MT.at = Date.now();
+      MT._loading = false; mtRender();
+    }).catch(function(e){
+      MT._loading = false;
+      var el = $('mtErr'); if(el){ el.style.display='block'; el.textContent = 'Erro ao carregar a meta: ' + e.message; }
+    });
+  };
+  window.mtOnPeriodo = function(){ if(MT.meta) mtRender(); };
+
+  /* ---------- render ---------- */
+  function mtRender(){
+    try {
+      var A = mtMesAncora(), mesDK = mtDK(A.ano, A.mes, 1);
+      var dias = mtDiasDoMes(A.ano, A.mes), cal = mtCalMap();
+      var hoje = mtHojeDK();
+      MT._ctx = { A:A, mesDK:mesDK, dias:dias, cal:cal, hoje:hoje,
+                  real: mtRealizado(dias), meta: mtMetaCalc(mesDK, dias, cal),
+                  semanas: mtSemanas(dias, cal) };
+      var el = $('mtErr'); if(el) el.style.display='none';
+      mtRenderHeader(); mtRenderPacing(); mtRenderBurn();
+      mtRenderMatriz(); mtRenderFunis(); mtRenderEventos(); mtRenderLeitura();
+    } catch(e){
+      var er = $('mtErr'); if(er){ er.style.display='block'; er.textContent = 'Erro ao renderizar a Meta do Mês: ' + e.message; }
+    }
+  }
+
+  var MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+
+  function mtRenderHeader(){
+    var c = MT._ctx;
+    var lab = $('mtMesLab'); if(lab) lab.textContent = '· ' + MESES[c.A.mes-1] + '/' + c.A.ano;
+    var atg = c.meta.total.fat ? 100*c.real.fatLiq/c.meta.total.fat : 0;
+    var b = $('mtAting'); if(b) b.textContent = c.meta.total.fat ? PCT(atg) : '–';
+    var s = $('mtAtingSub');
+    if(s) s.innerHTML = c.meta.total.fat
+      ? BRL(c.real.fatLiq) + ' de ' + BRL(c.meta.total.fat) + '<br>meta = ' + BRL(c.meta.totRec.fat) + ' recorrente + ' + BRL(c.meta.totEv.fat) + ' evento'
+      : 'Sem meta cadastrada para este mês.';
+  }
+
+  /* ---------- 4 cards de pacing ----------
+     O acumulado compara só até o ÚLTIMO DIA FECHADO: o dia corrente é parcial e
+     entraria como déficit falso. */
+  function mtRenderPacing(){
+    var c = MT._ctx, alvo = $('mtPacing'); if(!alvo) return;
+    var fechados = c.dias.filter(function(dk){ return dk < c.hoje; });
+    if(!fechados.length) fechados = c.dias.slice(0, 1);
+    var ate = fechados[fechados.length-1];
+
+    var mAcum = { leads:0, contato:0, vendas:0, fat:0 };
+    fechados.forEach(function(dk){
+      var pd = c.meta.porDia[dk] || {};
+      Object.keys(pd).forEach(function(f){
+        mAcum.leads += pd[f].leads; mAcum.contato += pd[f].contato;
+        mAcum.vendas += pd[f].vendas; mAcum.fat += pd[f].fat;
+      });
+    });
+    var rAcum = mtRealizado(fechados);
+    var uteisRestantes = c.dias.filter(function(dk){ return dk >= c.hoje && c.cal[dk] && c.cal[dk].util; }).length;
+
+    var cards = [
+      { lab:'💰 Faturamento líquido', r:rAcum.fatLiq, m:mAcum.fat, fmt:BRL, cor:MTP.green,
+        falta:(c.meta.total.fat - rAcum.fatLiq), faltaFmt:BRL },
+      { lab:'📊 Vendas', r:rAcum.vendas.total, m:mAcum.vendas, fmt:function(v){ return UM(v); }, cor:MTP.accent,
+        falta:(c.meta.total.vendas - rAcum.vendas.total), faltaFmt:function(v){ return UM(v); } },
+      { lab:'🎯 Leads', r:rAcum.leadsTotal, m:mAcum.leads, fmt:INT, cor:MTP.gold,
+        falta:(c.meta.total.leads - rAcum.leadsTotal), faltaFmt:INT },
+      { lab:'📈 Conversão EC → venda',
+        r:(rAcum.contatoTotal ? 100*rAcum.vendas.total/rAcum.contatoTotal : 0),
+        m:(mAcum.contato ? 100*mAcum.vendas/mAcum.contato : 0), fmt:PCT, cor:'#a78bfa', pp:true }
+    ];
+
+    alvo.innerHTML = cards.map(function(k){
+      var pct = k.m ? 100*k.r/k.m : 0;
+      var largura = Math.max(0, Math.min(100, pct));
+      var cls = pct >= 100 ? 'pos' : (pct >= 85 ? '' : 'neg');
+      var rodape = k.pp
+        ? '<span>meta ' + PCT(k.m) + '</span><span class="mt-pc-pct ' + cls + '">' + PP(k.r - k.m) + '</span>'
+        : '<span>' + (k.falta > 0 && uteisRestantes
+              ? 'falta ' + k.faltaFmt(k.falta/uteisRestantes) + '/dia útil'
+              : (k.falta > 0 ? 'falta ' + k.faltaFmt(k.falta) : 'meta do mês batida')) + '</span>'
+          + '<span class="mt-pc-pct ' + cls + '">' + PCT(pct) + '</span>';
+      return '<div class="mt-card">'
+        + '<div class="mt-lab">' + k.lab + '</div>'
+        + '<div class="mt-pc-val">' + k.fmt(k.r) + '</div>'
+        + '<div class="mt-pc-meta">meta acumulada ' + k.fmt(k.m) + '</div>'
+        + '<div class="mt-bar"><i style="width:' + largura + '%;background:' + k.cor + '"></i></div>'
+        + '<div class="mt-pc-foot">' + rodape + '</div>'
+        + '</div>';
+    }).join('');
+
+    var sub = $('mtAtingSub');
+    if(sub) sub.innerHTML += '<br><span style="opacity:.75">acumulado comparado até ' + ate.slice(8,10) + '/' + ate.slice(5,7)
+      + ' (o dia corrente é parcial e fica fora)</span>';
+  }
+
+  /* ---------- burn-up ---------- */
+  function mtRenderBurn(){
+    var c = MT._ctx, el = $('mtBurn'); if(!el || typeof Chart === 'undefined') return;
+    if(MT.charts.burn){ MT.charts.burn.destroy(); }
+    var accM = 0, accR = 0, serieM = [], serieR = [], labels = [], evDias = {};
+    Object.keys(c.meta.eventos).forEach(function(f){
+      (c.meta.eventos[f].datas||[]).forEach(function(d){ evDias[d] = 1; });
+    });
+    c.dias.forEach(function(dk){
+      labels.push(dk.slice(8,10) + '/' + dk.slice(5,7));
+      var pd = c.meta.porDia[dk] || {};
+      Object.keys(pd).forEach(function(f){ accM += pd[f].fat; });
+      serieM.push(accM);
+      if(dk <= c.hoje){
+        var v = (c.real.vendas.porDia[dk] ? c.real.vendas.porDia[dk].f : 0) - (c.real.reemb.porDia[dk] || 0);
+        accR += v; serieR.push(accR);
+      } else serieR.push(null);
+    });
+    MT.charts.burn = new Chart(el, {
+      type:'line',
+      data:{ labels:labels, datasets:[
+        { label:'Meta acumulada', data:serieM, borderColor:MTP.muted, borderDash:[6,4], borderWidth:2,
+          pointRadius:0, fill:false, tension:0 },
+        { label:'Realizado acumulado', data:serieR, borderColor:MTP.green, borderWidth:2.5,
+          pointRadius:0, backgroundColor:'rgba(34,197,94,.13)', fill:'-1', tension:.15, spanGaps:false }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ position:'bottom', labels:{ color:MTP.muted, boxWidth:10, font:{size:11} } },
+          tooltip:{ callbacks:{ label:function(x){
+            var extra = evDias[c.dias[x.dataIndex]] ? '  · dia de evento' : '';
+            return x.dataset.label + ': ' + BRL(x.raw) + extra; } } } },
+        scales:{ x:{ grid:{display:false}, ticks:{ color:MTP.muted, maxRotation:0, autoSkip:true, maxTicksLimit:12,
+                     callback:function(v,i){ return evDias[c.dias[i]] ? '★ ' + this.getLabelForValue(v) : this.getLabelForValue(v); } } },
+                 y:{ grid:{color:MTP.grid}, ticks:{ color:MTP.muted,
+                     callback:function(v){ return 'R$ ' + Math.round(v/1000) + 'k'; } }, beginAtZero:true } } }
+    });
+  }
+
+  /* ---------- matriz ---------- */
+  function mtCel(kind, real, meta){
+    var modo = MT.modo, v;
+    if(modo === 'real') v = real;
+    else if(modo === 'meta') v = meta;
+    else v = real - meta;
+    var cls = '';
+    if(modo === 'delta') cls = v > 0 ? 'pos' : (v < 0 ? 'neg' : 'z');
+    else if(!v) cls = 'z';
+    var txt;
+    if(kind === 'money')      txt = (modo==='delta') ? BRLd(v) : BRL(v);
+    else if(kind === 'pct')   txt = (modo==='delta') ? PP(v) : PCT(v);
+    else if(kind === 'vendas')txt = (modo==='meta' || modo==='delta') ? ((modo==='delta'&&v>0?'+':modo==='delta'&&v<0?'−':'') + UM(Math.abs(v))) : INT(v);
+    else                      txt = (modo==='delta') ? ((v>0?'+':v<0?'−':'') + INT(Math.abs(v))) : INT(v);
+    return { txt:txt, cls:cls };
+  }
+
+  function mtRenderMatriz(){
+    var c = MT._ctx; if(!c) return;
+    var t = $('mtMatriz'); if(!t) return;
+    var mostrarDias = MT.gran === 'dias';
+
+    // colunas: dias (opcional) + subtotal da semana logo após o último dia dela + MÊS
+    var cols = [];
+    c.semanas.forEach(function(s){
+      if(mostrarDias) s.dias.forEach(function(dk){
+        var d = new Date(dk+'T12:00:00'), fds = (d.getDay()===0 || d.getDay()===6);
+        cols.push({ tipo:'dia', dk:dk, dias:[dk], lab:dk.slice(8,10), fds:fds });
+      });
+      cols.push({ tipo:'sem', dias:s.dias, lab:s.lab });
+    });
+    cols.push({ tipo:'mes', dias:c.dias, lab:'MÊS' });
+
+    // pré-calcula o realizado por conjunto de colunas (leads/EC precisam de DISTINCT no período)
+    var cache = cols.map(function(col){ return mtRealizado(col.dias); });
+    var metaCol = cols.map(function(col){
+      var m = {};
+      col.dias.forEach(function(dk){
+        var pd = c.meta.porDia[dk] || {};
+        Object.keys(pd).forEach(function(f){
+          if(!m[f]) m[f] = { leads:0, contato:0, vendas:0, fat:0 };
+          m[f].leads += pd[f].leads; m[f].contato += pd[f].contato;
+          m[f].vendas += pd[f].vendas; m[f].fat += pd[f].fat;
+        });
+      });
+      return m;
+    });
+
+    var html = '<thead><tr><th class="k">Funil / KPI</th>';
+    cols.forEach(function(col){
+      var cls = col.tipo==='sem' ? 'sem' : col.tipo==='mes' ? 'mes' : (col.fds ? 'fds' : '');
+      html += '<th class="' + cls + '">' + col.lab + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    function linha(nome, kind, fnReal, fnMeta, grp){
+      var s = '<tr' + (grp ? ' class="grp"' : '') + '><td class="k">' + nome + '</td>';
+      cols.forEach(function(col, i){
+        var cel = mtCel(kind, fnReal(cache[i], col), fnMeta(metaCol[i], col));
+        var base = col.tipo==='sem' ? 'sem' : col.tipo==='mes' ? 'mes' : (col.fds ? 'fds' : '');
+        s += '<td class="' + base + ' ' + cel.cls + '">' + cel.txt + '</td>';
+      });
+      return s + '</tr>';
+    }
+
+    var funis = Object.keys(c.meta.recorrentes);
+    // funis que só existem no realizado (sem meta) também entram
+    Object.keys(c.real.vendas.porFunil).forEach(function(f){
+      if(f !== '(sem funil)' && funis.indexOf(f) < 0 && !c.meta.eventos[f]) funis.push(f);
+    });
+
+    funis.forEach(function(f, idx){
+      html += '<tr class="grp"><td class="k" style="color:' + mtCor(f, idx) + '">' + f + '</td>'
+            + cols.map(function(col){ return '<td class="' + (col.tipo==='sem'?'sem':col.tipo==='mes'?'mes':(col.fds?'fds':'')) + '"></td>'; }).join('') + '</tr>';
+      html += linha('&nbsp;&nbsp;Leads', 'int',
+        function(R){ return R.leadsFunil[f] ? R.nUniq(R.leadsFunil[f].geral) : 0; },
+        function(M){ return M[f] ? M[f].leads : 0; });
+      html += linha('&nbsp;&nbsp;Em Contato', 'int',
+        function(R){ return R.contatoFunil[f] ? R.nUniq(R.contatoFunil[f].geral) : 0; },
+        function(M){ return M[f] ? M[f].contato : 0; });
+      html += linha('&nbsp;&nbsp;Conversão EC→venda', 'pct',
+        function(R){ var ec = R.contatoFunil[f] ? R.nUniq(R.contatoFunil[f].geral) : 0;
+                     var vd = R.vendas.porFunil[f] ? R.vendas.porFunil[f].v : 0;
+                     return ec ? 100*vd/ec : 0; },
+        function(M){ return M[f] ? (M[f].contato ? 100*M[f].vendas/M[f].contato : 0) : 0; });
+      html += linha('&nbsp;&nbsp;Vendas', 'vendas',
+        function(R){ return R.vendas.porFunil[f] ? R.vendas.porFunil[f].v : 0; },
+        function(M){ return M[f] ? M[f].vendas : 0; });
+      html += linha('&nbsp;&nbsp;Faturamento', 'money',
+        function(R){ return R.vendas.porFunil[f] ? R.vendas.porFunil[f].f : 0; },
+        function(M){ return M[f] ? M[f].fat : 0; });
+    });
+
+    // fora dos funis
+    html += '<tr class="grp"><td class="k">Fora dos funis <span style="font-weight:400;color:var(--muted);font-size:10.5px">— soma no resultado, sem meta por funil</span></td>'
+          + cols.map(function(col){ return '<td class="' + (col.tipo==='sem'?'sem':col.tipo==='mes'?'mes':(col.fds?'fds':'')) + '"></td>'; }).join('') + '</tr>';
+    Object.keys(c.meta.eventos).forEach(function(f){
+      html += linha('&nbsp;&nbsp;' + f + ' · vendas', 'vendas',
+        function(R){ return R.vendas.porFunil[f] ? R.vendas.porFunil[f].v : 0; },
+        function(M){ return M[f] ? M[f].vendas : 0; });
+      html += linha('&nbsp;&nbsp;' + f + ' · faturamento', 'money',
+        function(R){ return R.vendas.porFunil[f] ? R.vendas.porFunil[f].f : 0; },
+        function(M){ return M[f] ? M[f].fat : 0; });
+    });
+    html += linha('&nbsp;&nbsp;Sem funil · vendas', 'vendas',
+      function(R){ return R.vendas.porFunil['(sem funil)'] ? R.vendas.porFunil['(sem funil)'].v : 0; },
+      function(){ return 0; });
+    html += linha('&nbsp;&nbsp;Sem funil · faturamento', 'money',
+      function(R){ return R.vendas.porFunil['(sem funil)'] ? R.vendas.porFunil['(sem funil)'].f : 0; },
+      function(){ return 0; });
+    html += linha('&nbsp;&nbsp;Reembolso', 'money',
+      function(R){ return -R.reemb.total; }, function(){ return 0; });
+
+    // TOTAL
+    html += '<tr class="grp"><td class="k">TOTAL</td>'
+          + cols.map(function(col){ return '<td class="' + (col.tipo==='sem'?'sem':col.tipo==='mes'?'mes':(col.fds?'fds':'')) + '"></td>'; }).join('') + '</tr>';
+    // DECISÃO DO NIRLA (02/09): o TOTAL de leads é a SOMA dos funis, não o único.
+    // Conta o mesmo lead uma vez por funil por onde ele passou (em agosto, +15,7%).
+    // Em Contato no TOTAL segue ÚNICO — são duas réguas na mesma coluna, de propósito,
+    // e é isso que a nota abaixo da tabela avisa.
+    html += linha('&nbsp;&nbsp;Leads <span style="font-weight:400;color:var(--muted);font-size:10px">(Σ funis)</span>', 'int',
+      function(R){ var t=0; Object.keys(R.leadsFunil).forEach(function(f){ t += R.nUniq(R.leadsFunil[f].geral); }); return t; },
+      function(M){ var t=0; Object.keys(M).forEach(function(f){ t += M[f].leads; }); return t; });
+    html += linha('&nbsp;&nbsp;Em Contato <span style="font-weight:400;color:var(--muted);font-size:10px">(único)</span>', 'int',
+      function(R){ return R.contatoTotal; },
+      function(M){ var t=0; Object.keys(M).forEach(function(f){ t += M[f].contato; }); return t; });
+    html += linha('&nbsp;&nbsp;Conversão EC→venda', 'pct',
+      function(R){ return R.contatoTotal ? 100*R.vendas.total/R.contatoTotal : 0; },
+      function(M){ var v=0,ec=0; Object.keys(M).forEach(function(f){ v+=M[f].vendas; ec+=M[f].contato; }); return ec ? 100*v/ec : 0; });
+    html += linha('&nbsp;&nbsp;Vendas', 'vendas',
+      function(R){ return R.vendas.total; },
+      function(M){ var t=0; Object.keys(M).forEach(function(f){ t += M[f].vendas; }); return t; });
+    html += linha('&nbsp;&nbsp;Ticket médio', 'money',
+      function(R){ return R.vendas.total ? R.fatLiq/R.vendas.total : 0; },
+      function(M){ var v=0,f=0; Object.keys(M).forEach(function(k){ v+=M[k].vendas; f+=M[k].fat; }); return v ? f/v : 0; });
+    html += linha('&nbsp;&nbsp;Faturamento líquido', 'money',
+      function(R){ return R.fatLiq; },
+      function(M){ var t=0; Object.keys(M).forEach(function(f){ t += M[f].fat; }); return t; });
+
+    t.innerHTML = html + '</tbody>';
+
+    var nota = $('mtMatrizNota');
+    if(nota) nota.innerHTML =
+      '<b>Leads e Em Contato não somam na horizontal.</b> As colunas de semana e de MÊS contam pessoa única no período — o mesmo lead reaparece em dias diferentes, então somar os dias dá mais. '
+      + '<b>Σ funis ≠ TOTAL</b> pelo mesmo motivo: o lead conta em todos os funis por onde passou. '
+      + 'No TOTAL, <b>Leads</b> é a soma dos funis e <b>Em Contato</b> é o único do período — réguas diferentes na mesma coluna, por decisão de leitura. '
+      + '<b>Conversão no grão dia é ruído</b> (a venda sai ~17 dias depois do lead): na daily se cobra lead e venda; conversão e ticket se leem na semana e no mês. '
+      + 'Fim de semana tem meta zero e entra no realizado. Com evento no mês, a soma dos dias não fecha com a meta do mês — o evento não é diluído.';
+  }
+
+  /* ---------- funis recorrentes ---------- */
+  function mtRenderFunis(){
+    var c = MT._ctx, alvo = $('mtFunis'); if(!alvo) return;
+    var funis = Object.keys(c.meta.recorrentes);
+    if(!funis.length){ alvo.innerHTML = '<div class="mt-card"><div class="mt-cap">Sem meta recorrente cadastrada para este mês.</div></div>'; return; }
+    alvo.innerHTML = funis.map(function(f, i){
+      var m = c.meta.recorrentes[f];
+      var L  = c.real.leadsFunil[f]   ? c.real.nUniq(c.real.leadsFunil[f].geral)   : 0;
+      var EC = c.real.contatoFunil[f] ? c.real.nUniq(c.real.contatoFunil[f].geral) : 0;
+      var V  = c.real.vendas.porFunil[f] ? c.real.vendas.porFunil[f].v : 0;
+      var F  = c.real.vendas.porFunil[f] ? c.real.vendas.porFunil[f].f : 0;
+      var conv = EC ? 100*V/EC : 0, tk = V ? F/V : 0;
+      var pct = m.fat ? 100*F/m.fat : 0;
+      var cls = pct >= 100 ? 'pos' : (pct >= 85 ? '' : 'neg');
+      function kpi(lab, real, meta){ return '<div class="mt-kpi"><div class="mt-lab">' + lab + '</div><div class="n">' + real + '</div><div class="m">meta ' + meta + '</div></div>'; }
+      return '<div class="mt-fn">'
+        + '<div class="mt-fn-hd"><span class="mt-fn-dot" style="background:' + mtCor(f,i) + '"></span>'
+        + '<span class="mt-fn-nome">' + f + '</span>'
+        + '<span class="mt-fn-pct ' + cls + '">' + PCT(pct) + '</span></div>'
+        + '<div class="mt-bar"><i style="width:' + Math.max(0,Math.min(100,pct)) + '%;background:' + mtCor(f,i) + '"></i></div>'
+        + '<div class="mt-kpis">'
+        + kpi('Leads', INT(L), INT(m.leads))
+        + kpi('Em Contato', INT(EC), INT(m.contato))
+        + kpi('Conversão', PCT(conv), PCT(m.conv))
+        + kpi('Ticket', BRL(tk), BRL(m.ticket))
+        + kpi('Faturamento', BRL(F), BRL(m.fat))
+        + '</div></div>';
+    }).join('');
+  }
+
+  /* ---------- eventos ---------- */
+  function mtRenderEventos(){
+    var c = MT._ctx, alvo = $('mtEventos'); if(!alvo) return;
+    var evs = Object.keys(c.meta.eventos);
+    if(!evs.length){ alvo.innerHTML = '<div class="mt-card"><div class="mt-cap">Nenhum evento cadastrado para este mês.</div></div>'; return; }
+    alvo.innerHTML = evs.map(function(f){
+      var m = c.meta.eventos[f];
+      var pub = c.real.leadsFunil[f] ? c.real.nUniq(c.real.leadsFunil[f].geral) : 0;
+      var EC  = c.real.contatoFunil[f] ? c.real.nUniq(c.real.contatoFunil[f].geral) : 0;
+      var V   = c.real.vendas.porFunil[f] ? c.real.vendas.porFunil[f].v : 0;
+      var F   = c.real.vendas.porFunil[f] ? c.real.vendas.porFunil[f].f : 0;
+      var conv = EC ? 100*V/EC : 0, d = F - m.fat;
+      var pct = m.fat ? 100*F/m.fat : 0;
+      var cls = pct >= 100 ? 'pos' : (pct >= 85 ? '' : 'neg');
+      function kpi(lab, real, meta){ return '<div class="mt-kpi"><div class="mt-lab">' + lab + '</div><div class="n">' + real + '</div><div class="m">' + meta + '</div></div>'; }
+      return '<div class="mt-fn">'
+        + '<div class="mt-fn-hd"><span class="mt-fn-dot" style="background:#a78bfa"></span>'
+        + '<span class="mt-fn-nome">' + f + '</span>'
+        + '<span style="color:var(--muted);font-size:11px">' + (m.datas.join(' · ') || 'sem data') + '</span>'
+        + '<span class="mt-fn-pct ' + cls + '">' + PCT(pct) + '</span></div>'
+        + '<div class="mt-bar"><i style="width:' + Math.max(0,Math.min(100,pct)) + '%;background:#a78bfa"></i></div>'
+        + '<div class="mt-kpis">'
+        + kpi('Público', INT(pub), 'meta ' + INT(m.leads))
+        + kpi('Em Contato', INT(EC), '—')
+        + kpi('Conversão', PCT(conv), 'meta ' + PCT(m.conv))
+        + kpi('Faturamento', BRL(F), 'meta ' + BRL(m.fat))
+        + kpi('Δ', BRLd(d), '&nbsp;')
+        + '</div></div>';
+    }).join('');
+  }
+
+  /* ---------- leitura automática ----------
+     Decomposição SEQUENCIAL (telescópica) do Δ de faturamento em 4 efeitos. A soma
+     dos quatro é EXATAMENTE o Δ — por isso cada termo usa os reais à esquerda e as
+     metas à direita do fator que varia. Determinístico, sem IA. */
+  function mtDecompor(L,P,C,T, Lm,Pm,Cm,Tm){
+    return {
+      volume:    (L - Lm) * Pm      * Cm      * Tm,
+      passagem:  L        * (P - Pm)* Cm      * Tm,
+      conversao: L        * P       * (C - Cm)* Tm,
+      ticket:    L        * P       * C       * (T - Tm)
+    };
+  }
+  function mtRenderLeitura(){
+    var c = MT._ctx, alvo = $('mtLeitura'); if(!alvo) return;
+    var li = [];
+    function add(tag, txt){ li.push('<div class="mt-li"><span class="mt-tag">' + tag + '</span><span>' + txt + '</span></div>'); }
+
+    var dFat = c.real.fatLiq - c.meta.total.fat;
+    add('GAP', '<b>' + BRLd(dFat) + '</b> contra a meta do mês — ' + BRL(c.real.fatLiq) + ' de ' + BRL(c.meta.total.fat)
+      + ' (' + PCT(c.meta.total.fat ? 100*c.real.fatLiq/c.meta.total.fat : 0) + ').');
+
+    // conversão total: acima ou abaixo da meta — muda o diagnóstico inteiro
+    var convR = c.real.contatoTotal ? 100*c.real.vendas.total/c.real.contatoTotal : 0;
+    var mV=0, mEC=0;
+    Object.keys(c.meta.recorrentes).forEach(function(f){ mV += c.meta.recorrentes[f].vendas; mEC += c.meta.recorrentes[f].contato; });
+    var convM = mEC ? 100*mV/mEC : 0;
+    if(convM){
+      if(convR >= convM)
+        add('NÃO É FECHAMENTO', 'Conversão EC→venda em <b>' + PCT(convR) + '</b> contra meta de ' + PCT(convM)
+          + '. O time está fechando no ritmo — o buraco, se existe, está antes da venda.');
+      else
+        add('GAP', 'Conversão EC→venda em <b>' + PCT(convR) + '</b> contra meta de ' + PCT(convM) + ' (' + PP(convR-convM) + ').');
+    }
+    if(mEC){
+      var dEC = c.real.contatoTotal - mEC;
+      if(dEC < 0)
+        add('É VOLUME NO MEIO', 'Em Contato em <b>' + INT(c.real.contatoTotal) + '</b> contra ' + INT(mEC)
+          + ' de meta (' + PCT(100*dEC/mEC) + '). O funil trava entre o lead e o atendimento.');
+    }
+
+    // por funil: os dois maiores efeitos
+    Object.keys(c.meta.recorrentes).forEach(function(f){
+      var m = c.meta.recorrentes[f];
+      var L  = c.real.leadsFunil[f]   ? c.real.nUniq(c.real.leadsFunil[f].geral)   : 0;
+      var EC = c.real.contatoFunil[f] ? c.real.nUniq(c.real.contatoFunil[f].geral) : 0;
+      var V  = c.real.vendas.porFunil[f] ? c.real.vendas.porFunil[f].v : 0;
+      var F  = c.real.vendas.porFunil[f] ? c.real.vendas.porFunil[f].f : 0;
+      var P  = L ? EC/L : 0, C2 = EC ? V/EC : 0, T = V ? F/V : 0;
+      var ef = mtDecompor(L, P, C2, T, m.leads, m.passagem/100, m.conv/100, m.ticket);
+      var nomes = { volume:'volume de leads', passagem:'passagem lead→Em Contato', conversao:'conversão EC→venda', ticket:'ticket' };
+      var ord = Object.keys(ef).sort(function(a,b){ return Math.abs(ef[b]) - Math.abs(ef[a]); }).slice(0,2);
+      var partes = ord.map(function(k){ return nomes[k] + ' <b>' + BRLd(ef[k]) + '</b>'; });
+      add(f, BRLd(F - m.fat) + ' — o que mais pesa: ' + partes.join(' e ') + '.');
+    });
+
+    var sf = c.real.vendas.porFunil['(sem funil)'];
+    if(sf && sf.f){
+      add('SEM FUNIL', '<b>' + BRL(sf.f) + '</b> em ' + INT(sf.v) + ' venda(s) sem funil identificado ('
+        + PCT(c.real.vendas.fat ? 100*sf.f/c.real.vendas.fat : 0) + ' do faturamento). Soma no resultado, não tem meta — '
+        + 'e o teto de qualidade aqui é a atribuição lead→venda.');
+    }
+    Object.keys(c.meta.eventos).forEach(function(f){
+      var m = c.meta.eventos[f];
+      var F = c.real.vendas.porFunil[f] ? c.real.vendas.porFunil[f].f : 0;
+      add('EVENTO', f + ': ' + BRL(F) + ' contra meta de ' + BRL(m.fat) + ' (' + BRLd(F - m.fat)
+        + '). Fora do pacing diário — a meta entra inteira em ' + (m.datas.join(' · ') || 'data não definida') + '.');
+    });
+
+    alvo.innerHTML = li.join('');
+  }
+})();
+
+console.log('%c[CIC-G2] build 2026-09-02b — fix: ancora do mes usava periodoAtual(), que nao e funcao (a aba abria sempre no mes corrente) -> agora PERIODO.ate; e mtOnPeriodo nao era chamado pelo setPeriodo — build 09-02: ABA NOVA \"Meta do Mes\": meta no Supabase (append-only) e TODO o realizado no JS reusando uniqPorEtapa/origemDaVenda/TMB_LIQUIDO_PCT (view que recalcula realizado = segunda regua) · pacing ate o ultimo dia FECHADO · matriz KPI x dia com toggles Real/Meta/Delta e Dias/So semanas · leads e EC sao DISTINCT no periodo, nunca soma dos dias · TOTAL: Leads = soma dos funis, Em Contato = unico (duas reguas, por decisao) · reembolso como linha propria em Fora dos funis pra bater com o card 2 da Home — build 08-28: Home: grupo Resultado com 7 cards (bruto Hubla+TMB100 = 219.632 · liquido 156.412 com as DUAS subtracoes escritas no subtitulo · ticket bruto 680 e liquido 484 na mesma base de vendas · Hubla agora BRUTA e TMB agora 100%) — o split de 50%% da TMB vem do JS (TMB_LIQUIDO_PCT), NAO da view — build 08-26e: legenda do doughnut BRANCA de verdade: generateLabels custom ignora labels.color, precisa de fontColor no item (senao cai no Chart.defaults.color #666) — build 08-26c: legenda do Ranking operacional vira popover no \"i\" do titulo (hover + foco) — build 08-26b: legenda do doughnut legivel (DCP.text), paleta por motivo com hues separados e validados no fundo navy, taxa do funil em branco — build 08-26: Discadora, bateria visual: scatter em linha inteira com raio pela RAIZ (area proporcional; era linear e a maior bolha cobria 1/3 do grafico) + funil sai do Chart.js e vira HTML SEM EIXO (escala log fazia a venda parecer metade da discada) + perdas viram doughnut com cauda <2% agrupada e URA fora (7 -> 5 fatias) + heatmap com amostra minima de 3 no TMA e teto robusto no p90 (teto 2819s -> 241s, 9 celulas fracas tracejadas) + legenda de escala no heatmap + Leitura rapida removida — build 2026-08-25: ranking da Discadora com 15 colunas (Efet. 1x1 CORRIGIDA: vinha de resumo_1x1.atendidas e mostrava atendida, nao efetiva — Vanessa 241/33,7% virou 82/11,5%) + efetivas_campanha nova (Efet.1x1 + Efet.Camp. = Total Efet.) + %Atend./%Efet. sobre TENTATIVAS TOTAIS + supervisor com traco no CONV. via callix_agente_papel (Aline/Daniel) + venda orfa resolvida NA VIEW pelo callix_agente_vendedor (Pedro Barach 6 -> 7; so fica utm: quem nao tem agente) + agente sem atividade e sem venda fora do ranking e dos graficos — build 2026-08-24e — tentativas 1x1 reais no ar (callix_resumo_1x1_hora + vw_callix_dash_agente_dia com tentativas_1x1_real/efetivas_1x1, backfill 03/08-24/08) — build 08-24d: ranking operacional com Tent./Efet. 1x1 + fix do fallback que inflava Efetivas — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
