@@ -1,7 +1,54 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-09-02b
+  CIC-G2 · BUILD 2026-09-02d
+  Build 2026-09-02d — a régua da conversão + 10 ajustes de tela do Nirla.
+  RÉGUA CORRIGIDA: a conversão que ele definiu na planilha é EM CONTATO -> VENDA, não
+  entrada->venda (eu tinha lido do título da planilha e errado na 09-02c). Então `conv_pct` é
+  SEMPRE EC->venda — a régua da Home e da Taxa de Passagem — e a meta de conversão VOLTA a existir
+  (5% · 10% · 10% · 20%). `passagem_pct` NULL significa só uma coisa agora: não há meta de Em
+  Contato, e ali a tela mostra "–". A meta de conversão do TOTAL é ponderada pelo volume de entrada
+  que cada funil prevê (7,7%) — é a régua da planilha e a única possível sem meta de EC.
+  AJUSTES: (1) sai a frase de âncora sob o título · (2) sai a legenda sob o atingimento · (3)
+  "Pacing" -> "Ritmo do mês" · (4) saem os subtítulos de todas as seções · (5) os 4 cards ficam só
+  com o número, a barra e o % — e o % passa a ser da META DO MÊS, não da acumulada (quem abre quer
+  saber quanto do mês já está feito; o pacing acumulado é a pergunta do burn-up logo abaixo) · (6)
+  "Conversão EC → venda" -> "Taxa de Conversão" em toda a tela · (7) sai a nota longa da matriz (o
+  popover do "i" já explica) · (8) bloco de Eventos some junto com o título quando não há evento
+  cadastrado · (9) Leitura do mês reescrita · (10) bloco Réguas removido.
+  LEITURA DO MÊS — mudou de diagnóstico para ação. Cada tópico virou card com barra lateral por
+  severidade (crítico/atenção/bom/info) e o número grande no canto, e agora TERMINA NUM NÚMERO QUE
+  SE PERSEGUE: "faltam R$ X/dia útil nos N dias que restam, 3,4x o ritmo de hoje" em vez de
+  "faltou R$ Y por volume de leads". A decomposição em 4 efeitos continua sendo o motor (soma
+  telescópica = exatamente o Δ), mas o efeito dominante é TRADUZIDO na variável que dá pra mexer:
+  volume vira leads/dia útil que faltam, conversão vira p.p. e quanto eles valem em R$, ticket vira
+  preço/mix. Tópicos novos: projeção de fechamento no ritmo atual, o funil que mais pesa no buraco,
+  e os funis ACIMA da meta (o que está funcionando também é informação de daily).
+  ----------------------------------------------------------------------------
+  Build 2026-09-02c — VALIDADA no dash publicado (as 6 checagens do §10.3 do spec passaram) + 4
+  ajustes do Nirla. As checagens, com os números do dia: Σ funis = TOTAL (R$ 21.239 e 38 vendas nos
+  dois) · faturamento da aba == card 2 (líquido) da Home, diferença R$ 0 · conversão == Taxa de
+  Passagem (392 Em Contato e 9,7% nas duas telas) · a coluna de semana SOMA faturamento e vendas e
+  NÃO soma leads (677 -> 673) nem Em Contato (398 -> 392) · toggle Δ conferido à mão num dia útil
+  (9.455 - 5.955 = +3.501) e num sábado (meta 0, Δ = realizado).
+  AJUSTES:
+  (1) Setembro sem evento definido: a linha de evento saiu, meta de evento = 0.
+  (2) Venda é coisa inteira. A meta é fracionária por construção (leads x conv dá 419,7), mas
+      "meia venda" não existe — arredonda na EXIBIÇÃO, em toda a tela.
+  (3) Meta real de setembro no ar, substituindo o seed 'mockup': 650 leads/dia, 50 vendas/dia,
+      ticket R$ 452,78 -> R$ 475.419 no mês (21 dias úteis). Confere com a planilha: 50,0 vendas/dia
+      e R$ 22.639/dia, exato.
+  (4) Coluna de semana em negrito de verdade na matriz (era peso 600 com a cor herdada).
+  SEM META DE EM CONTATO — decisão do Nirla, e ela muda o cálculo: a planilha de projeção vai de
+  ENTRADA -> VENDA direto, sem a etapa de Em Contato. Então `passagem_pct` fica NULL e, nesse modo,
+  `conv_pct` é entrada->venda e a cadeia é leads x conv (sem o fator de passagem). Onde não há meta,
+  a tela mostra "–", nunca 0 — zero seria uma meta, "–" é a ausência dela. Atinge: linha Em Contato
+  e Conversão EC->venda da matriz (em Meta e em Δ), card de pacing de conversão, KPI dos funis. A
+  decomposição da leitura vira de TRÊS efeitos (volume, conversão entrada->venda, ticket) — forçar o
+  quarto exigiria inventar uma passagem de meta e a soma deixaria de ser exatamente o Δ.
+  ARMADILHA que isso criou e custou um ciclo: o agregador da matriz inicializava `contato: 0` e
+  `0 + null` é 0 — a ausência de meta virava meta de zero. Null tem que ser propagado, não somado.
+  ----------------------------------------------------------------------------
   Build 2026-09-02b — dois bugs MEUS da 09-02, achados numa varredura das dependências:
   (1) `mtMesAncora` chamava `periodoAtual()` achando que era o getter do filtro. NÃO É: `periodoAtual`
       é variável local do parser da aba Rotina. A chamada morria no try/catch e a aba abria sempre no
@@ -1027,7 +1074,6 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     #tab-metadomes .mt-card h4{font-family:'Sora','Space Grotesk',sans-serif;font-size:12.5px;color:var(--text-strong);margin:0 0 6px}
     #tab-metadomes .mt-cap{color:var(--muted);font-size:11.5px;margin-bottom:12px;line-height:1.4}
     #tab-metadomes .mt-box{position:relative;height:280px}
-    #tab-metadomes .mt-regua p{color:var(--muted);font-size:11.5px;line-height:1.65;margin:0}
     #tab-metadomes .mt-erro{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:#fca5a5;border-radius:10px;padding:12px 14px;font-size:12px;margin-bottom:14px}
     /* card de pacing */
     #tab-metadomes .mt-pc-val{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:800;color:var(--text-strong);line-height:1.2;margin:4px 0 2px}
@@ -1053,7 +1099,8 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     #tab-metadomes .mt-t .grp .k{color:var(--text-strong);font-family:'Sora','Space Grotesk',sans-serif;font-size:12px;font-weight:700;padding-top:13px}
     #tab-metadomes .mt-t .grp td{padding-top:13px}
     #tab-metadomes .mt-t .fds{background:rgba(255,255,255,.028)}
-    #tab-metadomes .mt-t .sem{background:rgba(51,95,235,.10);font-weight:600}
+    #tab-metadomes .mt-t .sem{background:rgba(51,95,235,.10);font-weight:700;color:var(--text-strong)}
+    #tab-metadomes .mt-t th.sem{color:var(--text-strong);font-weight:700}
     #tab-metadomes .mt-t .mes{background:rgba(51,95,235,.18);font-weight:700;color:var(--text-strong)}
     #tab-metadomes .mt-t .ev{color:var(--purple,#a78bfa)}
     #tab-metadomes .mt-t .neg{color:#f87171}
@@ -1070,9 +1117,25 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     #tab-metadomes .mt-kpi .n{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--text-strong)}
     #tab-metadomes .mt-kpi .m{color:var(--muted);font-size:10.5px;margin-top:1px}
     /* leitura */
-    #tab-metadomes .mt-leitura{display:flex;flex-direction:column;gap:9px}
-    #tab-metadomes .mt-li{display:flex;gap:10px;align-items:flex-start;font-size:12px;color:var(--text);line-height:1.6}
-    #tab-metadomes .mt-tag{flex:none;font-size:9.5px;font-weight:700;letter-spacing:.05em;padding:2px 7px;border-radius:5px;background:rgba(148,163,184,.16);color:var(--muted);text-transform:uppercase;margin-top:2px;min-width:96px;text-align:center}
+    /* Leitura do mês: cada tópico é um card com barra lateral colorida por severidade e um número
+       grande no canto — o olho pousa no número, o texto diz o que fazer com ele. */
+    #tab-metadomes .mt-leitura{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+    #tab-metadomes .mt-lt{background:var(--card2);border-radius:10px;padding:13px 15px 14px;border-left:4px solid var(--muted);position:relative}
+    #tab-metadomes .mt-lt-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+    #tab-metadomes .mt-lt-tag{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+    #tab-metadomes .mt-lt-num{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:800}
+    #tab-metadomes .mt-lt-tit{font-family:'Sora','Space Grotesk',sans-serif;font-size:13.5px;font-weight:700;color:var(--text-strong);line-height:1.35;margin-bottom:5px}
+    #tab-metadomes .mt-lt-txt{font-size:11.5px;line-height:1.7;color:var(--muted)}
+    #tab-metadomes .mt-lt-txt b{color:var(--text-strong);font-weight:700}
+    #tab-metadomes .mt-lt-critico{border-left-color:#ef4444}
+    #tab-metadomes .mt-lt-critico .mt-lt-num,#tab-metadomes .mt-lt-critico .mt-lt-tag{color:#f87171}
+    #tab-metadomes .mt-lt-atencao{border-left-color:#f59e0b}
+    #tab-metadomes .mt-lt-atencao .mt-lt-num,#tab-metadomes .mt-lt-atencao .mt-lt-tag{color:#fbbf24}
+    #tab-metadomes .mt-lt-bom{border-left-color:#22c55e}
+    #tab-metadomes .mt-lt-bom .mt-lt-num,#tab-metadomes .mt-lt-bom .mt-lt-tag{color:#4ade80}
+    #tab-metadomes .mt-lt-info{border-left-color:#3987e5}
+    #tab-metadomes .mt-lt-info .mt-lt-num,#tab-metadomes .mt-lt-info .mt-lt-tag{color:#60a5fa}
+    @media(max-width:1000px){#tab-metadomes .mt-leitura{grid-template-columns:1fr}}
     /* popover "i" — mesmo par da Discadora */
     #tab-metadomes .mt-info{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:8px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);font-size:11px;font-weight:700;font-family:'Inter',system-ui,sans-serif;font-style:italic;line-height:1;padding-right:1px;cursor:help;vertical-align:middle;transition:color .12s,border-color .12s}
     #tab-metadomes .mt-info:hover,#tab-metadomes .mt-info:focus-visible{border-color:var(--text-strong);color:var(--text-strong);outline:none}
@@ -1080,7 +1143,8 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     #tab-metadomes .mt-info-pop b{color:var(--text-strong);font-weight:700}
     #tab-metadomes .mt-info-pop code{font-family:'JetBrains Mono',monospace;font-size:10.5px;background:rgba(255,255,255,.06);padding:1px 4px;border-radius:3px}
     #tab-metadomes .mt-info:hover .mt-info-pop,#tab-metadomes .mt-info:focus-visible .mt-info-pop{opacity:1;visibility:visible}
-    @media(max-width:1100px){#tab-metadomes .mt-g4{grid-template-columns:1fr 1fr}#tab-metadomes .mt-kpis{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:1300px){#tab-metadomes .mt-kpis{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:1100px){#tab-metadomes .mt-g4{grid-template-columns:1fr 1fr}}
     @media(max-width:900px){#tab-metadomes .mt-g3,#tab-metadomes .mt-g4{grid-template-columns:1fr}#tab-metadomes .mt-info-pop{left:auto;right:-10px}}
     #tab-home .hm-g4{grid-template-columns:repeat(4,1fr)}
     #tab-home .hm-g3{grid-template-columns:repeat(3,1fr)}
@@ -1223,19 +1287,17 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     <div class="mt-hero">
       <div>
         <h2>🎯 Meta do Mês <span id="mtMesLab">–</span></h2>
-        <div class="mt-sub">Ancorada no MÊS — <b>não</b> segue o filtro de período do topo, igual Projeção e Reembolsos.</div>
       </div>
       <div class="mt-hero-num">
         <div class="mt-lab">Atingimento do mês</div>
         <div class="mt-big" id="mtAting">–</div>
-        <div class="mt-sub" id="mtAtingSub">–</div>
       </div>
     </div>
 
     <div id="mtErr" class="mt-erro" style="display:none"></div>
 
     <!-- 2. cards de pacing -->
-    <div class="mt-sec"><span class="bar"></span><h2>Pacing</h2><small>— acumulado até o último dia fechado</small></div>
+    <div class="mt-sec"><span class="bar"></span><h2>Ritmo do mês</h2></div>
     <div class="mt-grid mt-g4" id="mtPacing"></div>
 
     <!-- 3. burn-up -->
@@ -1273,31 +1335,20 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
         </div>
       </div>
       <div class="mt-scroll"><table class="mt-t" id="mtMatriz"></table></div>
-      <div class="mt-note" id="mtMatrizNota"></div>
+
     </div>
 
     <!-- 5. funis recorrentes -->
-    <div class="mt-sec"><span class="bar" style="background:var(--green,#22c55e)"></span><h2>Funis recorrentes</h2><small>— meta × realizado no mês</small></div>
+    <div class="mt-sec"><span class="bar" style="background:var(--green,#22c55e)"></span><h2>Funis recorrentes</h2></div>
     <div id="mtFunis"></div>
 
     <!-- 6. evento -->
-    <div class="mt-sec"><span class="bar" style="background:var(--purple,#a78bfa)"></span><h2>Eventos</h2><small>— fora do pacing diário, ancorados nas datas do evento</small></div>
+    <div class="mt-sec" id="mtSecEventos"><span class="bar" style="background:var(--purple,#a78bfa)"></span><h2>Eventos</h2></div>
     <div id="mtEventos"></div>
 
     <!-- 7. leitura -->
-    <div class="mt-sec"><span class="bar" style="background:var(--orange,#f59e0b)"></span><h2>Leitura do mês</h2><small>— decomposição do Δ, determinística</small></div>
-    <div class="mt-card"><div id="mtLeitura" class="mt-leitura">–</div></div>
-
-    <!-- 8. réguas -->
-    <div class="mt-sec"><span class="bar" style="background:var(--silver,#cbd5e1)"></span><h2>Réguas</h2><small>— o que cada número desta tela significa</small></div>
-    <div class="mt-grid mt-g3" id="mtReguas">
-      <div class="mt-card mt-regua"><h4>Lead conta em todos os funis</h4><p>O lead que passou por Disparos e depois por Upsell conta nos <b>dois</b>. Por isso a soma dos funis é maior que o total — em agosto, 15,7% maior. É por construção, para que cada funil seja avaliado pelo que ele realmente tocou.</p></div>
-      <div class="mt-card mt-regua"><h4>Venda tem dono único</h4><p>Crédito <b>last-touch</b>: a venda vai para o último funil por onde o lead passou antes de comprar. Nunca é dividida nem duplicada, então a soma das vendas por funil fecha com o total.</p></div>
-      <div class="mt-card mt-regua"><h4>Conversão é Em Contato → Venda</h4><p>Mesma régua da Home e da Taxa de Passagem, <b>não</b> lead → venda. O denominador não é ajustado: se o lead migrou de funil e comprou em outro, a queda aparece no funil de origem — e o texto da leitura diz quantos foram.</p></div>
-      <div class="mt-card mt-regua"><h4>Faturamento é líquido</h4><p>O mesmo corte do card 2 da Home: TMB pela metade e reembolso descontado. O ticket que se digita na meta já é líquido — a cadeia %Hubla / taxa / cancelamento fica na planilha de forecast.</p></div>
-      <div class="mt-card mt-regua"><h4>Meta só em dia útil</h4><p>A meta do mês é distribuída pelos dias úteis, com peso e feriado vindos de tabela. Sábado e domingo entram no <b>realizado</b> com meta zero. A distribuição é régua de pacing; a meta é do mês.</p></div>
-      <div class="mt-card mt-regua"><h4>Sem amostra mínima</h4><p>Nenhum KPI é suprimido, arredondado para fora ou marcado como ruído por base pequena. Uma conversão de 47,4% numa semana de 19 Em Contato aparece como está. Quem julga o número é quem lê.</p></div>
-    </div>
+    <div class="mt-sec"><span class="bar" style="background:var(--orange,#f59e0b)"></span><h2>Leitura do mês</h2></div>
+    <div id="mtLeitura" class="mt-leitura">–</div>
 
   </div>
   <!-- ==================== FIM ABA META DO MÊS ==================== -->
@@ -8580,11 +8631,19 @@ renderMonthTabs();
                    .map(function(x){ return x.trim().slice(0,10); }).filter(Boolean);
         eventos[f] = { leads:pub, vendas:pub*conv, fat:pub*conv*tk, ticket:tk, conv:conv*100, datas:ds };
       } else {
-        var ld = N(r.leads_dia_util), pas = N(r.passagem_pct)/100;
+        var ld = N(r.leads_dia_util);
+        // `conv_pct` é SEMPRE Em Contato -> Venda: é a régua do dash inteiro (Home e Taxa de
+        // Passagem) e a ótica que o Nirla usa pra definir meta. `passagem_pct` NULL significa
+        // apenas que NÃO há meta de Em Contato — a tela mostra "–" ali em vez de inventar número.
+        // A cadeia de vendas segue a planilha: leads/dia x conversão (com passagem, entra o fator).
+        var temPas = (r.passagem_pct !== null && r.passagem_pct !== undefined && String(r.passagem_pct).trim() !== '');
+        var pas = temPas ? N(r.passagem_pct)/100 : null;
+        var fator = temPas ? pas : 1;
         recorrentes[f] = {
-          leadsDiaUtil: ld, passagem: pas*100, conv: conv*100, ticket: tk,
-          leads: ld*diasUteis, contato: ld*pas*diasUteis,
-          vendas: ld*pas*conv*diasUteis, fat: ld*pas*conv*tk*diasUteis
+          leadsDiaUtil: ld, temPassagem: temPas, passagem: temPas ? pas*100 : null,
+          conv: conv*100, ticket: tk,
+          leads: ld*diasUteis, contato: temPas ? ld*pas*diasUteis : null,
+          vendas: ld*fator*conv*diasUteis, fat: ld*fator*conv*tk*diasUteis
         };
       }
     });
@@ -8596,7 +8655,8 @@ renderMonthTabs();
       porDia[dk] = {};
       Object.keys(recorrentes).forEach(function(f){
         var m = recorrentes[f];
-        porDia[dk][f] = { leads:m.leads*fator, contato:m.contato*fator, vendas:m.vendas*fator, fat:m.fat*fator, ticket:m.ticket, conv:m.conv };
+        porDia[dk][f] = { leads:m.leads*fator, contato:(m.contato==null?null:m.contato*fator),
+                          vendas:m.vendas*fator, fat:m.fat*fator, ticket:m.ticket, conv:m.conv };
       });
       Object.keys(eventos).forEach(function(f){
         var ev = eventos[f], on = ev.datas.indexOf(dk) >= 0 ? (1/Math.max(1,ev.datas.length)) : 0;
@@ -8604,9 +8664,10 @@ renderMonthTabs();
       });
     });
 
-    var totRec = { leads:0, contato:0, vendas:0, fat:0 };
+    var totRec = { leads:0, contato:null, vendas:0, fat:0 };
     Object.keys(recorrentes).forEach(function(f){
-      totRec.leads += recorrentes[f].leads; totRec.contato += recorrentes[f].contato;
+      totRec.leads += recorrentes[f].leads;
+      if(recorrentes[f].contato != null) totRec.contato = (totRec.contato||0) + recorrentes[f].contato;
       totRec.vendas += recorrentes[f].vendas; totRec.fat += recorrentes[f].fat;
     });
     var totEv = { leads:0, vendas:0, fat:0 };
@@ -8672,7 +8733,7 @@ renderMonthTabs();
                   real: mtRealizado(dias), meta: mtMetaCalc(mesDK, dias, cal),
                   semanas: mtSemanas(dias, cal) };
       var el = $('mtErr'); if(el) el.style.display='none';
-      mtRenderHeader(); mtRenderPacing(); mtRenderBurn();
+      mtRenderHeader(); mtRenderRitmo(); mtRenderBurn();
       mtRenderMatriz(); mtRenderFunis(); mtRenderEventos(); mtRenderLeitura();
     } catch(e){
       var er = $('mtErr'); if(er){ er.style.display='block'; er.textContent = 'Erro ao renderizar a Meta do Mês: ' + e.message; }
@@ -8686,66 +8747,49 @@ renderMonthTabs();
     var lab = $('mtMesLab'); if(lab) lab.textContent = '· ' + MESES[c.A.mes-1] + '/' + c.A.ano;
     var atg = c.meta.total.fat ? 100*c.real.fatLiq/c.meta.total.fat : 0;
     var b = $('mtAting'); if(b) b.textContent = c.meta.total.fat ? PCT(atg) : '–';
-    var s = $('mtAtingSub');
-    if(s) s.innerHTML = c.meta.total.fat
-      ? BRL(c.real.fatLiq) + ' de ' + BRL(c.meta.total.fat) + '<br>meta = ' + BRL(c.meta.totRec.fat) + ' recorrente + ' + BRL(c.meta.totEv.fat) + ' evento'
-      : 'Sem meta cadastrada para este mês.';
   }
 
-  /* ---------- 4 cards de pacing ----------
-     O acumulado compara só até o ÚLTIMO DIA FECHADO: o dia corrente é parcial e
-     entraria como déficit falso. */
-  function mtRenderPacing(){
+  // meta de conversão do mês: ponderada pelo volume de entrada que cada funil prevê — é a régua da
+  // planilha, e a única possível sem meta de Em Contato.
+  function mtMetaConvTotal(){
+    var rec = MT._ctx.meta.recorrentes, num = 0, den = 0;
+    Object.keys(rec).forEach(function(f){ num += rec[f].conv * rec[f].leads; den += rec[f].leads; });
+    return den ? num/den : null;
+  }
+  function mtLeadsSomaFunis(R){
+    var t = 0; Object.keys(R.leadsFunil).forEach(function(f){ t += R.nUniq(R.leadsFunil[f].geral); });
+    return t;
+  }
+
+  /* ---------- 4 cards do ritmo ----------
+     O número grande é o realizado do MÊS e a barra/% são contra a META DO MÊS INTEIRO — não contra
+     a acumulada até hoje. Quem abre a tela quer saber quanto do mês já está feito; o pacing
+     acumulado (que é outra pergunta) vive no burn-up logo abaixo. */
+  function mtRenderRitmo(){
     var c = MT._ctx, alvo = $('mtPacing'); if(!alvo) return;
-    var fechados = c.dias.filter(function(dk){ return dk < c.hoje; });
-    if(!fechados.length) fechados = c.dias.slice(0, 1);
-    var ate = fechados[fechados.length-1];
-
-    var mAcum = { leads:0, contato:0, vendas:0, fat:0 };
-    fechados.forEach(function(dk){
-      var pd = c.meta.porDia[dk] || {};
-      Object.keys(pd).forEach(function(f){
-        mAcum.leads += pd[f].leads; mAcum.contato += pd[f].contato;
-        mAcum.vendas += pd[f].vendas; mAcum.fat += pd[f].fat;
-      });
-    });
-    var rAcum = mtRealizado(fechados);
-    var uteisRestantes = c.dias.filter(function(dk){ return dk >= c.hoje && c.cal[dk] && c.cal[dk].util; }).length;
-
+    var R = c.real, M = c.meta.total;
+    var convR = R.contatoTotal ? 100*R.vendas.total/R.contatoTotal : 0;
     var cards = [
-      { lab:'💰 Faturamento líquido', r:rAcum.fatLiq, m:mAcum.fat, fmt:BRL, cor:MTP.green,
-        falta:(c.meta.total.fat - rAcum.fatLiq), faltaFmt:BRL },
-      { lab:'📊 Vendas', r:rAcum.vendas.total, m:mAcum.vendas, fmt:function(v){ return UM(v); }, cor:MTP.accent,
-        falta:(c.meta.total.vendas - rAcum.vendas.total), faltaFmt:function(v){ return UM(v); } },
-      { lab:'🎯 Leads', r:rAcum.leadsTotal, m:mAcum.leads, fmt:INT, cor:MTP.gold,
-        falta:(c.meta.total.leads - rAcum.leadsTotal), faltaFmt:INT },
-      { lab:'📈 Conversão EC → venda',
-        r:(rAcum.contatoTotal ? 100*rAcum.vendas.total/rAcum.contatoTotal : 0),
-        m:(mAcum.contato ? 100*mAcum.vendas/mAcum.contato : 0), fmt:PCT, cor:'#a78bfa', pp:true }
+      { lab:'💰 Faturamento líquido', r:R.fatLiq,           m:M.fat,    fmt:BRL, cor:MTP.green  },
+      { lab:'📊 Vendas',              r:R.vendas.total,     m:M.vendas, fmt:INT, cor:MTP.accent },
+      { lab:'🎯 Leads',               r:mtLeadsSomaFunis(R),m:M.leads,  fmt:INT, cor:MTP.gold   },
+      { lab:'📈 Taxa de Conversão',   r:convR, m:mtMetaConvTotal(), fmt:PCT, cor:'#a78bfa' }
     ];
-
     alvo.innerHTML = cards.map(function(k){
-      var pct = k.m ? 100*k.r/k.m : 0;
-      var largura = Math.max(0, Math.min(100, pct));
-      var cls = pct >= 100 ? 'pos' : (pct >= 85 ? '' : 'neg');
-      var rodape = k.pp
-        ? '<span>meta ' + PCT(k.m) + '</span><span class="mt-pc-pct ' + cls + '">' + PP(k.r - k.m) + '</span>'
-        : '<span>' + (k.falta > 0 && uteisRestantes
-              ? 'falta ' + k.faltaFmt(k.falta/uteisRestantes) + '/dia útil'
-              : (k.falta > 0 ? 'falta ' + k.faltaFmt(k.falta) : 'meta do mês batida')) + '</span>'
-          + '<span class="mt-pc-pct ' + cls + '">' + PCT(pct) + '</span>';
+      if(k.m === null || k.m === undefined || !k.m){
+        return '<div class="mt-card"><div class="mt-lab">' + k.lab + '</div>'
+          + '<div class="mt-pc-val">' + k.fmt(k.r) + '</div><div class="mt-bar"></div>'
+          + '<div class="mt-pc-foot"><span></span><span class="mt-pc-pct z">–</span></div></div>';
+      }
+      var pct = 100*k.r/k.m, largura = Math.max(0, Math.min(100, pct));
+      var cls = pct >= 100 ? 'pos' : (pct >= 70 ? '' : 'neg');
       return '<div class="mt-card">'
         + '<div class="mt-lab">' + k.lab + '</div>'
         + '<div class="mt-pc-val">' + k.fmt(k.r) + '</div>'
-        + '<div class="mt-pc-meta">meta acumulada ' + k.fmt(k.m) + '</div>'
         + '<div class="mt-bar"><i style="width:' + largura + '%;background:' + k.cor + '"></i></div>'
-        + '<div class="mt-pc-foot">' + rodape + '</div>'
+        + '<div class="mt-pc-foot"><span></span><span class="mt-pc-pct ' + cls + '">' + PCT(pct) + '</span></div>'
         + '</div>';
     }).join('');
-
-    var sub = $('mtAtingSub');
-    if(sub) sub.innerHTML += '<br><span style="opacity:.75">acumulado comparado até ' + ate.slice(8,10) + '/' + ate.slice(5,7)
-      + ' (o dia corrente é parcial e fica fora)</span>';
   }
 
   /* ---------- burn-up ---------- */
@@ -8789,6 +8833,9 @@ renderMonthTabs();
   /* ---------- matriz ---------- */
   function mtCel(kind, real, meta){
     var modo = MT.modo, v;
+    // meta null = não existe meta pra esse KPI (ex.: Em Contato quando a meta foi montada
+    // entrada->venda). Mostra "–" em Meta e em Δ, nunca 0 — zero seria uma meta, "–" é a ausência.
+    if(modo !== 'real' && (meta === null || meta === undefined)) return { txt:'–', cls:'z' };
     if(modo === 'real') v = real;
     else if(modo === 'meta') v = meta;
     else v = real - meta;
@@ -8798,7 +8845,7 @@ renderMonthTabs();
     var txt;
     if(kind === 'money')      txt = (modo==='delta') ? BRLd(v) : BRL(v);
     else if(kind === 'pct')   txt = (modo==='delta') ? PP(v) : PCT(v);
-    else if(kind === 'vendas')txt = (modo==='meta' || modo==='delta') ? ((modo==='delta'&&v>0?'+':modo==='delta'&&v<0?'−':'') + UM(Math.abs(v))) : INT(v);
+    else if(kind === 'vendas')txt = (modo==='delta') ? ((v>0?'+':v<0?'−':'') + INT(Math.abs(v))) : INT(v);
     else                      txt = (modo==='delta') ? ((v>0?'+':v<0?'−':'') + INT(Math.abs(v))) : INT(v);
     return { txt:txt, cls:cls };
   }
@@ -8826,9 +8873,15 @@ renderMonthTabs();
       col.dias.forEach(function(dk){
         var pd = c.meta.porDia[dk] || {};
         Object.keys(pd).forEach(function(f){
-          if(!m[f]) m[f] = { leads:0, contato:0, vendas:0, fat:0 };
-          m[f].leads += pd[f].leads; m[f].contato += pd[f].contato;
+          // contato começa NULL, não 0: `0 + null` daria 0 e a ausência de meta viraria
+          // uma meta de zero — que é o oposto do que "–" quer dizer.
+          // contato começa NULL, não 0: `0 + null` daria 0 e a ausência de meta viraria uma meta
+          // de zero — o oposto do que "–" quer dizer. Null se propaga, não se soma.
+          if(!m[f]) m[f] = { leads:0, contato:null, vendas:0, fat:0, conv:null, ldMeta:0 };
+          m[f].leads += pd[f].leads;
+          if(pd[f].contato != null) m[f].contato = (m[f].contato||0) + pd[f].contato;
           m[f].vendas += pd[f].vendas; m[f].fat += pd[f].fat;
+          if(pd[f].leads > 0){ m[f].conv = pd[f].conv; m[f].ldMeta += pd[f].leads; }
         });
       });
       return m;
@@ -8865,12 +8918,12 @@ renderMonthTabs();
         function(M){ return M[f] ? M[f].leads : 0; });
       html += linha('&nbsp;&nbsp;Em Contato', 'int',
         function(R){ return R.contatoFunil[f] ? R.nUniq(R.contatoFunil[f].geral) : 0; },
-        function(M){ return M[f] ? M[f].contato : 0; });
-      html += linha('&nbsp;&nbsp;Conversão EC→venda', 'pct',
+        function(M){ return M[f] ? M[f].contato : null; });   // null -> "–": não há meta de EC
+      html += linha('&nbsp;&nbsp;Taxa de Conversão', 'pct',
         function(R){ var ec = R.contatoFunil[f] ? R.nUniq(R.contatoFunil[f].geral) : 0;
                      var vd = R.vendas.porFunil[f] ? R.vendas.porFunil[f].v : 0;
                      return ec ? 100*vd/ec : 0; },
-        function(M){ return M[f] ? (M[f].contato ? 100*M[f].vendas/M[f].contato : 0) : 0; });
+        function(M){ return (M[f] && M[f].conv != null) ? M[f].conv : null; });
       html += linha('&nbsp;&nbsp;Vendas', 'vendas',
         function(R){ return R.vendas.porFunil[f] ? R.vendas.porFunil[f].v : 0; },
         function(M){ return M[f] ? M[f].vendas : 0; });
@@ -8911,10 +8964,14 @@ renderMonthTabs();
       function(M){ var t=0; Object.keys(M).forEach(function(f){ t += M[f].leads; }); return t; });
     html += linha('&nbsp;&nbsp;Em Contato <span style="font-weight:400;color:var(--muted);font-size:10px">(único)</span>', 'int',
       function(R){ return R.contatoTotal; },
-      function(M){ var t=0; Object.keys(M).forEach(function(f){ t += M[f].contato; }); return t; });
-    html += linha('&nbsp;&nbsp;Conversão EC→venda', 'pct',
+      function(M){ var t=null; Object.keys(M).forEach(function(f){ if(M[f].contato!=null) t=(t||0)+M[f].contato; }); return t; });
+    html += linha('&nbsp;&nbsp;Taxa de Conversão', 'pct',
       function(R){ return R.contatoTotal ? 100*R.vendas.total/R.contatoTotal : 0; },
-      function(M){ var v=0,ec=0; Object.keys(M).forEach(function(f){ v+=M[f].vendas; ec+=M[f].contato; }); return ec ? 100*v/ec : 0; });
+      // Sem meta de Em Contato não dá média ponderada por EC. A régua aqui é a mesma da planilha:
+      // ponderar a conversão de cada funil pelo volume de entrada que a meta dele prevê.
+      function(M){ var num=0, den=0; Object.keys(M).forEach(function(f){
+        if(M[f].conv != null && M[f].ldMeta > 0){ num += M[f].conv*M[f].ldMeta; den += M[f].ldMeta; } });
+        return den ? num/den : null; });
     html += linha('&nbsp;&nbsp;Vendas', 'vendas',
       function(R){ return R.vendas.total; },
       function(M){ var t=0; Object.keys(M).forEach(function(f){ t += M[f].vendas; }); return t; });
@@ -8927,7 +8984,7 @@ renderMonthTabs();
 
     t.innerHTML = html + '</tbody>';
 
-    var nota = $('mtMatrizNota');
+    var nota = null;
     if(nota) nota.innerHTML =
       '<b>Leads e Em Contato não somam na horizontal.</b> As colunas de semana e de MÊS contam pessoa única no período — o mesmo lead reaparece em dias diferentes, então somar os dias dá mais. '
       + '<b>Σ funis ≠ TOTAL</b> pelo mesmo motivo: o lead conta em todos os funis por onde passou. '
@@ -8958,8 +9015,8 @@ renderMonthTabs();
         + '<div class="mt-bar"><i style="width:' + Math.max(0,Math.min(100,pct)) + '%;background:' + mtCor(f,i) + '"></i></div>'
         + '<div class="mt-kpis">'
         + kpi('Leads', INT(L), INT(m.leads))
-        + kpi('Em Contato', INT(EC), INT(m.contato))
-        + kpi('Conversão', PCT(conv), PCT(m.conv))
+        + kpi('Em Contato', INT(EC), m.contato==null ? '–' : INT(m.contato))
+        + kpi('Taxa de Conversão', PCT(conv), PCT(m.conv))
         + kpi('Ticket', BRL(tk), BRL(m.ticket))
         + kpi('Faturamento', BRL(F), BRL(m.fat))
         + '</div></div>';
@@ -8970,7 +9027,11 @@ renderMonthTabs();
   function mtRenderEventos(){
     var c = MT._ctx, alvo = $('mtEventos'); if(!alvo) return;
     var evs = Object.keys(c.meta.eventos);
-    if(!evs.length){ alvo.innerHTML = '<div class="mt-card"><div class="mt-cap">Nenhum evento cadastrado para este mês.</div></div>'; return; }
+    // Sem evento cadastrado o bloco inteiro sai da tela (título junto), em vez de ocupar espaço
+    // com um card dizendo que não há nada. Meta de evento = 0 quando não existe.
+    var sec = document.getElementById('mtSecEventos');
+    if(!evs.length){ alvo.innerHTML = ''; if(sec) sec.style.display='none'; return; }
+    if(sec) sec.style.display='';
     alvo.innerHTML = evs.map(function(f){
       var m = c.meta.eventos[f];
       var pub = c.real.leadsFunil[f] ? c.real.nUniq(c.real.leadsFunil[f].geral) : 0;
@@ -8998,9 +9059,11 @@ renderMonthTabs();
   }
 
   /* ---------- leitura automática ----------
-     Decomposição SEQUENCIAL (telescópica) do Δ de faturamento em 4 efeitos. A soma
-     dos quatro é EXATAMENTE o Δ — por isso cada termo usa os reais à esquerda e as
-     metas à direita do fator que varia. Determinístico, sem IA. */
+     Determinística, sem IA. Regra de escrita: cada tópico termina num NÚMERO QUE SE PERSEGUE, não
+     numa constatação. "Faltou R$ 40k por volume de leads" é diagnóstico e não serve pra daily;
+     "faltam 12 leads/dia útil nos 19 dias que restam" é meta de amanhã.
+     A decomposição do Δ em 4 efeitos continua sendo o motor (soma telescópica = exatamente o Δ),
+     mas o efeito dominante é TRADUZIDO na variável que dá pra mexer. */
   function mtDecompor(L,P,C,T, Lm,Pm,Cm,Tm){
     return {
       volume:    (L - Lm) * Pm      * Cm      * Tm,
@@ -9009,67 +9072,126 @@ renderMonthTabs();
       ticket:    L        * P       * C       * (T - Tm)
     };
   }
+
   function mtRenderLeitura(){
     var c = MT._ctx, alvo = $('mtLeitura'); if(!alvo) return;
-    var li = [];
-    function add(tag, txt){ li.push('<div class="mt-li"><span class="mt-tag">' + tag + '</span><span>' + txt + '</span></div>'); }
-
-    var dFat = c.real.fatLiq - c.meta.total.fat;
-    add('GAP', '<b>' + BRLd(dFat) + '</b> contra a meta do mês — ' + BRL(c.real.fatLiq) + ' de ' + BRL(c.meta.total.fat)
-      + ' (' + PCT(c.meta.total.fat ? 100*c.real.fatLiq/c.meta.total.fat : 0) + ').');
-
-    // conversão total: acima ou abaixo da meta — muda o diagnóstico inteiro
-    var convR = c.real.contatoTotal ? 100*c.real.vendas.total/c.real.contatoTotal : 0;
-    var mV=0, mEC=0;
-    Object.keys(c.meta.recorrentes).forEach(function(f){ mV += c.meta.recorrentes[f].vendas; mEC += c.meta.recorrentes[f].contato; });
-    var convM = mEC ? 100*mV/mEC : 0;
-    if(convM){
-      if(convR >= convM)
-        add('NÃO É FECHAMENTO', 'Conversão EC→venda em <b>' + PCT(convR) + '</b> contra meta de ' + PCT(convM)
-          + '. O time está fechando no ritmo — o buraco, se existe, está antes da venda.');
-      else
-        add('GAP', 'Conversão EC→venda em <b>' + PCT(convR) + '</b> contra meta de ' + PCT(convM) + ' (' + PP(convR-convM) + ').');
-    }
-    if(mEC){
-      var dEC = c.real.contatoTotal - mEC;
-      if(dEC < 0)
-        add('É VOLUME NO MEIO', 'Em Contato em <b>' + INT(c.real.contatoTotal) + '</b> contra ' + INT(mEC)
-          + ' de meta (' + PCT(100*dEC/mEC) + '). O funil trava entre o lead e o atendimento.');
+    var R = c.real, META = c.meta, cards = [];
+    function add(tipo, tag, titulo, corpo, num){
+      cards.push('<div class="mt-lt mt-lt-' + tipo + '">'
+        + '<div class="mt-lt-top"><span class="mt-lt-tag">' + tag + '</span>'
+        + (num ? '<span class="mt-lt-num">' + num + '</span>' : '') + '</div>'
+        + '<div class="mt-lt-tit">' + titulo + '</div>'
+        + '<div class="mt-lt-txt">' + corpo + '</div></div>');
     }
 
-    // por funil: os dois maiores efeitos
-    Object.keys(c.meta.recorrentes).forEach(function(f){
-      var m = c.meta.recorrentes[f];
-      var L  = c.real.leadsFunil[f]   ? c.real.nUniq(c.real.leadsFunil[f].geral)   : 0;
-      var EC = c.real.contatoFunil[f] ? c.real.nUniq(c.real.contatoFunil[f].geral) : 0;
-      var V  = c.real.vendas.porFunil[f] ? c.real.vendas.porFunil[f].v : 0;
-      var F  = c.real.vendas.porFunil[f] ? c.real.vendas.porFunil[f].f : 0;
-      var P  = L ? EC/L : 0, C2 = EC ? V/EC : 0, T = V ? F/V : 0;
-      var ef = mtDecompor(L, P, C2, T, m.leads, m.passagem/100, m.conv/100, m.ticket);
-      var nomes = { volume:'volume de leads', passagem:'passagem lead→Em Contato', conversao:'conversão EC→venda', ticket:'ticket' };
-      var ord = Object.keys(ef).sort(function(a,b){ return Math.abs(ef[b]) - Math.abs(ef[a]); }).slice(0,2);
-      var partes = ord.map(function(k){ return nomes[k] + ' <b>' + BRLd(ef[k]) + '</b>'; });
-      add(f, BRLd(F - m.fat) + ' — o que mais pesa: ' + partes.join(' e ') + '.');
+    // --- base do ritmo: dias úteis já fechados x os que restam ---
+    var uteis = c.dias.filter(function(d){ return c.cal[d] && c.cal[d].util; });
+    var fechados = uteis.filter(function(d){ return d < c.hoje; });
+    var restantes = uteis.filter(function(d){ return d >= c.hoje; });
+    var nF = fechados.length, nR = restantes.length;
+    var ritmoDia = nF ? R.fatLiq/nF : 0;
+    var projecao = R.fatLiq + ritmoDia*nR;
+    var faltaFat = META.total.fat - R.fatLiq;
+    var precisaDia = nR ? faltaFat/nR : 0;
+    var mult = ritmoDia ? precisaDia/ritmoDia : 0;
+
+    if(nF && META.total.fat){
+      var pctProj = 100*projecao/META.total.fat;
+      var tipo = pctProj >= 100 ? 'bom' : (pctProj >= 80 ? 'atencao' : 'critico');
+      add(tipo, 'Ritmo', 'No ritmo atual, o mês fecha em ' + BRL(projecao),
+        'São <b>' + BRL(ritmoDia) + '/dia útil</b> em ' + nF + ' dia(s) fechado(s). Para bater a meta '
+        + 'faltam <b>' + BRL(faltaFat) + '</b> em <b>' + nR + ' dias úteis</b> — ou seja <b>'
+        + BRL(precisaDia) + '/dia</b>, '
+        + (mult > 1.15 ? '<b>' + UM(mult) + '× o ritmo de hoje</b>.' : 'dentro do ritmo de hoje.'),
+        PCT(pctProj) + ' da meta');
+    }
+
+    // --- por funil: gap em R$ e a alavanca traduzida em ação ---
+    var linhas = Object.keys(META.recorrentes).map(function(f){
+      var m = META.recorrentes[f];
+      var L  = R.leadsFunil[f]   ? R.nUniq(R.leadsFunil[f].geral)   : 0;
+      var EC = R.contatoFunil[f] ? R.nUniq(R.contatoFunil[f].geral) : 0;
+      var V  = R.vendas.porFunil[f] ? R.vendas.porFunil[f].v : 0;
+      var F  = R.vendas.porFunil[f] ? R.vendas.porFunil[f].f : 0;
+      var conv = EC ? 100*V/EC : 0, tk = V ? F/V : 0;
+      var P = L ? EC/L : (m.temPassagem ? m.passagem/100 : 1);
+      var ef = mtDecompor(L, P, conv/100, tk, m.leads, m.temPassagem ? m.passagem/100 : P, m.conv/100, m.ticket);
+      if(!m.temPassagem) delete ef.passagem;
+      var dom = Object.keys(ef).sort(function(a,b){ return Math.abs(ef[b]) - Math.abs(ef[a]); })[0];
+      return { f:f, m:m, L:L, EC:EC, V:V, F:F, conv:conv, tk:tk, gap:F - m.fat, ef:ef, dom:dom,
+               pct: m.fat ? 100*F/m.fat : 0 };
+    }).sort(function(a,b){ return a.gap - b.gap; });
+
+    // o funil que mais pesa no buraco
+    var pior = linhas[0];
+    if(pior && pior.gap < 0){
+      var faltaV = Math.max(0, Math.ceil((pior.m.vendas - pior.V)));
+      var acao;
+      if(pior.dom === 'conversao'){
+        var ppFalta = pior.m.conv - pior.conv;
+        acao = 'A conversão está em <b>' + PCT(pior.conv) + '</b> contra meta de <b>' + PCT(pior.m.conv)
+             + '</b>. Fechar esses <b>' + UM(ppFalta) + ' p.p.</b> nos ' + Math.max(1,pior.EC) + ' Em Contato do mês vale ~<b>'
+             + BRL(ppFalta/100*pior.EC*(pior.tk||pior.m.ticket)) + '</b>.';
+      } else if(pior.dom === 'volume'){
+        var faltaL = Math.max(0, pior.m.leads - pior.L);
+        acao = 'Entraram <b>' + INT(pior.L) + '</b> leads contra <b>' + INT(pior.m.leads) + '</b> de meta. '
+             + (nR ? 'Faltam <b>' + INT(Math.ceil(faltaL/nR)) + ' leads/dia útil</b> nos ' + nR + ' dias que restam.'
+                   : 'Faltaram ' + INT(faltaL) + ' leads no mês.');
+      } else if(pior.dom === 'ticket'){
+        acao = 'O ticket saiu a <b>' + BRL(pior.tk) + '</b> contra <b>' + BRL(pior.m.ticket) + '</b> de meta. '
+             + 'Não é volume nem fechamento — é preço ou mix de produto.';
+      } else {
+        acao = 'A passagem lead→Em Contato está em <b>' + PCT(100*pior.L?100*pior.EC/pior.L:0)
+             + '</b> contra <b>' + PCT(pior.m.passagem) + '</b> de meta. O lead entra e não é atendido.';
+      }
+      add('critico', pior.f, BRLd(pior.gap) + ' — é o maior buraco do mês',
+        acao + ' Faltam <b>' + INT(faltaV) + ' vendas</b> para o funil bater a meta.',
+        PCT(pior.pct));
+    }
+
+    // funis acima da meta — o que está funcionando também é informação de daily
+    linhas.filter(function(x){ return x.gap >= 0; }).forEach(function(x){
+      add('bom', x.f, 'Acima da meta em ' + BRLd(x.gap),
+        'Conversão de <b>' + PCT(x.conv) + '</b> contra meta de ' + PCT(x.m.conv)
+        + ' e ticket de <b>' + BRL(x.tk) + '</b>. Vale olhar o que está sendo feito aqui antes de mexer no resto.',
+        PCT(x.pct));
     });
 
-    var sf = c.real.vendas.porFunil['(sem funil)'];
+    // os demais funis em déficit, um por linha, com a alavanca
+    linhas.filter(function(x){ return x.gap < 0 && x !== pior; }).forEach(function(x){
+      var nomes = { volume:'volume de leads', passagem:'passagem lead→Em Contato',
+                    conversao:'taxa de conversão', ticket:'ticket' };
+      add('atencao', x.f, BRLd(x.gap) + ' abaixo da meta',
+        'O que mais pesa é <b>' + nomes[x.dom] + '</b> (' + BRLd(x.ef[x.dom]) + '). '
+        + 'Conversão <b>' + PCT(x.conv) + '</b> vs meta ' + PCT(x.m.conv)
+        + ' · ticket <b>' + BRL(x.tk) + '</b> vs meta ' + BRL(x.m.ticket) + '.',
+        PCT(x.pct));
+    });
+
+    // dinheiro que entra sem funil identificado
+    var sf = R.vendas.porFunil['(sem funil)'];
     if(sf && sf.f){
-      add('SEM FUNIL', '<b>' + BRL(sf.f) + '</b> em ' + INT(sf.v) + ' venda(s) sem funil identificado ('
-        + PCT(c.real.vendas.fat ? 100*sf.f/c.real.vendas.fat : 0) + ' do faturamento). Soma no resultado, não tem meta — '
-        + 'e o teto de qualidade aqui é a atribuição lead→venda.');
+      add('info', 'Sem funil', BRL(sf.f) + ' entraram sem funil identificado',
+        'São <b>' + INT(sf.v) + ' venda(s)</b>, <b>' + PCT(R.vendas.fat ? 100*sf.f/R.vendas.fat : 0)
+        + '</b> do faturamento. Somam no resultado e não têm meta. Quanto maior essa fatia, menos '
+        + 'confiável fica a leitura por funil — vale rastrear a origem dessas vendas no CRM.',
+        INT(sf.v) + ' vendas');
     }
-    Object.keys(c.meta.eventos).forEach(function(f){
-      var m = c.meta.eventos[f];
-      var F = c.real.vendas.porFunil[f] ? c.real.vendas.porFunil[f].f : 0;
-      add('EVENTO', f + ': ' + BRL(F) + ' contra meta de ' + BRL(m.fat) + ' (' + BRLd(F - m.fat)
-        + '). Fora do pacing diário — a meta entra inteira em ' + (m.datas.join(' · ') || 'data não definida') + '.');
+
+    // eventos, só quando existem
+    Object.keys(META.eventos).forEach(function(f){
+      var m = META.eventos[f];
+      var F = R.vendas.porFunil[f] ? R.vendas.porFunil[f].f : 0;
+      add(F >= m.fat ? 'bom' : 'atencao', 'Evento', f + ': ' + BRL(F) + ' de ' + BRL(m.fat),
+        'Fora do ritmo diário — a meta entra inteira em ' + (m.datas.join(' · ') || 'data não definida') + '.',
+        m.fat ? PCT(100*F/m.fat) : '–');
     });
 
-    alvo.innerHTML = li.join('');
+    alvo.innerHTML = cards.join('') || '<div class="mt-cap">Sem meta cadastrada para este mês.</div>';
   }
 })();
 
-console.log('%c[CIC-G2] build 2026-09-02b — fix: ancora do mes usava periodoAtual(), que nao e funcao (a aba abria sempre no mes corrente) -> agora PERIODO.ate; e mtOnPeriodo nao era chamado pelo setPeriodo — build 09-02: ABA NOVA \"Meta do Mes\": meta no Supabase (append-only) e TODO o realizado no JS reusando uniqPorEtapa/origemDaVenda/TMB_LIQUIDO_PCT (view que recalcula realizado = segunda regua) · pacing ate o ultimo dia FECHADO · matriz KPI x dia com toggles Real/Meta/Delta e Dias/So semanas · leads e EC sao DISTINCT no periodo, nunca soma dos dias · TOTAL: Leads = soma dos funis, Em Contato = unico (duas reguas, por decisao) · reembolso como linha propria em Fora dos funis pra bater com o card 2 da Home — build 08-28: Home: grupo Resultado com 7 cards (bruto Hubla+TMB100 = 219.632 · liquido 156.412 com as DUAS subtracoes escritas no subtitulo · ticket bruto 680 e liquido 484 na mesma base de vendas · Hubla agora BRUTA e TMB agora 100%) — o split de 50%% da TMB vem do JS (TMB_LIQUIDO_PCT), NAO da view — build 08-26e: legenda do doughnut BRANCA de verdade: generateLabels custom ignora labels.color, precisa de fontColor no item (senao cai no Chart.defaults.color #666) — build 08-26c: legenda do Ranking operacional vira popover no \"i\" do titulo (hover + foco) — build 08-26b: legenda do doughnut legivel (DCP.text), paleta por motivo com hues separados e validados no fundo navy, taxa do funil em branco — build 08-26: Discadora, bateria visual: scatter em linha inteira com raio pela RAIZ (area proporcional; era linear e a maior bolha cobria 1/3 do grafico) + funil sai do Chart.js e vira HTML SEM EIXO (escala log fazia a venda parecer metade da discada) + perdas viram doughnut com cauda <2% agrupada e URA fora (7 -> 5 fatias) + heatmap com amostra minima de 3 no TMA e teto robusto no p90 (teto 2819s -> 241s, 9 celulas fracas tracejadas) + legenda de escala no heatmap + Leitura rapida removida — build 2026-08-25: ranking da Discadora com 15 colunas (Efet. 1x1 CORRIGIDA: vinha de resumo_1x1.atendidas e mostrava atendida, nao efetiva — Vanessa 241/33,7% virou 82/11,5%) + efetivas_campanha nova (Efet.1x1 + Efet.Camp. = Total Efet.) + %Atend./%Efet. sobre TENTATIVAS TOTAIS + supervisor com traco no CONV. via callix_agente_papel (Aline/Daniel) + venda orfa resolvida NA VIEW pelo callix_agente_vendedor (Pedro Barach 6 -> 7; so fica utm: quem nao tem agente) + agente sem atividade e sem venda fora do ranking e dos graficos — build 2026-08-24e — tentativas 1x1 reais no ar (callix_resumo_1x1_hora + vw_callix_dash_agente_dia com tentativas_1x1_real/efetivas_1x1, backfill 03/08-24/08) — build 08-24d: ranking operacional com Tent./Efet. 1x1 + fix do fallback que inflava Efetivas — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+console.log('%c[CIC-G2] build 2026-09-02d — conv_pct e SEMPRE Em Contato->Venda (regua da Home/TP): a meta de conversao volta (5/10/10/20%), so a de Em Contato fica \"–\" · Leitura do Mes reescrita: cards coloridos por severidade e cada topico termina num numero que se persegue (falta R$ X/dia util nos N dias, 3,4x o ritmo) em vez de diagnostico · 4 cards so com numero+barra+% da META DO MES · Pacing -> Ritmo do mes · Taxa de Conversao em vez de Conversao EC->venda · bloco Eventos some sem evento cadastrado · fora: frases de secao, nota da matriz e bloco Reguas — build 09-02c: Meta do Mes VALIDADA no ar (6/6 checagens: fat == card liquido da Home com diferenca R$ 0, conversao == Taxa de Passagem 392/9,7%, semana soma fat e vendas mas nao leads/EC, toggle delta conferido) + meta real de setembro (R$ 475.419, 50 vendas/dia, bate exato com a planilha) + SEM meta de Em Contato: a projecao e ENTRADA->VENDA, entao passagem fica NULL e a tela mostra \"–\" em vez de 0 + venda sem casa decimal + coluna de semana em negrito — build 09-02b: fix: ancora do mes usava periodoAtual(), que nao e funcao (a aba abria sempre no mes corrente) -> agora PERIODO.ate; e mtOnPeriodo nao era chamado pelo setPeriodo — build 09-02: ABA NOVA \"Meta do Mes\": meta no Supabase (append-only) e TODO o realizado no JS reusando uniqPorEtapa/origemDaVenda/TMB_LIQUIDO_PCT (view que recalcula realizado = segunda regua) · pacing ate o ultimo dia FECHADO · matriz KPI x dia com toggles Real/Meta/Delta e Dias/So semanas · leads e EC sao DISTINCT no periodo, nunca soma dos dias · TOTAL: Leads = soma dos funis, Em Contato = unico (duas reguas, por decisao) · reembolso como linha propria em Fora dos funis pra bater com o card 2 da Home — build 08-28: Home: grupo Resultado com 7 cards (bruto Hubla+TMB100 = 219.632 · liquido 156.412 com as DUAS subtracoes escritas no subtitulo · ticket bruto 680 e liquido 484 na mesma base de vendas · Hubla agora BRUTA e TMB agora 100%) — o split de 50%% da TMB vem do JS (TMB_LIQUIDO_PCT), NAO da view — build 08-26e: legenda do doughnut BRANCA de verdade: generateLabels custom ignora labels.color, precisa de fontColor no item (senao cai no Chart.defaults.color #666) — build 08-26c: legenda do Ranking operacional vira popover no \"i\" do titulo (hover + foco) — build 08-26b: legenda do doughnut legivel (DCP.text), paleta por motivo com hues separados e validados no fundo navy, taxa do funil em branco — build 08-26: Discadora, bateria visual: scatter em linha inteira com raio pela RAIZ (area proporcional; era linear e a maior bolha cobria 1/3 do grafico) + funil sai do Chart.js e vira HTML SEM EIXO (escala log fazia a venda parecer metade da discada) + perdas viram doughnut com cauda <2% agrupada e URA fora (7 -> 5 fatias) + heatmap com amostra minima de 3 no TMA e teto robusto no p90 (teto 2819s -> 241s, 9 celulas fracas tracejadas) + legenda de escala no heatmap + Leitura rapida removida — build 2026-08-25: ranking da Discadora com 15 colunas (Efet. 1x1 CORRIGIDA: vinha de resumo_1x1.atendidas e mostrava atendida, nao efetiva — Vanessa 241/33,7% virou 82/11,5%) + efetivas_campanha nova (Efet.1x1 + Efet.Camp. = Total Efet.) + %Atend./%Efet. sobre TENTATIVAS TOTAIS + supervisor com traco no CONV. via callix_agente_papel (Aline/Daniel) + venda orfa resolvida NA VIEW pelo callix_agente_vendedor (Pedro Barach 6 -> 7; so fica utm: quem nao tem agente) + agente sem atividade e sem venda fora do ranking e dos graficos — build 2026-08-24e — tentativas 1x1 reais no ar (callix_resumo_1x1_hora + vw_callix_dash_agente_dia com tentativas_1x1_real/efetivas_1x1, backfill 03/08-24/08) — build 08-24d: ranking operacional com Tent./Efet. 1x1 + fix do fallback que inflava Efetivas — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
