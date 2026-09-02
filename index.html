@@ -1,7 +1,47 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CIC-G2 · BUILD 2026-09-03
+  CIC-G2 · BUILD 2026-09-03b
+  Build 2026-09-03b — ABA NOVA "Vendedores" (spec de 02/09). 10 KPIs por vendedor no período do
+  filtro universal. SEM SQL: nenhuma view, nenhuma coluna, nenhuma migration — tudo do que já está
+  no ar. NOTA DE VERSÃO: o spec foi escrito contra a 09-02f e pedia 09-02g, mas a base já era a
+  09-03 (as três leituras da Meta do Mês entraram depois), então a entrega é 09-03b.
+  ÚNICO PONTO QUE MEXE EM ESTRUTURA COMPARTILHADA: o `flat.push` do parser de eventos ganhou dois
+  campos, `dono` e `hhmm`. Sem `dono` não existe lead/Em Contato POR VENDEDOR; sem `hhmm` não
+  existe LRT. Os dois já vinham no fetch e já estavam calculados no laço — só não eram gravados.
+  É aditivo (ninguém lê o flat por posição) e custa ~3 MB de memória em 106k eventos; se aparecer
+  travamento em máquina fraca, é o primeiro suspeito.
+  RÉGUAS que a tela aplica e explica no popover:
+   · LRT é MEDIANA, não média. A média fica de 10 a 40x maior porque uma cauda de lead antigo
+     re-trabalhado domina o número (Pedro: mediana 18,5 min, média 764 min). E o pareamento é com a
+     ÚLTIMA ENTRADA ANTES do contato — o pareamento ingênuo pela primeira entrada dá tempo NEGATIVO
+     em quem re-entra na base depois de já ter sido contatado (39 leads em agosto). A varredura é
+     sobre o flat INTEIRO: a entrada pareada pode ser de meses atrás, só o contato precisa estar no
+     período. Chave = telefone||email, SEM fallback de índice — 'x'+i tornaria cada evento único e
+     destruiria o pareamento. Ao lado da mediana vai o contador de leads acima de 24h.
+   · "Conectados 1×1" é LIGAÇÃO EFETIVA, não pessoa única: rediscar o mesmo número conta de novo,
+     e em volume baixo isso infla (Guilherme 9 ligações para 6 telefones, +33%). Rotulado como tal;
+     não escrever "pessoas".
+   · "Falado" é o TOTAL da Callix, campanha + 1×1 (Vanessa: 15,4 h total, só 6,5 h de 1×1).
+   · Faturamento usa `porVendedor[v].valorBruto`, que apesar do nome é o LÍQUIDO sem abater
+     reembolso — a régua decidida. Usar `.valor` tiraria o reembolso duas vezes (GabrielP -11,6%).
+   · Leads e Em Contato são EVENTOS NO PERÍODO, não coorte: lead que entrou em julho e foi movido
+     em agosto conta só no EC de agosto. Por isso a taxa passa de 100% (Lorena 986/1.357). Rótulo,
+     não bug. E o Em Contato daqui é POR VENDEDOR — a Home usa pessoa única e dá menos.
+   · Quem não usa a Callix (GabrielP, Thalita, GustavoH) mostra "—", nunca 0: zero leria como
+     integração quebrada, e o GabrielP é o 1o em faturamento.
+   · Supervisor (papel da vw_callix_dash_agente_dia) entra com selo SUP e conversão "–" — a venda
+     do Daniel é descartada no processamento desde sempre, então 0% seria mentira.
+   · Vendedor sem NENHUMA atividade sai da tela (critério estrutural, sem lista de nomes).
+  A SOMA DA TELA NÃO BATE COM A HOME de propósito: `comercial_mitsuo` (__OUTROS__) tem 86 vendas e
+  R$ 31.585 em agosto e fica fora do placar por decisão vigente. A nota do rodapé diz isso.
+  Hooks: vdOnPeriodo() no FIM do renderAll() E no setPeriodo() — a armadilha da 09-02e (aba que
+  depende de EVENTOS/VENDAS_LISTA renderiza antes dos CSVs e ninguém recalcula) não se repete.
+  CONFERIDO: os dois SQL de aceite do spec batem na vírgula (LRT Pedro 18,5 · Thalita 20,3 ·
+  Trinchão 26,1 · Jocinete 28,0 · GabrielP 29,6 · JoaoG 30,6 · Vanessa 48,9 · Lorena 49,7 ·
+  GustavoH 61,1, cobertura 96,6-100%; Callix Vanessa 924/15,4h/102, Jocinete 549/15,4h/105 etc).
+  Harness com o gabarito do §5: 291 vendas, R$ 154.728, ticket R$ 532 — exato.
+  ----------------------------------------------------------------------------
   Build 2026-09-03 — LEITURA ganha três recortes: MÊS, SEMANA ATUAL e DIA ANTERIOR, num toggle
   (triplicar a seção deixaria a tela impossível de rolar).
   DIA ANTERIOR — a pergunta da daily. Realizado do último dia fechado contra a meta DAQUELE dia e
@@ -1071,6 +1111,7 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
       <button class="sb-item active" data-tab="home" onclick="setTab('home')"><span class="sb-ic">🏠</span><span class="sb-txt">Home</span></button>
       <button class="sb-item" data-tab="metadomes" onclick="setTab('metadomes')"><span class="sb-ic">🎯</span><span class="sb-txt">Meta do Mês</span></button>
       <button class="sb-item" data-tab="dashboard" onclick="setTab('dashboard')"><span class="sb-ic">📊</span><span class="sb-txt">Dashboard</span></button>
+      <button class="sb-item" data-tab="vendedores" onclick="setTab('vendedores')"><span class="sb-ic">👤</span><span class="sb-txt">Vendedores</span></button>
       <button class="sb-item" data-tab="recordes" onclick="setTab('recordes')"><span class="sb-ic">🏆</span><span class="sb-txt">Quadro dos Recordes</span></button>
       <button class="sb-item" data-tab="times" onclick="setTab('times')"><span class="sb-ic">⚔️</span><span class="sb-txt">Competição de Times</span></button>
       <button class="sb-item" data-tab="faturamento" onclick="setTab('faturamento')"><span class="sb-ic">📈</span><span class="sb-txt">Faturamento Diário</span></button>
@@ -1105,6 +1146,59 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
     #tab-home .hm-sec small{color:var(--muted);font-size:12px}
     #tab-home .hm-grid{display:grid;gap:16px}
     /* ==================== ABA META DO MÊS ==================== */
+    /* ==================== ABA VENDEDORES ==================== */
+    #tab-vendedores .vd-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:18px 20px;margin-bottom:16px}
+    #tab-vendedores .vd-hero h2{font-family:'Sora','Space Grotesk',sans-serif;font-size:20px;color:var(--text-strong);margin:0}
+    #tab-vendedores .vd-hero-num{text-align:right}
+    #tab-vendedores .vd-lab{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.07em}
+    #tab-vendedores .vd-big{font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:800;color:var(--text-strong);line-height:1.1}
+    #tab-vendedores .vd-sub{color:var(--muted);font-size:11.5px;line-height:1.5}
+    #tab-vendedores .vd-sec{display:flex;align-items:center;gap:10px;margin:22px 0 12px}
+    #tab-vendedores .vd-sec .bar{width:4px;height:18px;border-radius:2px;background:var(--accent);display:inline-block}
+    #tab-vendedores .vd-sec h2{font-family:'Sora','Space Grotesk',sans-serif;font-size:14px;color:var(--text-strong);margin:0}
+    #tab-vendedores .vd-card{background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:16px}
+    #tab-vendedores .vd-card h3{font-family:'Sora','Space Grotesk',sans-serif;font-size:13.5px;color:var(--text-strong);margin:0 0 12px}
+    #tab-vendedores .vd-cap{color:var(--muted);font-size:11.5px;line-height:1.4}
+    #tab-vendedores .vd-erro{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:#fca5a5;border-radius:10px;padding:12px 14px;font-size:12px;margin-bottom:14px}
+    /* cards por vendedor */
+    #tab-vendedores .vd-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    #tab-vendedores .vd-p{background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:14px 16px 12px}
+    #tab-vendedores .vd-p-hd{display:flex;align-items:center;gap:11px;padding-bottom:11px;border-bottom:1px solid rgba(143,163,199,.14);margin-bottom:10px}
+    #tab-vendedores .vd-av{width:40px;height:40px;border-radius:50%;overflow:hidden;flex:none;background:var(--card2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--text-strong);font-size:15px}
+    #tab-vendedores .vd-av img{width:100%;height:100%;object-fit:cover;display:block}
+    #tab-vendedores .vd-p-nome{font-family:'Sora','Space Grotesk',sans-serif;font-size:13.5px;font-weight:600;color:var(--text-strong);line-height:1.2}
+    #tab-vendedores .vd-p-fat{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;color:var(--text-strong);margin-top:2px}
+    #tab-vendedores .vd-p-conv{margin-left:auto;text-align:right;font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;color:var(--accent);line-height:1.1}
+    #tab-vendedores .vd-p-conv span{display:block;font-family:'Inter',system-ui,sans-serif;font-size:9.5px;font-weight:400;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+    #tab-vendedores .vd-bl{margin-bottom:9px}
+    #tab-vendedores .vd-bl-tit{color:var(--muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:4px}
+    #tab-vendedores .vd-kv{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:11.5px;color:var(--muted);padding:2px 0}
+    #tab-vendedores .vd-kv b{font-family:'JetBrains Mono',monospace;color:var(--text-strong);font-weight:700}
+    #tab-vendedores .vd-kv b.z{color:var(--muted);opacity:.5;font-weight:400}
+    #tab-vendedores .vd-24{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;color:#fbbf24;font-weight:600}
+    #tab-vendedores .vd-sup{font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:4px;background:rgba(148,163,184,.18);color:var(--muted);vertical-align:middle}
+    /* tabela */
+    #tab-vendedores .vd-scroll{overflow-x:auto}
+    #tab-vendedores .vd-t{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap}
+    #tab-vendedores .vd-t th{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;text-align:right;padding:7px 10px;border-bottom:1px solid rgba(143,163,199,.18);cursor:pointer;user-select:none;transition:color .12s}
+    #tab-vendedores .vd-t th:hover{color:var(--text-strong)}
+    #tab-vendedores .vd-t th.vd-on{color:var(--text-strong)}
+    #tab-vendedores .vd-t .vd-ar{margin-left:3px;font-size:9px}
+    #tab-vendedores .vd-t td{text-align:right;padding:8px 10px;border-bottom:1px solid rgba(143,163,199,.08)}
+    #tab-vendedores .vd-t .k{text-align:left;min-width:150px}
+    #tab-vendedores .vd-t td.b{font-weight:700;color:var(--text-strong)}
+    #tab-vendedores .vd-t .z{color:var(--muted);opacity:.45}
+    #tab-vendedores .vd-t .vd-tot td{border-top:1px solid rgba(143,163,199,.28);font-weight:700;color:var(--text-strong);background:rgba(51,95,235,.10)}
+    #tab-vendedores .vd-note{color:var(--muted);font-size:11px;line-height:1.7;margin-top:12px}
+    #tab-vendedores .vd-note code{font-family:'JetBrains Mono',monospace;font-size:10.5px;background:rgba(255,255,255,.06);padding:1px 4px;border-radius:3px}
+    /* popover "i" — mesmo par da Discadora e da Meta */
+    #tab-vendedores .vd-info{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:8px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);font-size:11px;font-weight:700;font-family:'Inter',system-ui,sans-serif;font-style:italic;line-height:1;padding-right:1px;cursor:help;vertical-align:middle;transition:color .12s,border-color .12s}
+    #tab-vendedores .vd-info:hover,#tab-vendedores .vd-info:focus-visible{border-color:var(--text-strong);color:var(--text-strong);outline:none}
+    #tab-vendedores .vd-info-pop{position:absolute;top:calc(100% + 9px);left:-10px;z-index:60;width:min(640px,80vw);padding:13px 15px;background:var(--card2);border:1px solid var(--line,var(--border));border-radius:10px;box-shadow:0 12px 34px rgba(0,0,0,.45);color:var(--muted);font-family:'Inter',system-ui,sans-serif;font-size:11.5px;font-weight:400;font-style:normal;line-height:1.75;text-align:left;white-space:normal;opacity:0;visibility:hidden;transition:opacity .13s;pointer-events:none}
+    #tab-vendedores .vd-info-pop b{color:var(--text-strong);font-weight:700}
+    #tab-vendedores .vd-info:hover .vd-info-pop,#tab-vendedores .vd-info:focus-visible .vd-info-pop{opacity:1;visibility:visible}
+    @media(max-width:1200px){#tab-vendedores .vd-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:800px){#tab-vendedores .vd-grid{grid-template-columns:1fr}#tab-vendedores .vd-info-pop{left:auto;right:-10px}}
     #tab-metadomes .mt-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line,var(--border));border-radius:14px;padding:18px 20px;margin-bottom:16px}
     #tab-metadomes .mt-hero h2{font-family:'Sora','Space Grotesk',sans-serif;font-size:20px;color:var(--text-strong);margin:0 0 4px}
     #tab-metadomes .mt-hero-num{text-align:right}
@@ -1538,6 +1632,41 @@ h1 span{background:linear-gradient(90deg,var(--accent),#a3b5ff);-webkit-backgrou
   </div>
 
   </div><!-- fim tab-dashboard -->
+
+
+  <!-- ==================== ABA VENDEDORES ==================== -->
+  <div id="tab-vendedores" class="tab-content">
+    <div class="vd-hero">
+      <div>
+        <h2>👤 Vendedores <span id="vdPeriodoLab"></span></h2>
+      </div>
+      <div class="vd-hero-num">
+        <div class="vd-lab">No placar</div>
+        <div class="vd-big" id="vdTotalVend">–</div>
+        <div class="vd-sub" id="vdTotalSub">–</div>
+      </div>
+    </div>
+
+    <div id="vdErr" class="vd-erro" style="display:none"></div>
+
+    <div class="vd-sec"><span class="bar"></span><h2>Cards</h2></div>
+    <div id="vdCards" class="vd-grid"></div>
+
+    <div class="vd-sec"><span class="bar" style="background:var(--gold,#fbbf24)"></span><h2>Ranking</h2></div>
+    <div class="vd-card">
+      <h3>Todos os KPIs<span class="vd-info" tabindex="0" role="button" aria-label="Como ler">i<span class="vd-info-pop">
+        <b>Tent. 1×1</b> — discagens manuais. <b>Falado</b> é o <b>total</b> da Callix: mistura campanha e 1×1, não é só o tempo de 1×1.<br>
+        <b>Conectados 1×1</b> — <b>ligações efetivas</b>, não pessoa única: rediscar o mesmo número conta de novo. Em volume baixo isso infla (Guilherme: 9 ligações para 6 telefones).<br>
+        <b>LRT</b> — lead response time, da entrada até o primeiro "Em Contato". É a <b>mediana</b>, não a média: a média fica 10 a 40× maior porque um punhado de lead antigo re-trabalhado domina o número. O contador ao lado é de leads que levaram <b>mais de 24h</b>.<br>
+        <b>Leads</b> e <b>Em Contato</b> são <b>eventos no período</b>, não coorte: um lead que entrou em julho e foi movido em agosto conta só no Em Contato de agosto. Por isso a taxa pode passar de 100% — é a régua, não erro.<br>
+        <b>Faturamento</b> é líquido (Hubla parcela 1 + TMB pela metade) e <b>não desconta reembolso</b>.<br>
+        <b>Conversão</b> = vendas ÷ Em Contato do vendedor. É régua <b>por vendedor</b>, diferente do card da Home, que conta pessoa única no período.
+      </span></span></h3>
+      <div class="vd-scroll"><table class="vd-t" id="vdTabela"></table></div>
+      <div class="vd-note" id="vdNota"></div>
+    </div>
+  </div>
+  <!-- ==================== FIM ABA VENDEDORES ==================== -->
 
   <div id="tab-recordes" class="tab-content">
     <div class="recordes-hero">
@@ -2686,6 +2815,7 @@ function setPeriodo(tipo, custDe, custAte){
   if(typeof dcOnPeriodo === 'function') dcOnPeriodo();
   if(typeof mpOnPeriodo === 'function') mpOnPeriodo();
   if(typeof mtOnPeriodo === 'function') mtOnPeriodo();
+  if(typeof vdOnPeriodo === 'function') vdOnPeriodo();
 }
 function escolherPeriodoInicial(){
   const r = rangeDoPeriodo('mesAtual'); PERIODO = { tipo:'mesAtual', de:r.de, ate:r.ate };
@@ -4164,6 +4294,9 @@ function renderAll(){
   // Sem esta linha, quem abre a aba direto (ou pela URL ?aba=metadomes) vê a tela toda zerada:
   // o _ctx é montado no boot, quando ainda não há dado nenhum, e nada o recalcula.
   if(typeof window.mtOnPeriodo === 'function') window.mtOnPeriodo();
+  // Vendedores: mesma dependência de EVENTOS/VENDAS_LISTA da Meta do Mês — sem este gancho,
+  // quem abre a aba direto vê a tela zerada (foi o bug da build 09-02e).
+  if(typeof window.vdOnPeriodo === 'function') window.vdOnPeriodo();
 }
 
 // ========== EVOLUÇÃO MENSAL (mês atual vs mês anterior) ==========
@@ -7052,6 +7185,7 @@ function setTab(tab){
   if(tab==='discadora'){ (function _dcTry(){ if(typeof window.carregarDiscadora==='function'){ window.carregarDiscadora(); } else { setTimeout(_dcTry,50); } })(); }
   if(tab==='home'){ (function _hmTry(){ if(typeof window.renderHome==='function'){ window.renderHome(); } else { setTimeout(_hmTry,50); } })(); }
   if(tab==='metadomes'){ (function _mtTry(){ if(typeof window.carregarMeta==='function'){ window.carregarMeta(); } else { setTimeout(_mtTry,50); } })(); }
+  if(tab==='vendedores'){ (function _vdTry(){ if(typeof window.carregarVendedores==='function'){ window.carregarVendedores(); } else { setTimeout(_vdTry,50); } })(); }
   // expande/recolhe submenu de Processos
   const subProc = document.getElementById('sbSubProcessos');
   const parentProc = document.querySelector('.sb-parent');
@@ -8051,7 +8185,13 @@ function processarEventos(entrada){
         origemLbl: nrOrigemLabel(idxOrigem >= 0 ? row[idxOrigem] : ''),
         pipeline: idxPipe >= 0 ? String(row[idxPipe]||'') : '',
         tel: idxTelEv >= 0 ? telKey(row[idxTelEv]) : '',
-        email: nrNorm(email)
+        email: nrNorm(email),
+        // + build 09-03b (aba Vendedores). Aditivo: ninguém lê o flat por posição.
+        // `dono` destrava lead/Em Contato POR VENDEDOR (o flat não tinha proprietário);
+        // `hhmm` destrava o LRT (não tinha hora). Os dois já vinham no fetch e já estavam
+        // calculados neste laço — só não eram gravados. Custo: ~106k eventos x 2 campos.
+        dono: vend,
+        hhmm: idxHora >= 0 ? String(row[idxHora]||'') : ''
       });
     }
 
@@ -9468,7 +9608,295 @@ renderMonthTabs();
 
 })();
 
-console.log('%c[CIC-G2] build 2026-09-03 — Leitura com tres recortes num toggle: MES, SEMANA ATUAL e DIA ANTERIOR (dia compara com a meta daquele dia E com a media dos outros dias uteis; fds nao tem meta, entao e superavit) · correcao de escala: os cards por funil da leitura do mes comparavam realizado contra a meta do MES INTEIRO e com 1 dia de 21 davam -R$ 188 mil; agora e pro-rata contra os dias fechados · efeito dominante muito maior que o gap passa a dizer o que compensou — build 09-02f: REVERTE a exclusao do lead sem origem da soma de Leads (o Nirla pegou): contradizia o spec e criava inconsistencia, ja que Vendas e Faturamento sempre incluiram a venda sem funil e a matriz sempre incluiu o lead sem origem — impacto 9 de 723 leads, 1,2% — build 09-02e: FIX: a aba renderizava ANTES dos CSVs chegarem e nada re-renderizava, entao quem abria direto via a tela TODA ZERADA (mtOnPeriodo agora e chamado no fim do renderAll) · meta do mes sob o titulo de cada KPI · dia/semana que ainda nao chegou nao mostra delta (era 0-meta e pintava o mes de vermelho no dia 2) · Sem origem fora da soma de Leads — build 09-02d: conv_pct e SEMPRE Em Contato->Venda (regua da Home/TP): a meta de conversao volta (5/10/10/20%), so a de Em Contato fica \"–\" · Leitura do Mes reescrita: cards coloridos por severidade e cada topico termina num numero que se persegue (falta R$ X/dia util nos N dias, 3,4x o ritmo) em vez de diagnostico · 4 cards so com numero+barra+% da META DO MES · Pacing -> Ritmo do mes · Taxa de Conversao em vez de Conversao EC->venda · bloco Eventos some sem evento cadastrado · fora: frases de secao, nota da matriz e bloco Reguas — build 09-02c: Meta do Mes VALIDADA no ar (6/6 checagens: fat == card liquido da Home com diferenca R$ 0, conversao == Taxa de Passagem 392/9,7%, semana soma fat e vendas mas nao leads/EC, toggle delta conferido) + meta real de setembro (R$ 475.419, 50 vendas/dia, bate exato com a planilha) + SEM meta de Em Contato: a projecao e ENTRADA->VENDA, entao passagem fica NULL e a tela mostra \"–\" em vez de 0 + venda sem casa decimal + coluna de semana em negrito — build 09-02b: fix: ancora do mes usava periodoAtual(), que nao e funcao (a aba abria sempre no mes corrente) -> agora PERIODO.ate; e mtOnPeriodo nao era chamado pelo setPeriodo — build 09-02: ABA NOVA \"Meta do Mes\": meta no Supabase (append-only) e TODO o realizado no JS reusando uniqPorEtapa/origemDaVenda/TMB_LIQUIDO_PCT (view que recalcula realizado = segunda regua) · pacing ate o ultimo dia FECHADO · matriz KPI x dia com toggles Real/Meta/Delta e Dias/So semanas · leads e EC sao DISTINCT no periodo, nunca soma dos dias · TOTAL: Leads = soma dos funis, Em Contato = unico (duas reguas, por decisao) · reembolso como linha propria em Fora dos funis pra bater com o card 2 da Home — build 08-28: Home: grupo Resultado com 7 cards (bruto Hubla+TMB100 = 219.632 · liquido 156.412 com as DUAS subtracoes escritas no subtitulo · ticket bruto 680 e liquido 484 na mesma base de vendas · Hubla agora BRUTA e TMB agora 100%) — o split de 50%% da TMB vem do JS (TMB_LIQUIDO_PCT), NAO da view — build 08-26e: legenda do doughnut BRANCA de verdade: generateLabels custom ignora labels.color, precisa de fontColor no item (senao cai no Chart.defaults.color #666) — build 08-26c: legenda do Ranking operacional vira popover no \"i\" do titulo (hover + foco) — build 08-26b: legenda do doughnut legivel (DCP.text), paleta por motivo com hues separados e validados no fundo navy, taxa do funil em branco — build 08-26: Discadora, bateria visual: scatter em linha inteira com raio pela RAIZ (area proporcional; era linear e a maior bolha cobria 1/3 do grafico) + funil sai do Chart.js e vira HTML SEM EIXO (escala log fazia a venda parecer metade da discada) + perdas viram doughnut com cauda <2% agrupada e URA fora (7 -> 5 fatias) + heatmap com amostra minima de 3 no TMA e teto robusto no p90 (teto 2819s -> 241s, 9 celulas fracas tracejadas) + legenda de escala no heatmap + Leitura rapida removida — build 2026-08-25: ranking da Discadora com 15 colunas (Efet. 1x1 CORRIGIDA: vinha de resumo_1x1.atendidas e mostrava atendida, nao efetiva — Vanessa 241/33,7% virou 82/11,5%) + efetivas_campanha nova (Efet.1x1 + Efet.Camp. = Total Efet.) + %Atend./%Efet. sobre TENTATIVAS TOTAIS + supervisor com traco no CONV. via callix_agente_papel (Aline/Daniel) + venda orfa resolvida NA VIEW pelo callix_agente_vendedor (Pedro Barach 6 -> 7; so fica utm: quem nao tem agente) + agente sem atividade e sem venda fora do ranking e dos graficos — build 2026-08-24e — tentativas 1x1 reais no ar (callix_resumo_1x1_hora + vw_callix_dash_agente_dia com tentativas_1x1_real/efetivas_1x1, backfill 03/08-24/08) — build 08-24d: ranking operacional com Tent./Efet. 1x1 + fix do fallback que inflava Efetivas — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
+
+/* ===================================================================
+   ABA "VENDEDORES" — build 2026-09-03b
+   Sem SQL: tudo sai do que já está no ar. Callix vem de window._dcRaw.ag (o mesmo
+   cache de 5 min da aba Discadora), funil e LRT saem de EVENTOS.flat, e vendas de
+   dadosAtivos().porVendedor.
+   =================================================================== */
+(function(){
+  var VD = { ord:'fat', desc:true, dados:null };
+  window._vd = VD;
+
+  var N   = function(v){ var n = parseFloat(String(v==null?0:v).replace(',','.')); return isFinite(n)?n:0; };
+  var $   = function(id){ return document.getElementById(id); };
+  var BRL = function(v){ return 'R$ ' + Math.round(N(v)).toLocaleString('pt-BR'); };
+  var INT = function(v){ return Math.round(N(v)).toLocaleString('pt-BR'); };
+  var UM  = function(v){ return N(v).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}); };
+  var PCT = function(v){ return UM(v) + '%'; };
+  var TRACO = '—';
+
+  function vdHoras(seg){ return seg ? UM(seg/3600) + ' h' : TRACO; }
+  function vdMin(m){
+    if(m == null) return TRACO;
+    if(m < 60) return UM(m) + ' min';
+    return UM(m/60) + ' h';
+  }
+  function vdMediana(arr){
+    if(!arr || !arr.length) return null;
+    var a = arr.slice().sort(function(x,y){ return x-y; }), n = a.length, i = Math.floor(n/2);
+    return n % 2 ? a[i] : (a[i-1] + a[i]) / 2;
+  }
+
+  /* ---------- LRT: entrada -> primeiro "Em Contato" ----------
+     A média é imprestável aqui: fica de 10 a 40× a mediana porque uma cauda de lead antigo
+     re-trabalhado domina o número. E o pareamento ingênuo (a PRIMEIRA entrada do lead) produz
+     tempo NEGATIVO em quem re-entra na base depois de já ter sido contatado — por isso o
+     pareamento é com a ÚLTIMA ENTRADA ANTES do contato.
+     A varredura é sobre o flat INTEIRO, não só o período: a entrada pareada pode ser de meses
+     atrás. Só o CONTATO precisa cair dentro do período. */
+  function vdLRT(dentro){
+    var FLAT = (typeof EVENTOS!=='undefined' && EVENTOS && EVENTOS.flat) ? EVENTOS.flat : [];
+    var porLead = {}, semChave = 0;
+    for(var i=0;i<FLAT.length;i++){
+      var e = FLAT[i];
+      if(e.cls !== 'entrada' || !e.dayKey) continue;   // 'entrada' aqui é a CLASSE DA AÇÃO
+      var ehWeb = (typeof nrNorm==='function') && nrNorm(e.pipeline).indexOf('webinar') >= 0;
+      var passo = null;
+      if(ehWeb ? (typeof nrIsAcessouLive==='function' && nrIsAcessouLive(e.etapa))
+               : (typeof nrIsBaseStage==='function'   && nrIsBaseStage(e.etapa))) passo = 'ent';
+      else if(typeof nrIsContato==='function' && nrIsContato(e.etapa)) passo = 'ct';
+      if(!passo) continue;
+      // chave = telefone || email. SEM fallback de índice: 'x'+i torna cada evento único e
+      // destrói o pareamento (o lead nunca casa com a própria entrada).
+      var k = e.tel || e.email;
+      if(!k){ if(passo === 'ct') semChave++; continue; }
+      var ts = Date.parse(e.dayKey + 'T' + ((e.hhmm && /^\d{1,2}:\d{2}/.test(e.hhmm)) ? (e.hhmm.length===5 ? e.hhmm+':00' : e.hhmm) : '00:00:00'));
+      if(!isFinite(ts)) continue;
+      (porLead[k] = porLead[k] || []).push({ ts:ts, passo:passo, dono:e.dono||'', dk:e.dayKey });
+    }
+    var por = {}, pareados = 0, contatos = 0;
+    Object.keys(porLead).forEach(function(k){
+      var ev = porLead[k].sort(function(a,b){ return a.ts - b.ts; });
+      var ultimaEnt = null;
+      for(var j=0;j<ev.length;j++){
+        if(ev[j].passo === 'ent'){ ultimaEnt = ev[j].ts; continue; }
+        if(!dentro(ev[j].dk)) continue;              // só conta contato DENTRO do período
+        contatos++;
+        if(ultimaEnt == null) break;                  // contato sem entrada conhecida
+        var d = (ev[j].ts - ultimaEnt) / 60000;       // minutos
+        if(d < 0) break;
+        pareados++;
+        var dono = ev[j].dono || '';                  // crédito de quem ATENDEU
+        if(!por[dono]) por[dono] = { deltas:[], acima24:0 };
+        por[dono].deltas.push(d);
+        if(d > 1440) por[dono].acima24++;
+        break;                                        // só o PRIMEIRO contato do lead
+      }
+    });
+    var out = {};
+    Object.keys(por).forEach(function(v){
+      out[v] = { mediana: vdMediana(por[v].deltas), acima24: por[v].acima24, n: por[v].deltas.length };
+    });
+    return { porVendedor: out, cobertura: contatos ? 100*pareados/contatos : 0, semChave: semChave };
+  }
+
+  /* ---------- funil por vendedor: leads e Em Contato, ÚNICO POR DONO no período ---------- */
+  function vdFunil(dentro){
+    var FLAT = (typeof EVENTOS!=='undefined' && EVENTOS && EVENTOS.flat) ? EVENTOS.flat : [];
+    var L = {}, C = {};
+    for(var i=0;i<FLAT.length;i++){
+      var e = FLAT[i];
+      if(e.cls !== 'entrada' || !e.dayKey || !dentro(e.dayKey)) continue;
+      var dono = e.dono; if(!dono) continue;
+      var k = e.tel || e.email || ('x'+i);
+      var ehWeb = (typeof nrNorm==='function') && nrNorm(e.pipeline).indexOf('webinar') >= 0;
+      var ehLead = ehWeb ? (typeof nrIsAcessouLive==='function' && nrIsAcessouLive(e.etapa))
+                         : (typeof nrIsBaseStage==='function'   && nrIsBaseStage(e.etapa));
+      if(ehLead){ (L[dono] = L[dono] || {})[k] = 1; }
+      if(typeof nrIsContato==='function' && nrIsContato(e.etapa)){ (C[dono] = C[dono] || {})[k] = 1; }
+    }
+    var out = {};
+    Object.keys(L).concat(Object.keys(C)).forEach(function(v){
+      if(out[v]) return;
+      out[v] = { leads: L[v] ? Object.keys(L[v]).length : 0, ec: C[v] ? Object.keys(C[v]).length : 0 };
+    });
+    return out;
+  }
+
+  /* ---------- Callix: soma do período por vendedor, do cache da aba Discadora ---------- */
+  function vdCallix(dentro){
+    var ag = (window._dcRaw && window._dcRaw.ag) ? window._dcRaw.ag : [];
+    var out = {};
+    ag.forEach(function(r){
+      if(!dentro(String(r.data||'').slice(0,10))) return;
+      var v = String(r.vendedor||'').trim();
+      if(!v) return;                                   // agente sem vendedor mapeado (ex.: Aline)
+      if(!out[v]) out[v] = { tent:0, falado:0, conect:0, papel:null };
+      out[v].tent   += N(r.tentativas_1x1_real);
+      out[v].falado += N(r.tempo_falado_s);
+      out[v].conect += N(r.efetivas_1x1);
+      if(r.papel) out[v].papel = String(r.papel);
+    });
+    return out;
+  }
+
+  /* ---------- monta a lista ---------- */
+  function vdMontar(){
+    var dias = (typeof diasFiltrados === 'function') ? diasFiltrados() : [];
+    var set = {}; dias.forEach(function(d){ set[d] = 1; });
+    var dentro = function(dk){ return !!set[dk]; };
+
+    var d   = (typeof dadosAtivos === 'function') ? dadosAtivos() : null;
+    var pv  = (d && d.porVendedor) ? d.porVendedor : {};
+    var fun = vdFunil(dentro), cal = vdCallix(dentro), lrt = vdLRT(dentro);
+
+    var nomes = {};
+    Object.keys(pv).concat(Object.keys(fun)).concat(Object.keys(cal)).forEach(function(v){ nomes[v] = 1; });
+    delete nomes['__OUTROS__'];                        // canal automático, fora do placar
+
+    var lista = Object.keys(nomes).map(function(v){
+      var c = cal[v] || { tent:0, falado:0, conect:0, papel:null };
+      var f = fun[v] || { leads:0, ec:0 };
+      var l = lrt.porVendedor[v] || {};
+      var p = pv[v] || {};
+      // `valorBruto` é o LÍQUIDO sem abater reembolso — é a régua decidida. Usar `.valor` por
+      // engano tiraria o reembolso duas vezes (GabrielP cairia 11,6%).
+      var fat = (p.valorBruto !== undefined ? p.valorBruto : p.valor) || 0;
+      var qtd = p.qtd || 0;
+      var sup = c.papel === 'supervisor';
+      // sem NENHUMA linha na Callix = não usa a discadora. Mostrar 0 leria como integração quebrada.
+      var usaCallix = (c.tent + c.falado + c.conect) > 0;
+      return {
+        v:v, sup:sup, usaCallix:usaCallix,
+        tent:c.tent, falado:c.falado, conect:c.conect,
+        leads:f.leads, ec:f.ec,
+        lrt: (l.mediana != null ? l.mediana : null), lrt24: l.acima24 || 0,
+        qtd:qtd, fat:fat,
+        ticket: qtd ? fat/qtd : 0,
+        conv: (sup ? null : (f.ec ? 100*qtd/f.ec : 0)),
+        ativo: (f.leads + f.ec + c.tent + c.conect + qtd) > 0
+      };
+    }).filter(function(x){ return x.ativo; });          // §3.6: critério estrutural, sem lista de nomes
+
+    return { lista:lista, lrt:lrt, dias:dias };
+  }
+
+  window.vdSort = function(k){
+    if(VD.ord === k) VD.desc = !VD.desc; else { VD.ord = k; VD.desc = true; }
+    vdRenderTabela();
+  };
+
+  window.carregarVendedores = function(){
+    // Reusa o cache _dcRaw da Discadora (5 min). Sem fetch novo.
+    if(typeof window.carregarDiscadora === 'function' && !window._dcRaw) window.carregarDiscadora();
+    vdRender();
+    if(!window._dcRaw){ setTimeout(function(){ if(window._dcRaw) vdRender(); }, 1200); }
+  };
+  window.vdOnPeriodo = function(){ if($('tab-vendedores')) vdRender(); };
+
+  function vdRender(){
+    try {
+      if(!$('vdCards')) return;
+      VD.dados = vdMontar();
+      var e = $('vdErr'); if(e) e.style.display = 'none';
+      vdRenderHero(); vdRenderCards(); vdRenderTabela();
+    } catch(err){
+      var er = $('vdErr'); if(er){ er.style.display='block'; er.textContent = 'Erro ao renderizar Vendedores: ' + err.message; }
+    }
+  }
+
+  function vdRenderHero(){
+    var L = VD.dados.lista;
+    var lab = $('vdPeriodoLab');
+    if(lab) lab.textContent = (typeof labelPeriodo === 'function') ? '· ' + labelPeriodo() : '';
+    var fat = L.reduce(function(a,x){ return a + x.fat; }, 0);
+    var qtd = L.reduce(function(a,x){ return a + x.qtd; }, 0);
+    var n = $('vdTotalVend'); if(n) n.textContent = INT(L.length);
+    var s = $('vdTotalSub');
+    if(s) s.innerHTML = INT(qtd) + ' vendas · ' + BRL(fat) + '<br>ticket ' + (qtd ? BRL(fat/qtd) : TRACO);
+  }
+
+  function vdRenderCards(){
+    var alvo = $('vdCards'); if(!alvo) return;
+    var L = VD.dados.lista.slice().sort(function(a,b){ return b.fat - a.fat; });
+    if(!L.length){ alvo.innerHTML = '<div class="vd-card"><div class="vd-cap">Nenhum vendedor com atividade no período.</div></div>'; return; }
+    var foto = (typeof fotoVendDash === 'function') ? fotoVendDash : function(v){ return '<div class="vd-av">' + v[0] + '</div>'; };
+    var nome = (typeof displayName === 'function') ? displayName : function(v){ return v; };
+    var SUP = ' <span class="vd-sup">SUP</span>';
+    alvo.innerHTML = L.map(function(x){
+      function bl(tit, itens){
+        return '<div class="vd-bl"><div class="vd-bl-tit">' + tit + '</div>'
+          + itens.map(function(i){ return '<div class="vd-kv"><span>' + i[0] + '</span><b' + (i[2]?' class="'+i[2]+'"':'') + '>' + i[1] + '</b></div>'; }).join('')
+          + '</div>';
+      }
+      var cal = x.usaCallix
+        ? [['Tent. 1×1', INT(x.tent)], ['Falado (total)', vdHoras(x.falado)], ['Conectados 1×1', INT(x.conect)]]
+        : [['Tent. 1×1', TRACO, 'z'], ['Falado (total)', TRACO, 'z'], ['Conectados 1×1', TRACO, 'z']];
+      return '<div class="vd-p">'
+        + '<div class="vd-p-hd">' + foto(x.v, 'vd-av') + '<div><div class="vd-p-nome">' + nome(x.v) + (x.sup ? SUP : '') + '</div>'
+        + '<div class="vd-p-fat">' + BRL(x.fat) + '</div></div>'
+        + '<div class="vd-p-conv">' + (x.conv == null ? TRACO : PCT(x.conv)) + '<span>conversão</span></div></div>'
+        + bl('Discadora', cal)
+        + bl('Funil', [['Leads', INT(x.leads)], ['Em Contato', INT(x.ec)],
+                       ['LRT (mediana)', x.lrt == null ? TRACO : vdMin(x.lrt) + (x.lrt24 ? ' <span class="vd-24">+' + x.lrt24 + ' >24h</span>' : '')]])
+        + bl('Resultado', [['Vendas', INT(x.qtd)], ['Faturamento', BRL(x.fat)], ['Ticket', x.qtd ? BRL(x.ticket) : TRACO]])
+        + '</div>';
+    }).join('');
+  }
+
+  var VD_COLS = [
+    { k:'v',      lab:'Vendedor', txt:true },
+    { k:'tent',   lab:'Tent. 1×1' },
+    { k:'falado', lab:'Falado (tot.)' },
+    { k:'conect', lab:'Conect. 1×1' },
+    { k:'leads',  lab:'Leads' },
+    { k:'ec',     lab:'Em Contato' },
+    { k:'lrt',    lab:'LRT med.' },
+    { k:'qtd',    lab:'Vendas' },
+    { k:'fat',    lab:'Fat. líquido' },
+    { k:'ticket', lab:'Ticket' },
+    { k:'conv',   lab:'Conv.' }
+  ];
+
+  function vdRenderTabela(){
+    var t = $('vdTabela'); if(!t || !VD.dados) return;
+    var nome = (typeof displayName === 'function') ? displayName : function(v){ return v; };
+    var L = VD.dados.lista.slice().sort(function(a,b){
+      var A = a[VD.ord], B = b[VD.ord];
+      if(A == null) A = -1; if(B == null) B = -1;
+      if(VD.ord === 'v') return VD.desc ? String(B).localeCompare(String(A)) : String(A).localeCompare(String(B));
+      return VD.desc ? B - A : A - B;
+    });
+    var html = '<thead><tr>' + VD_COLS.map(function(c){
+      var on = VD.ord === c.k ? ' vd-on' : '';
+      return '<th class="' + (c.txt ? 'k' : '') + on + '" onclick="vdSort(\'' + c.k + '\')">' + c.lab
+           + (VD.ord === c.k ? '<span class="vd-ar">' + (VD.desc ? '▾' : '▴') + '</span>' : '') + '</th>';
+    }).join('') + '</tr></thead><tbody>';
+    L.forEach(function(x){
+      html += '<tr><td class="k">' + nome(x.v) + (x.sup ? ' <span class="vd-sup">SUP</span>' : '') + '</td>'
+        + (x.usaCallix
+            ? '<td>' + INT(x.tent) + '</td><td>' + vdHoras(x.falado) + '</td><td>' + INT(x.conect) + '</td>'
+            : '<td class="z">' + TRACO + '</td><td class="z">' + TRACO + '</td><td class="z">' + TRACO + '</td>')
+        + '<td>' + INT(x.leads) + '</td><td>' + INT(x.ec) + '</td>'
+        + '<td>' + (x.lrt == null ? '<span class="z">' + TRACO + '</span>' : vdMin(x.lrt) + (x.lrt24 ? ' <span class="vd-24">+' + x.lrt24 + '</span>' : '')) + '</td>'
+        + '<td class="b">' + INT(x.qtd) + '</td><td class="b">' + BRL(x.fat) + '</td>'
+        + '<td>' + (x.qtd ? BRL(x.ticket) : '<span class="z">' + TRACO + '</span>') + '</td>'
+        + '<td class="' + (x.conv == null ? 'z' : '') + '">' + (x.conv == null ? TRACO : PCT(x.conv)) + '</td></tr>';
+    });
+    var tot = L.reduce(function(a,x){ a.qtd += x.qtd; a.fat += x.fat; a.leads += x.leads; a.ec += x.ec; return a; },
+                       { qtd:0, fat:0, leads:0, ec:0 });
+    html += '<tr class="vd-tot"><td class="k">TOTAL</td><td></td><td></td><td></td>'
+      + '<td>' + INT(tot.leads) + '</td><td>' + INT(tot.ec) + '</td><td></td>'
+      + '<td class="b">' + INT(tot.qtd) + '</td><td class="b">' + BRL(tot.fat) + '</td>'
+      + '<td>' + (tot.qtd ? BRL(tot.fat/tot.qtd) : TRACO) + '</td>'
+      + '<td>' + (tot.ec ? PCT(100*tot.qtd/tot.ec) : TRACO) + '</td></tr>';
+    t.innerHTML = html + '</tbody>';
+
+    var nota = $('vdNota');
+    if(nota) nota.innerHTML =
+      '<b>A soma desta tela não bate com o card da Home</b>, e é esperado: o canal automático '
+      + '<code>comercial_mitsuo</code> (<code>__OUTROS__</code>) fica fora do placar por decisão vigente, '
+      + 'junto com venda sem vendedor mapeado. A diferença tem que ser exatamente isso. '
+      + '<b>Em Contato aqui é por vendedor</b> (o mesmo lead conta uma vez para cada vendedor que o atendeu) — '
+      + 'a Home usa pessoa única no período e dá um número menor. As duas estão certas, são perguntas diferentes. '
+      + '<b>Leads e Em Contato são eventos no período</b>, não coorte: por isso a taxa pode passar de 100%. '
+      + 'Cobertura do LRT no período: <b>' + UM(VD.dados.lrt.cobertura) + '%</b> dos contatos pareados com uma entrada anterior.';
+  }
+})();
+
+console.log('%c[CIC-G2] build 2026-09-03b — ABA NOVA \"Vendedores\": 10 KPIs por vendedor, SEM SQL (Callix do cache _dcRaw, funil e LRT do EVENTOS.flat, vendas do dadosAtivos) · flat.push ganhou `dono` e `hhmm` (unico ponto compartilhado, aditivo, ~3MB) · LRT e MEDIANA pareando a ULTIMA entrada antes do contato (media e 10-40x maior; pareamento ingenuo da tempo negativo) · Conectados 1x1 e ligacao efetiva, nao pessoa unica · faturamento por valorBruto (liquido SEM abater reembolso) · quem nao usa Callix mostra — e nao 0 · supervisor com SUP e conversao – · soma nao bate com a Home porque comercial_mitsuo fica fora (86 vendas / R$ 31.585 em ago) — build 09-03: Leitura com tres recortes num toggle: MES, SEMANA ATUAL e DIA ANTERIOR (dia compara com a meta daquele dia E com a media dos outros dias uteis; fds nao tem meta, entao e superavit) · correcao de escala: os cards por funil da leitura do mes comparavam realizado contra a meta do MES INTEIRO e com 1 dia de 21 davam -R$ 188 mil; agora e pro-rata contra os dias fechados · efeito dominante muito maior que o gap passa a dizer o que compensou — build 09-02f: REVERTE a exclusao do lead sem origem da soma de Leads (o Nirla pegou): contradizia o spec e criava inconsistencia, ja que Vendas e Faturamento sempre incluiram a venda sem funil e a matriz sempre incluiu o lead sem origem — impacto 9 de 723 leads, 1,2% — build 09-02e: FIX: a aba renderizava ANTES dos CSVs chegarem e nada re-renderizava, entao quem abria direto via a tela TODA ZERADA (mtOnPeriodo agora e chamado no fim do renderAll) · meta do mes sob o titulo de cada KPI · dia/semana que ainda nao chegou nao mostra delta (era 0-meta e pintava o mes de vermelho no dia 2) · Sem origem fora da soma de Leads — build 09-02d: conv_pct e SEMPRE Em Contato->Venda (regua da Home/TP): a meta de conversao volta (5/10/10/20%), so a de Em Contato fica \"–\" · Leitura do Mes reescrita: cards coloridos por severidade e cada topico termina num numero que se persegue (falta R$ X/dia util nos N dias, 3,4x o ritmo) em vez de diagnostico · 4 cards so com numero+barra+% da META DO MES · Pacing -> Ritmo do mes · Taxa de Conversao em vez de Conversao EC->venda · bloco Eventos some sem evento cadastrado · fora: frases de secao, nota da matriz e bloco Reguas — build 09-02c: Meta do Mes VALIDADA no ar (6/6 checagens: fat == card liquido da Home com diferenca R$ 0, conversao == Taxa de Passagem 392/9,7%, semana soma fat e vendas mas nao leads/EC, toggle delta conferido) + meta real de setembro (R$ 475.419, 50 vendas/dia, bate exato com a planilha) + SEM meta de Em Contato: a projecao e ENTRADA->VENDA, entao passagem fica NULL e a tela mostra \"–\" em vez de 0 + venda sem casa decimal + coluna de semana em negrito — build 09-02b: fix: ancora do mes usava periodoAtual(), que nao e funcao (a aba abria sempre no mes corrente) -> agora PERIODO.ate; e mtOnPeriodo nao era chamado pelo setPeriodo — build 09-02: ABA NOVA \"Meta do Mes\": meta no Supabase (append-only) e TODO o realizado no JS reusando uniqPorEtapa/origemDaVenda/TMB_LIQUIDO_PCT (view que recalcula realizado = segunda regua) · pacing ate o ultimo dia FECHADO · matriz KPI x dia com toggles Real/Meta/Delta e Dias/So semanas · leads e EC sao DISTINCT no periodo, nunca soma dos dias · TOTAL: Leads = soma dos funis, Em Contato = unico (duas reguas, por decisao) · reembolso como linha propria em Fora dos funis pra bater com o card 2 da Home — build 08-28: Home: grupo Resultado com 7 cards (bruto Hubla+TMB100 = 219.632 · liquido 156.412 com as DUAS subtracoes escritas no subtitulo · ticket bruto 680 e liquido 484 na mesma base de vendas · Hubla agora BRUTA e TMB agora 100%) — o split de 50%% da TMB vem do JS (TMB_LIQUIDO_PCT), NAO da view — build 08-26e: legenda do doughnut BRANCA de verdade: generateLabels custom ignora labels.color, precisa de fontColor no item (senao cai no Chart.defaults.color #666) — build 08-26c: legenda do Ranking operacional vira popover no \"i\" do titulo (hover + foco) — build 08-26b: legenda do doughnut legivel (DCP.text), paleta por motivo com hues separados e validados no fundo navy, taxa do funil em branco — build 08-26: Discadora, bateria visual: scatter em linha inteira com raio pela RAIZ (area proporcional; era linear e a maior bolha cobria 1/3 do grafico) + funil sai do Chart.js e vira HTML SEM EIXO (escala log fazia a venda parecer metade da discada) + perdas viram doughnut com cauda <2% agrupada e URA fora (7 -> 5 fatias) + heatmap com amostra minima de 3 no TMA e teto robusto no p90 (teto 2819s -> 241s, 9 celulas fracas tracejadas) + legenda de escala no heatmap + Leitura rapida removida — build 2026-08-25: ranking da Discadora com 15 colunas (Efet. 1x1 CORRIGIDA: vinha de resumo_1x1.atendidas e mostrava atendida, nao efetiva — Vanessa 241/33,7% virou 82/11,5%) + efetivas_campanha nova (Efet.1x1 + Efet.Camp. = Total Efet.) + %Atend./%Efet. sobre TENTATIVAS TOTAIS + supervisor com traco no CONV. via callix_agente_papel (Aline/Daniel) + venda orfa resolvida NA VIEW pelo callix_agente_vendedor (Pedro Barach 6 -> 7; so fica utm: quem nao tem agente) + agente sem atividade e sem venda fora do ranking e dos graficos — build 2026-08-24e — tentativas 1x1 reais no ar (callix_resumo_1x1_hora + vw_callix_dash_agente_dia com tentativas_1x1_real/efetivas_1x1, backfill 03/08-24/08) — build 08-24d: ranking operacional com Tent./Efet. 1x1 + fix do fallback que inflava Efetivas — heatmap da Discadora com eixo por dia da semana (média por dia) — heatmap da Discadora com métrica TMA (média ponderada) + lista de vendas sem __OUTROS__ + tempo excedido conta como atendida + Felipe/JoaoP/Walisson fora das visualizações — build 08-13: varredura do ciclo: lista de vendas e reembolsos agora acompanham o filtro de período (a lista rotulava pelo MÊS e os dados vinham do PERÍODO) — build 08-12: cache das abas Discadora/Motivos de Perda/Home com validade de 5 min + auto-refresh reativando a aba visível (antes a Callix congelava no 1º carregamento) — build 08-11g Home: "Em Contato" agora usa a régua do CARD DO FUNIL da Taxa de Passagem (uniqBy: pessoa única no período) = 2.855 em ago, e não a da tabela de vendedores (único por vendedor, somado) = 3.320. Conversão = todas as vendas ÷ Em Contato, batendo com o card Vendas. — build 08-11e: leads/conversão agora batem com a Taxa de Passagem (só etapa de ENTRADA + único no período; era 5.009 leads/2,0%, virou 3.281/3,1% em 01-11/08) · legendas dos cards removidas · ticket médio em destaque · matriz reordenada (Leads>Conversão>Vendas>Ticket>Faturamento) c/ Hubla/TMB colapsáveis e negrito em Faturamento/Conversão · grupo "Dinheiro" -> "Funil" — build 08-11d: NOVA ABA HOME (faixa 1: faturamento c/ split Hubla/TMB, vendas+ticket, reembolso qtd/valor/%, conversão geral · faixa 2: taxa de atendimento SEPARADA campanha x 1x1 em destaque · matriz KPI x dia do mês ancorada no mês da data final, coluna sticky + TOTAL, fds sombreado, hoje = parcial) · Discadora: taxa quebrada campanha x 1x1 (KPIs + 2 séries) · SQL: vw_callix_dash_volume_dia +4 colunas, vw_dash_tmb agora filtra utm comercial% (impacto R$ 0,00) · reembolso passa a contar quantidade por dia — Supabase + filtro universal + atribuição unificada (telefone->email->índice + dobradinha tel8+1ºnome) + Reembolsos por período + Discadora (rótulo do KPI, curva horária sem horas mortas) + Funil: etapa 4 casa Link OU Forecast nas DUAS réguas (etapaOrdinal + nrIsLink) + NOVA ABA Motivos de Perda (perda por etapa/origem, webinar separado, pizzas por motivo) · menu Funil & Taxa de Passagem removido · Discadora: ranking largo com Total/%Camp./%1x1/Atend./Conv., discado quebrado, datas DD/MM','color:#335FEB;font-weight:700');
 
 // Iniciar aba a partir da URL
 const urlParams = new URLSearchParams(window.location.search);
